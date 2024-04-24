@@ -1,0 +1,17 @@
+# Ignore everything
+/*
+
+# Don't ignore the requirements.txt nor XNAT_Schema.xml file
+!/requirements.txt
+!/XNAT_Schema.xml
+!/.gitignore
+
+# Don't ignore the 'tmp' directory but do ignore everything within the 'tmp' directory
+!/tmp 
+/tmp/*
+
+# same thing for the src and data directories
+!/src
+/src/*
+!/data
+/data/*

@@ -3,8 +3,8 @@ Some scripts for getting your source and derived fluoroscopic image data to and 
 
 ## Installation
 ### Option 1 via git clone
-1. Install python 3.7
-    - Don't forget to add the python37.exe file to your environment PATH variable.
+1. Install python 3.8, 64-bit
+    - Don't forget to add the python38.exe file to your environment PATH variable.
 2. Open a command terminal and navigate to the folder where this library will live.
 3. Run: 
 ```bash

@@ -49,7 +49,7 @@ pip install -r requirements.txt
 ```
 6. Run a test command **todo**
 ```bash
-python src/test_install.py
+python src/tests/test_install.py
 ```
 
 ### Option 2 via pip **todo**

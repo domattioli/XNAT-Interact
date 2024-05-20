@@ -19,21 +19,38 @@ cd XNAT-Interact
 4. Create and then activate a virtual environment:
     - You'll need to install pip, too, by first downloading a get-pip.py file and then running it via python
 ```bash
-python -m venv .venv-xnat-interact
+python -m venv .my_venv_for_xnat_interact
 ```
-```bash
-.venv-xnat-interact\Scripts\activate # Windows only
-```
-```bash
-curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
-python get-pip.py
-pip --version
-```
+>Windows:
+>```bash
+>.my_venv_for_xnat_interact\Scripts\activate 
+>```
+
+>Unix:
+>```bash
+>source .my_venv_for_xnat_interact/Scripts/Activate
+>```
+
+>Windows:
+>```bash
+>curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+>python get-pip.py
+>pip --version
+>```
+
+>Unix:
+> ```bash
+>tbd
+> ```
+
 5. Install the requirements
 ```bash
 pip install -r requirements.txt
 ```
 6. Run a test command **todo**
+```bash
+python src/test_install.py
+```
 
 ### Option 2 via pip **todo**
 

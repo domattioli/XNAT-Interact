@@ -6,12 +6,19 @@
 !/XNAT_Schema.xml
 !/.gitignore
 
-# Don't ignore the 'tmp' directory but do ignore everything within the 'tmp' directory
-!/tmp 
-/tmp/*
+# Don't ignore the tests director in src nor the main files necessary for running the repo
+!/src/tests/*
+!/main.py
+!/src/DataTypes.py
+!/src/Utilities.py
 
-# same thing for the src and data directories
-!/src
-/src/*
-!/data
-/data/*
+# Don't ignore the 'tmp' directory but do ignore everything within the 'tmp' directory
+!/data/tmp  
+/data/tmp/*
+!/data/image_templates/*
+
+# Definitely ignore meta_tables.json -- only the librarian should be manging changes to this.
+/meta_tables.json
+
+
+

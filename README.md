@@ -49,18 +49,25 @@ pip install -r requirements.txt
 ```
 6. Run a test command **todo**
 ```bash
-python src/test_install.py
+python src/tests/test_install.py
+```
+7. Test out the functions by following the prompts.
+```bash
+python main.py
 ```
 
+
+===
 ### Option 2 via pip **todo**
 
 ```bash
 pip install XNAT-Interact
 ```
+===
 
 
 ---
-## Example Usage
+## Example Usage --- Note as of 5/20/2024 the following examples are outdated; going to shift to using just main.py and input prompts to achieve the functionality documented below.
 #### 1. Uploading a new case
 - Given a new surgical performance with N dicom files representing the intraoperative fluoros.
 

@@ -7,8 +7,13 @@ Some scripts for getting your source and derived fluoroscopic image data to and 
 ### Option 1 via git clone
 1. Install python 3.8, 64-bit
     - Don't forget to add the python38.exe file to your environment PATH variable.
+      
 2. Open a command terminal and navigate to the folder where this library will live.
-3. Run: 
+```bash
+cd path_to_my_fav_local_folder_for_storing_repositories_of_code
+```
+
+3. Copy the repository to a local directory: 
 ```bash
 git clone https://github.com/domattioli/XNAT-Interact.git
 ```
@@ -17,40 +22,42 @@ git clone https://github.com/domattioli/XNAT-Interact.git
 cd XNAT-Interact
 ```
 4. Create and then activate a virtual environment:
-    - You'll need to install pip, too, by first downloading a get-pip.py file and then running it via python
 ```bash
 python -m venv .my_venv_for_xnat_interact
 ```
->Windows:
+>Activate virtual environment using _Windows_:
 >```bash
 >.my_venv_for_xnat_interact\Scripts\activate 
 >```
-
->Unix:
+>
+>Activate virtual environment using _Unix_:
 >```bash
 >source .my_venv_for_xnat_interact/Scripts/Activate
 >```
 
->Windows:
+You'll need to install [pip](https://pypi.org/project/pip/), too, by first downloading a get-pip.py file and then running it via python
+>Intall pip using _Windows_:
 >```bash
 >curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
 >python get-pip.py
 >pip --version
 >```
-
->Unix:
+>
+>Intall pip using Unix:
 > ```bash
->tbd
+>apt-get install python3-pip
 > ```
 
-5. Install the requirements
+5. Install the requirements, i.e., the python libraries necessary for running our code:
 ```bash
 pip install -r requirements.txt
 ```
-6. Run a test command **todo**
+
+6. Run a test to verify correct installation:
 ```bash
 python src/tests/test_install.py
 ```
+
 7. Test out the functions by following the prompts.
 ```bash
 python main.py

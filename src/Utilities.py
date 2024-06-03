@@ -19,10 +19,9 @@ from pyxnat.core.resources import Project as pyxnatProject
 from typing import Optional as Opt, Tuple, List as typehintList, Dict as typehintDict, AnyStr as typehintAnyStr
 
 # potentially unused:
-from pydicom import Dataset, Sequence
+import pydicom
 from pydicom.uid import UID as pydicomUID, generate_uid as generate_pydicomUID
 from pathlib import Path, PurePosixPath
-from pyxnat import schema
 
 
 # Define list for allowable imports from this module -- do not want to import _local_variables.
@@ -232,13 +231,15 @@ class MetaTables( LibrarianUtilities ):
     @property
     def accessor_username( self ) -> str:   return str( self.login_info.validated_username ).upper() 
     @property
+    def accessor_uid( self ) -> str:        return self.get_uid( 'REGISTERED_USERS', self.accessor_username )
+    @property
     def now_datetime( self ) -> str:        return datetime.now( pytz.timezone( 'US/Central' ) ).isoformat()
 
     #==========================================================PRIVATE METHODS==========================================================
     def _instantiate_json_file( self ):
         '''#Instantiate with a registered users table.'''
         assert self.login_info.is_valid, f"Provided login info must be validated before loading metatables: {self.login_info}"
-        assert self.accessor_username is not None, f'BUG: shouldnt arrive to this point in the code without having an established username; receive: {self.accessor_username}.'
+        assert self.accessor_uid is not None, f'BUG: shouldnt arrive to this point in the code without having an established username; receive: {self.accessor_uid}.'
         now_datetime = self.now_datetime
         default_users = { 'DMATTIOLI':              [self._generate_uid(), now_datetime, 'INIT'] }
         if self.accessor_username not in ( k.upper() for k in default_users.keys() ):
@@ -247,7 +248,7 @@ class MetaTables( LibrarianUtilities ):
         self._tables = {    'REGISTERED_USERS': pd.DataFrame( data, columns=self.default_meta_table_columns ) }
         self._metadata = {  'CREATED': now_datetime,
                             'LAST_MODIFIED': now_datetime,
-                            'REGISTERED_USER': self.accessor_username }
+                            'REGISTERED_USER': self.accessor_uid }
         
         # Fill initialized tables
         self.add_new_table( 'AcquisitioN_sites' )
@@ -275,15 +276,15 @@ class MetaTables( LibrarianUtilities ):
             print( f'SUCCESS! -- Loaded metatables from: {self.meta_tables_ffn}' )
     
     def _update_metadata( self ) -> None:
-        self.metadata.update( {'LAST_MODIFIED': self.now_datetime, 'REGISTERED_USER': self.accessor_username} )
+        self.metadata.update( {'LAST_MODIFIED': self.now_datetime, 'REGISTERED_USER': self.accessor_uid} )
     
     def _init_table_w_default_cols( self ) -> pd.DataFrame:
-        return pd.DataFrame( columns=self.default_meta_table_columns ).assign( CREATED=self.now_datetime, REGISTERED_USER=self.accessor_username )
+        return pd.DataFrame( columns=self.default_meta_table_columns ).assign( CREATED=self.now_datetime, REGISTERED_USER=self.accessor_uid )
     
     def _validate_login_for_important_functions( self ) -> None:
         assert self.login_info.is_valid, f"Provided login info must be validated before accessing metatables: {self.login_info}"
-        assert self.is_user_registered(), f'User {self.accessor_username} must first be registed before saving metatables.'
-        assert self.accessor_username == 'DMATTIOLI', f'Invalid credentials for saving metatables data.'
+        assert self.is_user_registered(), f'User {self.accessor_uid} must first be registed before saving metatables.'
+        assert self.get_name( table_name='REGISTERED_USERS', item_uid=self.accessor_uid ) == 'DMATTIOLI', f'Invalid credentials for saving metatables data.'
     
     def _generate_uid( self ) -> str: return str( generate_pydicomUID() ).replace( '.', '_' )
 
@@ -368,6 +369,11 @@ class MetaTables( LibrarianUtilities ):
         assert self.item_exists( table_name, item_name ), f"Item '{item_name}' does not exist in table '{table_name}'"
         return str( self.tables[table_name].loc[self.tables[table_name]['NAME'] == item_name, 'UID'].values[0] )
 
+    def get_name( self, table_name: str, item_uid: str ) -> str:
+        table_name, item_uid = table_name.upper(), item_uid.upper()
+        assert self.item_exists( table_name, item_uid ), f"Item '{item_uid}' does not exist in table '{table_name}'"
+        return str( self.tables[table_name].loc[self.tables[table_name]['UID'] == item_uid, 'NAME'].values[0] )
+
     def __str__( self ) -> str:
         output = [f'\n-- MetaTables -- Accessed by: {self.accessor_username}']
         for table_name, table_data in self.tables.items():
@@ -410,7 +416,7 @@ class XNATConnection( LibrarianUtilities ):
     def __init__( self, login_info: XNATLogin, meta_tables: MetaTables, stay_connected: bool = False ):
         assert login_info.is_valid, f"Provided login info must be validated before accessing metatables: {login_info}"
         super().__init__()  # Call the __init__ method of the base clas
-        self._login_info, self.meta_tables, self._open = login_info, meta_tables, stay_connected
+        self._login_info, self.meta_tables, self._open, self._project_handle = login_info, meta_tables, stay_connected, None
         self._verify_login()
         if stay_connected:
             self.server.disconnect()
@@ -443,7 +449,7 @@ class XNATConnection( LibrarianUtilities ):
 
     def _grab_project_handle( self ):
         self._project_query_str = '/project/' + self.xnat_project_name
-        project_handle = self.server.select( self._project_query_str )
+        project_handle = self.server.select( self.project_query_str )
         if project_handle.exists(): # type: ignore
             self._project_handle = project_handle
 

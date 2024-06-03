@@ -5,10 +5,21 @@ Some scripts for getting your source and derived fluoroscopic image data to and 
 ---
 ## Installation
 ### Option 1 via git clone
-1. Install python 3.8, 64-bit
+0. Open a command prompt/terminal.
+1. Ensure that [git](https://git-scm.com/) installed on your machine.
+```bash
+git --version
+```
+- If you get an error, install git (for windows, go [here](https://gitforwindows.org/)).
+  
+2. Ensure that python 3.8 (64-bit) is installed on your machine.
+```bash
+python3 --version
+```
+- If you get an error, install [python3.8](https://www.python.org/downloads/release/python-380/).
     - Don't forget to add the python38.exe file to your environment PATH variable.
       
-2. Open a command terminal and navigate to the folder where this library will live.
+2. Navigate to the folder where this library will live.
 ```bash
 cd path_to_my_fav_local_folder_for_storing_repositories_of_code
 ```
@@ -23,7 +34,7 @@ cd XNAT-Interact
 ```
 4. Create and then activate a virtual environment:
 ```bash
-python -m venv .my_venv_for_xnat_interact
+python3 -m venv .my_venv_for_xnat_interact
 ```
 >Activate virtual environment using _Windows_:
 >```bash
@@ -39,7 +50,7 @@ You'll need to install [pip](https://pypi.org/project/pip/), too, by first downl
 >Intall pip using _Windows_:
 >```bash
 >curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
->python get-pip.py
+>python3 get-pip.py
 >pip --version
 >```
 >
@@ -55,12 +66,12 @@ pip install -r requirements.txt
 
 6. Run a test to verify correct installation:
 ```bash
-python src/tests/test_install.py
+python3 src/tests/test_install.py
 ```
 
 7. Test out the functions by following the prompts.
 ```bash
-python main.py
+python3 main.py
 ```
 
 

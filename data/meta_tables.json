@@ -1,7 +1,7 @@
 {
     "metadata": {
         "CREATED": "2024-05-20T12:39:31.216620-05:00",
-        "LAST_MODIFIED": "2024-05-20T15:22:04.556041-05:00",
+        "LAST_MODIFIED": "2024-06-03T12:22:27.316496-05:00",
         "REGISTERED_USER": "DMATTIOLI"
     },
     "tables": {
@@ -11,6 +11,12 @@
                 "UID": "1_2_826_0_1_3680043_8_498_12995881126005765071073119969449514308",
                 "CREATED": "2024-05-20T12:39:31.216620-05:00",
                 "REGISTERED_USER": "INIT"
+            },
+            {
+                "NAME": "STELONG",
+                "UID": "1_2_826_0_1_3680043_8_498_74094926507744989839976817022038651518",
+                "CREATED": "2024-06-03T12:22:27.307445-05:00",
+                "REGISTERED_USER": "DMATTIOLI"
             }
         ],
         "ACQUISITION_SITES": [
@@ -25130,6 +25136,22 @@
                 "SUBJECT": "1_2_826_0_1_3680043_8_498_10998141236448711029817665630847417649",
                 "INSTANCE_NUM": "122"
             }
-        ]
+        ],
+        "SEGMENTATION_OBJECTS": [
+            {
+                "NAME": "FEMUR",
+                "UID": "1_2_826_0_1_3680043_8_498_89446165024754129357105524120374303748",
+                "CREATED": "2024-05-22T12:18:28.881044-05:00",
+                "REGISTERED_USER": "DMATTIOLI",
+                "TYPE": "BONE",
+                "DICOM_TITLE_CODE": "T-12760",
+                "DICOM_TYPE_CODE": "T-32000",
+                "CODING_SCHEME_DESIGNATOR": "SRT"
+            }
+        ],
+        "MTURK_BATCH_IDS": [],
+        "MTURK_HIT_IDS": [],
+        "MTURK_ASSIGNMENT_IDS": [],
+        "MTURK_WORKER_IDS": []
     }
 }

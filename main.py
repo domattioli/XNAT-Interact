@@ -5,6 +5,8 @@ import argparse
 from src.Utilities import *
 from src.DataTypes import *
 
+from src.tests import *
+
 from typing import Tuple
 
 

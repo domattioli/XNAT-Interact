@@ -190,9 +190,9 @@ class ScanFile( LibrarianUtilities ):
         return f'-- {self.__class__.__name__} --\nEmpty'
 
     @staticmethod
-    def generate_source_image_file_name( n_str: str ) -> str:
-        assert len( n_str ) < 4, f'This function is intended for use with creating dicom file names from their metadata instance number. It is assumed that there may be no more than 999 instances possible. You entered "{n_str}", which exceeds that threshold'
-        return '0' * ( 3 - len( n_str ) ) + n_str
+    def generate_source_image_file_name( n_str: str, patient_uid: str ) -> str:
+        assert len( n_str ) < 4, f'This function is intended for use with creating dicom file names from their metadata instance number. It is assumed that there may be no more than 999 instances possible. You entered "{n_str}", which exceeds that threshold.'
+        return '0' * ( 3 - len( n_str ) ) + n_str + '-' + patient_uid
 
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -456,7 +456,7 @@ class SourceRFSession( ExperimentData ): # to-do: Need to detail past and presen
             if deid_dcm.is_valid:
                 dt_data = self._query_dicom_series_time_info( deid_dcm )
                 self._df.loc[idx, ['DATE', 'INSTANCE_TIME', 'SERIES_TIME', 'INSTANCE_NUM']] = dt_data
-                self._df.loc[idx, 'NEW_FN'] = deid_dcm.generate_source_image_file_name( str( deid_dcm.metadata.InstanceNumber ) )
+                self._df.loc[idx, 'NEW_FN'] = deid_dcm.generate_source_image_file_name( str( deid_dcm.metadata.InstanceNumber ), str( self.label ) )
 
         # Need to check within-case for duplicates -- apparently those do exist.
         hash_strs = set()

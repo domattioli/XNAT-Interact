@@ -12,11 +12,12 @@ from dateutil import parser
 from datetime import datetime
 import pytz
 
+import hashlib
 
 from pyxnat import Interface
 from pyxnat.core.resources import Project as pyxnatProject
 
-from typing import Optional as Opt, Tuple, List as typehintList, Dict as typehintDict, AnyStr as typehintAnyStr
+from typing import Optional as Opt, Union, Tuple, List as typehintList, Dict as typehintDict, AnyStr as typehintAnyStr
 
 # potentially unused:
 import pydicom
@@ -24,8 +25,11 @@ from pydicom.uid import UID as pydicomUID, generate_uid as generate_pydicomUID
 from pathlib import Path, PurePosixPath
 
 
+import matplotlib.pyplot as plt
+
+
 # Define list for allowable imports from this module -- do not want to import _local_variables.
-__all__ = ['LibrarianUtilities', 'XNATLogin', 'MetaTables', 'XNATConnection', 'USCentralDateTime']
+__all__ = ['LibrarianUtilities', 'XNATLogin', 'MetaTables', 'XNATConnection', 'USCentralDateTime', 'ImageHash']
 
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -90,36 +94,38 @@ class LibrarianUtilities:
     @property
     def local_variables( self ) -> _local_variables:    return self._local_variables
     @property
-    def doc_dir( self ) -> str:                     return self.local_variables.doc_dir
+    def doc_dir( self ) -> str:                         return self.local_variables.doc_dir
     @property
-    def data_dir( self ) -> str:                    return self.local_variables.data_dir
+    def data_dir( self ) -> str:                        return self.local_variables.data_dir
     @property
-    def tmp_data_dir( self ) -> str:                return self.local_variables.tmp_data_dir
+    def tmp_data_dir( self ) -> str:                    return self.local_variables.tmp_data_dir
     @property
-    def cataloged_resources_ffn( self ) -> str:     return self.local_variables.cataloged_resources_ffn
+    def cataloged_resources_ffn( self ) -> str:         return self.local_variables.cataloged_resources_ffn
     @property
-    def meta_tables_ffn( self ) -> str:             return self.local_variables.meta_tables_ffn
+    def meta_tables_ffn( self ) -> str:                 return self.local_variables.meta_tables_ffn
     @property
-    def required_login_keys( self ) -> list:        return self.local_variables.required_login_keys
+    def required_login_keys( self ) -> list:            return self.local_variables.required_login_keys
     @property
-    def xnat_project_name( self ) -> str:           return self.local_variables.xnat_project_name
+    def xnat_project_name( self ) -> str:               return self.local_variables.xnat_project_name
     @property
-    def xnat_project_url( self ) -> str:            return self.local_variables.xnat_project_url
+    def xnat_project_url( self ) -> str:                return self.local_variables.xnat_project_url
     @property
-    def default_meta_table_columns( self ) -> list: return self.local_variables.default_meta_table_columns
+    def default_meta_table_columns( self ) -> list:     return self.local_variables.default_meta_table_columns
     @property
-    def template_img_dir( self ) -> str:            return self.local_variables.template_img_dir
+    def template_img_dir( self ) -> str:                return self.local_variables.template_img_dir
     @property
-    def template_img( self ) -> np.ndarray:         return self.local_variables.template_img
+    def template_img( self ) -> np.ndarray:             return self.local_variables.template_img
     @property
-    def acceptable_img_dtypes( self ) -> list:      return self.local_variables.acceptable_img_dtypes
+    def acceptable_img_dtypes( self ) -> list:          return self.local_variables.acceptable_img_dtypes
     @property
     def required_img_size_for_hashing( self ) -> tuple: return self.local_variables.required_img_size_for_hashing
     @property
-    def mturk_batch_col_names( self ) -> list:      return self.local_variables.mturk_batch_col_names
+    def mturk_batch_col_names( self ) -> list:          return self.local_variables.mturk_batch_col_names
     
     def convert_all_kwarg_strings_to_uppercase( **kwargs ):
         return {k: v.upper() if isinstance(v, str) else v for k, v in kwargs.items()}
+
+    def generate_uid( self ) -> str: return str( generate_pydicomUID() ).replace( '.', '_' )
 
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -218,8 +224,12 @@ class MetaTables( LibrarianUtilities ):
         assert login_info.is_valid, f"Provided login info must be validated before accessing metatables: {login_info}"
         super().__init__()  # Call the __init__ method of the base clas
         self._login_info = login_info
-        if os.path.isfile( self.meta_tables_ffn ):  self._load( print_out )
-        else:                                       self._instantiate_json_file() 
+        if os.path.isfile( self.meta_tables_ffn ):
+            self._load( print_out )
+        else:
+            self._instantiate_json_file()
+            self._initialize_metatables()
+            # self.save( print_out ) # Commenting out bc I cant figure out how to initialize a table like Subjects, which require extra_columns, and maintain those extra columns after the save, ie the json dumps method will drop that info. Need to init it outside of this and then add our first subject then we can save.
 
 
     @property
@@ -233,39 +243,62 @@ class MetaTables( LibrarianUtilities ):
     @property
     def accessor_uid( self ) -> str:        return self.get_uid( 'REGISTERED_USERS', self.accessor_username )
     @property
-    def now_datetime( self ) -> str:        return datetime.now( pytz.timezone( 'US/Central' ) ).isoformat()
+    def now_datetime( self ) -> str:
+        # return datetime.now( pytz.timezone( 'US/Central' ) ).isoformat()
+        return datetime.now( pytz.timezone('America/Chicago' ) ).isoformat()
 
     #==========================================================PRIVATE METHODS==========================================================
     def _instantiate_json_file( self ):
         '''#Instantiate with a registered users table.'''
         assert self.login_info.is_valid, f"Provided login info must be validated before loading metatables: {self.login_info}"
-        assert self.accessor_uid is not None, f'BUG: shouldnt arrive to this point in the code without having an established username; receive: {self.accessor_uid}.'
+        # assert self.accessor_uid is not None, f'BUG: shouldnt arrive to this point in the code without having an established username; receive: {self.accessor_uid}.' # commenting out on 6/19/2024 bc this function should only be called once, when I (dom) need to create the metatables.json file in the first place.
+        assert self.login_info.validated_username.lower() == 'dmattioli', f'Only user DMATTIOLI can instantiate the metatables.json file.'
         now_datetime = self.now_datetime
-        default_users = { 'DMATTIOLI':              [self._generate_uid(), now_datetime, 'INIT'] }
+        default_users = { 'DMATTIOLI':              [self.generate_uid(), now_datetime, 'DMATTIOLI'] }
         if self.accessor_username not in ( k.upper() for k in default_users.keys() ):
-            default_users[self.accessor_username] = [self._generate_uid(), now_datetime, 'INIT']
+            default_users[self.accessor_username] = [self.generate_uid(), now_datetime, 'INIT']
         data = [[name] + info for name, info in default_users.items()]
         self._tables = {    'REGISTERED_USERS': pd.DataFrame( data, columns=self.default_meta_table_columns ) }
         self._metadata = {  'CREATED': now_datetime,
                             'LAST_MODIFIED': now_datetime,
                             'REGISTERED_USER': self.accessor_uid }
-        
-        # Fill initialized tables
+            
+    def _initialize_metatables( self ) -> None:
         self.add_new_table( 'AcquisitioN_sites' )
         self.add_new_item( 'acquisitIon_sites', 'UNIVERSITY_OF_IOWA_HOSPITALS_AND_CLINICS' )
         self.add_new_item( 'acqUisition_sites', 'UNIVERSITY_OF_HOUSTON' )
         self.add_new_item( 'ACQUISITION_SItes', 'AMAZON_MECHANICAL_TURK' )
         self.add_new_table( 'gRouPs' )
-        self.add_new_item( 'grOups', 'DYNAMIC_HIP_scrEW' )
-        self.add_new_item( 'grOups', 'TROCHANTERIC_STABILIZATION_PLATE' )
+        # trauma:
+        self.add_new_item( 'grOups', 'Open_reduction_hip_fracture–Dynamic_hip_screw' )
+        self.add_new_item( 'grOups', 'Open_reduction_hip_fracture–Cannulated_hip_screw' )
+        self.add_new_item( 'grOups', 'Closed_reduction_hip_fracture–Cannulated_hip_screw' )
+        self.add_new_item( 'grOups', 'Percutaneous_sacroliac_fixation' )
+        self.add_new_item( 'groUps', 'PEDIATRIC_SUPRACONDYLaR_HUMERUS_FRACTURE_reduction_and_pinning' )
+        self.add_new_item( 'grOups', 'Open_and_percutaneous_pilon_fractures' )
+        self.add_new_item( 'grOups', 'Intramedullary_nail-CMN' )
+        self.add_new_item( 'grOups', 'Intramedullary_nail-Antegrade_femoral' )
+        self.add_new_item( 'grOups', 'Intramedullary_nail-Retrograde_femoral' )
+        self.add_new_item( 'grOups', 'Intramedullary_nail-Tibia' )
+        self.add_new_item( 'grOups', 'Scaphoid_Fracture' )
+        # arthro
+        self.add_new_item( 'groups', 'Shoulder_ARTHROSCOPY' )
         self.add_new_item( 'groups', 'KNEE_ARTHROSCOPY' )
-        self.add_new_item( 'groups', 'INTERMEDULLARY_NAIL' )
-        self.add_new_item( 'groups', 'TROCHANTERIC_STABILIZING_PLATE' )
-        self.add_new_item( 'groUps', 'PEDIATRIC_SUPRACONDYLaR_HUMERUS_FRACTURE' )
+        self.add_new_item( 'groups', 'Hip_ARTHROSCOPY' )
+        self.add_new_item( 'groups', 'Ankle_ARTHROSCOPY' )
         self.add_new_table( 'subjects', ['acquisition_site', 'group'] ) # need additional columns to reference uids from other tables
         self.add_new_table( 'IMAGE_HASHES', ['subject', 'INSTANCE_NUM'] ) # need additional columns to reference uids from other tables
-        # self.save()
-        
+        self.add_new_table( 'Surgeons', ['first_name', 'last_name', 'middle_initial'] )
+        self.add_new_item( 'surgeons', 'karamm', extra_columns_values={'first_name':'MATTHEW', 'last_name': 'KARAM', 'middle_initial': 'D' } )
+        self.add_new_item( 'surgeons', 'kowalskih', extra_columns_values={'first_name':'HEATHER', 'last_name': 'KOWALSKI', 'middle_initial': 'R' } )
+        self.add_new_item( 'surgeons', 'mbollier', extra_columns_values={'first_name':'MATTHEW', 'last_name': 'BOLLIER', 'middle_initial': 'J' } )
+        self.add_new_item( 'registered_users', 'gthomas' )
+        self.add_new_item( 'registered_users', 'andersondd' )
+        self.add_new_item( 'registered_users', 'mtatum' )
+        self.add_new_item( 'registered_users', 'stelong' )
+        self.add_new_item( 'registered_users', 'jhill7' )
+        self.add_new_item( 'registered_users', 'ezwilliams' )
+
     def _load( self, print_out: Opt[bool] = False ) -> None:
         assert self.login_info.is_valid, f"Provided login info must be validated before loading metatables: {self.login_info}"
         with open( self.meta_tables_ffn, 'r' ) as f:
@@ -286,12 +319,10 @@ class MetaTables( LibrarianUtilities ):
         assert self.is_user_registered(), f'User {self.accessor_uid} must first be registed before saving metatables.'
         assert self.get_name( table_name='REGISTERED_USERS', item_uid=self.accessor_uid ) == 'DMATTIOLI', f'Invalid credentials for saving metatables data.'
     
-    def _generate_uid( self ) -> str: return str( generate_pydicomUID() ).replace( '.', '_' )
-
     #==========================================================PUBLIC METHODS==========================================================
     def save( self, print_out: Opt[bool] = False ) -> None: # Convert all tables to JSON; Write the data to the file
         self._validate_login_for_important_functions()
-        tables_json = {name: df.to_dict('records') for name, df in self.tables.items()}
+        tables_json = {name: df.to_dict( 'records' ) for name, df in self.tables.items()}
         data = {'metadata': self.metadata, 'tables': tables_json }
         with open( self.meta_tables_ffn, 'w' ) as f:
             json.dump( data, f, indent=4 )
@@ -339,7 +370,7 @@ class MetaTables( LibrarianUtilities ):
         assert self.table_exists( table_name ), f"Cannot add item '{item_name}' to table '{table_name}' because that table does not yet exist.\n\tTry creating the new table before adding '{item_name}' as a new item."
         assert not self.item_exists( table_name, item_name ), f'Cannot add item "{item_name}" to Table "{table_name}" because it already exists.'
 
-        new_item_uid = self._generate_uid()
+        new_item_uid = self.generate_uid()
         if extra_columns_values: # convert keys to uppercase, make sure all inputted keys were defined when the table was added as new.
             extra_columns_values = {k.upper(): v for k, v in extra_columns_values.items()}
             assert all( k in self.tables[table_name].columns for k in extra_columns_values.keys() ), f"Provided extra column names must exist in the table: {table_name}"
@@ -350,14 +381,6 @@ class MetaTables( LibrarianUtilities ):
             new_data = pd.DataFrame( [[item_name, new_item_uid, self.now_datetime, self.accessor_username, *extra_columns_values.values()]], columns=self.tables[table_name].columns )
         else: # No inserted data for extra columns
             new_data = pd.DataFrame( [[item_name, new_item_uid, self.now_datetime, self.accessor_username]], columns=self.tables[table_name].columns )
-
-
-        # # For empty tables, we need a special approach
-        # if self.tables[table_name].empty:
-        #     self._tables[table_name] = self._init_table_w_default_cols()
-        #     if extra_columns_values: # checks if it is not None and if the dict is not empty
-        #         for k, v in extra_columns_values.items():
-        #             self._tables[table_name][k.upper()] = None
 
         self._tables[table_name] = pd.concat( [self.tables[table_name], new_data], ignore_index=True )
         self._update_metadata()
@@ -376,9 +399,10 @@ class MetaTables( LibrarianUtilities ):
 
     def __str__( self ) -> str:
         output = [f'\n-- MetaTables -- Accessed by: {self.accessor_username}']
+        output.append( f'   *Last Modified: {self.metadata["LAST_MODIFIED"]}')
         for table_name, table_data in self.tables.items():
-            if table_name == 'REGISTERED_USERS':
-                continue  # Skip the 'REGISTERED_USERS' table
+            # if table_name == 'REGISTERED_USERS':
+            #     continue  # Skip the 'REGISTERED_USERS' table
             output.append( f'\tTable: {table_name}')
             if table_data.empty:
                 output.append( '\t--Empty--' )
@@ -396,7 +420,6 @@ class MetaTables( LibrarianUtilities ):
         return '\n'.join( output )
 
     # def doc( self ) -> str: return self.__doc__
-
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for establishing a connection to the xnat server with specific credentials.
@@ -416,7 +439,8 @@ class XNATConnection( LibrarianUtilities ):
     def __init__( self, login_info: XNATLogin, meta_tables: MetaTables, stay_connected: bool = False ):
         assert login_info.is_valid, f"Provided login info must be validated before accessing metatables: {login_info}"
         super().__init__()  # Call the __init__ method of the base clas
-        self._login_info, self.meta_tables, self._open, self._project_handle = login_info, meta_tables, stay_connected, None
+        self._login_info, self.meta_tables, self._project_handle = login_info, meta_tables, None
+        self._is_verified, self._session_uid, self._open = False, self.generate_uid(), stay_connected
         self._verify_login()
         if stay_connected:
             self.server.disconnect()
@@ -438,6 +462,8 @@ class XNATConnection( LibrarianUtilities ):
     def get_user( self ) -> Opt[str]:       return self.login_info.validated_username
     @property
     def get_password( self ) -> Opt[str]:   return self.login_info.validated_password
+    @property
+    def session_uid( self ) -> str:         return self._session_uid
 
     def _verify_login( self, stay_connected: bool = False ):
         self._server = self._establish_connection()
@@ -457,7 +483,7 @@ class XNATConnection( LibrarianUtilities ):
         if hasattr( self, '_server' ):
             self._server.disconnect()
         self._open = False
-        print( f'!!!'*3 + '\n\tConnection to XNAT server has been closed -- any unsaved metatable data will be lost!\n' + '!!!'*3 )
+        print( f'!!!'*3 + f"\n\tConnection '{self.session_uid}' to XNAT server has been closed -- any unsaved metatable data will be lost!\n" + '!!!'*3 )
 
     def __del__( self ):    self.close()
 
@@ -478,6 +504,7 @@ class XNATConnection( LibrarianUtilities ):
 ## Class for ensuring common formatting of date-time strings.
 class USCentralDateTime():
     '''
+    # Convert to us central standard time.
     # Example usage:
     tst1 = USCentralDateTime( '2022-01-01 11:00:00 PST' )
     print( tst1 )
@@ -502,5 +529,121 @@ class USCentralDateTime():
     def time( self ) -> str:    return self.dt.strftime( '%H%M%S' )
     @property
     def dt( self ) -> datetime: return self._dt # type: ignore
+    @property
+    def verbose( self ) -> str:  return str( self.dt.strftime( '%Y-%m-%d %H:%M:%S' ) ) + ' US-CST'
 
-    def __str__( self ) -> str: return f'{self._dt} US-Central\t({self._raw_dt_str})'
+    def __str__( self ) -> str: return f'{self.dt} US-CST'
+
+
+#--------------------------------------------------------------------------------------------------------------------------
+# Class for representing images as unique hashes.
+class ImageHash( LibrarianUtilities ):
+    def __init__( self, reference_table: Opt[MetaTables]=None, img: Opt[np.ndarray] = None ):
+        '''ImageHash()
+        A class for creating a unique hash for an image. A list of seen-hashes will allow us to prevent duplicate images in the db.
+            - Cataloging of the hashes is done elsewhere.
+
+        Hashes are computed through the following subroutine:
+        1.  Ensure/convert to grayscale
+        2.  Convert to uint8 (normalize to 0-255 pixel values)
+            - Currently supported types are signed- and unsigned-int8, 16, 32, and 64 bits.
+                - Floats are not supported. Not sure how to handle them.
+            - We want to convert images down to uint8 to account for possible outside-transformation of images.
+                - Don't want ImageHash( np.int16( img ) ) != ImageHash( np.float32( img ) )
+        3. Resize to 256x256.
+            - Some of our images derived from the same performance can look to similar
+                - Don't want to risk generating the same hash by downsampling too much.
+        
+        To-do: If need be, revisit the init to require only an image ffn so we can use cv2 ro imread it into a predictable way, i.e., rgb not bgr.
+
+        # Example usage:
+        tst1 = ImageHash( reference_table( XNatLogin( {...} ) ) ) # computes hash using the template dicom image stored in the LibrarianUtilities attributes.
+        tst2 = ImageHash( reference_table( XNatLogin( {...} ) ), np.uint32( tst1.raw_img ) )
+        tst3 = ImageHash( reference_table( XNatLogin( {...} ) ), np.int16(  tst1.raw_img ) )
+        print( tst1 )
+        print( tst2 )
+        print( tst3 )
+        print( 'All hash strings the same:', tst1.hash_str == tst1.hash_str and tst1.hash_str == tst3.hash_str and tst2.hash_str == tst3.hash_str )
+        '''
+        super().__init__()  # Call the __init__ method of the base class
+        self._validate_input( img )
+        self._processed_img, self._gray_img, self._hash_str  = self.dummy_image(), self.dummy_image(), ''
+        self._meta_tables, self._in_img_hash_metatable = reference_table, False
+        self._convert_to_grayscale()
+        self._normalize_and_convert_to_uint8()
+        self._resize_image()
+        self._compute_hash_str()
+        if self.metatables is not None and isinstance( self.metatables, MetaTables ):
+            self._check_img_hash_metatable()
+    
+    @property
+    def raw_img( self )                 -> np.ndarray:                      return self._raw_img
+    @property
+    def gray_img_bit_depth( self )      -> int:
+        assert self.gray_img is not None, f'Raw image must be defined before checking bit depth.'
+        gray_img_dtype = self.gray_img.dtype
+        if gray_img_dtype   in ( np.uint8, np.int8 ):
+            return 8
+        elif gray_img_dtype in ( np.uint16, np.int16 ):
+            return 16
+        elif gray_img_dtype in ( np.uint32, np.int32, np.float32 ):
+            return 32
+        elif gray_img_dtype in ( np.uint64, np.int64, np.float64 ):
+            return 64
+        else:
+            raise ValueError( f'Unsupported/unexpected bit depth: {gray_img_dtype}' )
+    @property
+    def gray_img( self )                -> np.ndarray:                      return self._gray_img
+    @property
+    def processed_img( self )           -> np.ndarray:                      return self._processed_img
+    @property
+    def hash_str( self )                -> str:                             return self._hash_str
+    @property
+    def metatables( self )              -> Opt[Union[MetaTables, list]]:    return self._meta_tables
+    @property
+    def in_img_hash_metatable( self )   -> bool:                            return self._in_img_hash_metatable
+    
+    def _validate_input( self, img: Opt[np.ndarray] = None ):
+        if img is None:
+            self._raw_img = self.template_img
+        else:
+            self._raw_img = img.astype( np.uint64 ).copy()
+        assert self.raw_img.dtype in self.acceptable_img_dtypes, f'Bitdepth "{self.raw_img.dtype}" is unsupported; inputted image must be one of: {self.acceptable_img_dtypes}.'
+        assert 2 <= self.raw_img.ndim <= 3, f'Inputted image must be a 2D or 3D array.'
+
+    def _convert_to_grayscale( self ):
+        if len( self.raw_img.shape ) == 3:  # Ensure that the image is in grayscale
+            self._gray_img = np.mean( self.raw_img, axis=2 )
+            # self._processed_img = cv2.cvtColor( self.raw_img, cv2.COLOR_BGR2GRAY )
+        else:
+            self._gray_img = self.raw_img
+
+    def _normalize_and_convert_to_uint8( self ): # Normalize the image to the range 0-255
+        self._gray_img = cv2.normalize( self.gray_img, np.zeros( self.gray_img.shape, np.uint8 ), 0, 255, cv2.NORM_MINMAX ).astype( np.uint8 )
+
+    def _resize_image( self ):
+        self._processed_img = cv2.resize( self.gray_img, self.required_img_size_for_hashing )
+    
+    def _compute_hash_str( self ):
+        self._hash_str = hashlib.sha256( self.processed_img.tobytes() ).hexdigest() # alternatively: imagehash.average_hash( Image.fromarray( image ) )
+        assert self.hash_str is not None and len( self.hash_str ) == 64, f'Hash string must be 64 characters long.'
+    
+    def _check_img_hash_metatable( self ): # check if it exists in the metatables
+        assert self.processed_img.shape == self.required_img_size_for_hashing, f'Processed image must be of size {self.required_img_size_for_hashing} (is currently size {self.processed_img.shape}).'
+        if isinstance( self.metatables, MetaTables ):
+            self._in_img_hash_metatable = self.metatables.item_exists( table_name='IMAGE_HASHES', item_name=self.hash_str )
+        else:
+            self._in_img_hash_metatable = False
+    
+    def __str__( self ) -> str:
+        return f"-- ImageHash --\n\nShape:\t{self.processed_img.shape}\nDType:\t{self.processed_img.dtype}\t(min: {np.min(self.processed_img)}, max: {np.max(self.processed_img)})\nHash:\t{self.hash_str}\tIn metatables:\t{self.in_img_hash_metatable}"
+
+    def plot( self ):
+        fig, ax = plt.subplots()
+        ax.imshow( self.processed_img, cmap='gray' )
+        ax.set_title( self.hash_str) 
+        ax.axis('off')
+        plt.show()
+
+    def dummy_image( self ) -> np.ndarray:
+        return np.full( self.required_img_size_for_hashing, np.nan )

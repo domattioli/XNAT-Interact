@@ -37,22 +37,35 @@ acceptable_ortho_procedure_names = { '1a': 'Shoulder_Arthroscopy', '1b': 'KNEE_A
                                     '3a': 'PEDIATRIC_SUPRACONDYLaR_HUMERUS_FRACTURE_reduction_and_pinning', '4a': 'Other' }
 options_str = "\n".join( [f"Enter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_ortho_procedure_names.items()] )
 
-                    
-class ORDataIntakeForm():
+
+class ResourceFile( LibrarianUtilities ):
     def __init__( self, metatables: MetaTables, login: XNATLogin ):
+        self.__running_text_file = ''
         self._metatables = metatables
         assert self.metatables.is_user_registered( login.validated_username ), f'User with HAWKID {login.validated_username} is not registered in the system!'
+        self._login = login
 
-        self._welcome_message()
+    def _welcome_message( self ):
+        self._running_text_file = str(self)  # Directly use the string representation
+        print( self.running_text_file )
+
+        
+    def __str__( self )             -> str:     return '-----'*5 + f'\nOR Data Intake Form\n' + '-----'*5 + '\n\n'
+
+    @property
+    def running_text_file( self )   -> str:         return self._running_text_file
+    @property
+    def metatables( self )          -> MetaTables:  return self._metatables
+
+
+class ORDataIntakeForm( ResourceFile ):
+    def __init__( self, metatables: MetaTables, login: XNATLogin ):
+        super().__init__( metatables=metatables, login=login ) # Call the __init__ method of the base class
         self._filer_name_and_operation_date_user_prompts()
         self._surgical_procedure_info_user_prompts()
         self._skills_assessment_user_prompts()
         self._storage_device_user_prompts()
         self._create_text_file_reconstruction()
-
-    def _welcome_message( self ):
-        self._running_text_file = '-----'*5 + f'\nOR Data Intake Form\n' + '-----'*5 + '\n\n'
-        print( self.running_text_file )
 
 
     def _filer_name_and_operation_date_user_prompts( self ):
@@ -224,14 +237,6 @@ class ORDataIntakeForm():
             f.write( self.running_text_file )
 
             
-
-
-    @property
-    def metatables( self )          -> MetaTables:  return self._metatables
-
-    @property
-    def running_text_file( self )   -> str:         return self._running_text_file
-
     @property
     def filer_name( self )                              -> str:     return self._filer_name
     @property

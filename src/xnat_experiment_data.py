@@ -26,6 +26,7 @@ import tempfile
 
 from src.utilities import LibrarianUtilities, MetaTables, USCentralDateTime, XNATLogin, XNATConnection, ImageHash
 from src.xnat_scan_data import *
+from src.xnat_resource_data import *
 
 # Define list for allowable imports from this module -- do not want to import _local_variables.
 __all__ = ['SourceRFSession', 'SourceESVSession']
@@ -34,11 +35,12 @@ __all__ = ['SourceRFSession', 'SourceESVSession']
 #--------------------------------------------------------------------------------------------------------------------------
 ## Base class for all xnat experiment sessions.
 class ExperimentData():
-    def __init__( self, pn: Path, acquisition_site: str, login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables, group: str ):
+    def __init__( self, pn: Path, acquisition_site: str, login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables, group: str, resource_files: Opt[list] = None ):
         self._pn, self._acquisition_site, self._group = pn, acquisition_site, group # Required user inputs
         self._login, self._xnat_connection, self._metatables = login, xnat_connection, metatables # Required user inputs
         self._series_description, self._usability, self._past_upload_data = '', '', None # Optional user inputs
         self._df, self._uid, self._datetime, self._is_valid = pd.DataFrame(), '', None, False # Derived from inputs
+        self._resource_files = resource_files
     
     @property # --- Required Properties ---
     def pn( self )              -> Path:            return self._pn
@@ -72,6 +74,8 @@ class ExperimentData():
     def is_valid( self )        -> bool:            return self._is_valid
     # @property
     # def label( self )           -> str:             return self._label # Commenting out this property because it is confusing when used in conjunction with uid. Original intent was to store original dicom-generated uid (with '.') and then replace the '.' with '_' and store as the label.
+    @property
+    def resource_files( self )  -> Opt[list]:       return self._resource_files
 
     def _generate_session_uid( self ):
         # dt_str = datetime.strptime( self.date + self.time, '%Y%m%d%H%M%S' ).strftime( '%Y-%m-%d %H:%M:%S' )

@@ -1,26 +1,17 @@
-import json
 import os
 import glob
-import re
-from typing import Optional as Opt, Tuple, Union
-import cv2
-import io
-import base64
-import numpy as np
 import requests
+from typing import Optional as Opt, Tuple, Union
+
+import numpy as np
 import pandas as pd
 
 from datetime import datetime
-from dateutil import parser
-import pytz
 
 from pydicom.dataset import FileDataset as pydicomFileDataset
-from pydicom import Dataset, Sequence, dcmread, dcmwrite, uid as dcmUID
-
+from pydicom import Dataset, Sequence, dcmread, dcmwrite
 
 from pathlib import Path, PurePosixPath
-
-
 import shutil
 import tempfile
 
@@ -77,24 +68,30 @@ class ExperimentData():
     @property
     def resource_files( self )  -> Opt[list]:       return self._resource_files
 
-    def _generate_session_uid( self ):
+
+    def _assign_experiment_uid( self ):             self._uid = self.metatables.generate_uid() # This should work
         # dt_str = datetime.strptime( self.date + self.time, '%Y%m%d%H%M%S' ).strftime( '%Y-%m-%d %H:%M:%S' )
-        self._uid = dcmUID.generate_uid( prefix=None, entropy_srcs=[self.datetime.date + ' ' + self.datetime.time] ).replace( '.', '_' )
+        # self._uid = dcmUID.generate_uid( prefix=None, entropy_srcs=[self.datetime.date + ' ' + self.datetime.time] ).replace( '.', '_' )
+
 
     def _populate_df( self ):                       raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
     def _check_session_validity( self ):            raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
+
 
     # to-do: the following validate methods may need to be defined as classes in the future
     def _validate_series_description_input( self ): raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
     def _validate_usability_input( self ):          raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
     def _validate_past_upload_data_input( self ):   raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
 
+
     def _validate_acquisition_site_input( self ): # to-do: potentially turn this into a class
         assert self.metatables.item_exists( table_name='ACQUISITION_SITES', item_name=self.acquisition_site ), f"The inputted acquisition site '{self.acquisition_site}' is not recognized.\nIt must be one of these:\n{self.metatables.tables['ACQUISITION_SITES']['NAME'].values}"
  
+
     def _validate_group_input( self ): # to-do shouldn't always be allowed to input none but we will for now; possibly use an ML classifier way down the line.
         assert self.metatables.item_exists( table_name='GROUPS', item_name=self.group ), f"The inputted group (aka 'surgical procedure name') '{self.group}' is not recognized.\nIt must be one of these:\n{self.metatables.tables['GROUPS']['NAME'].values}"
     
+
     #--------------------------------------------XNAT-Publishing helpers and methods----------------------------------------------------------
     def _generate_queries( self, scan_type_label: str, resource_label: str ) -> Tuple[str, str, str, str, str, str]:
         # Create query strings and select object in xnat then create the relevant objects
@@ -111,6 +108,7 @@ class ExperimentData():
         files_qs = scan_qs / 'resource' / 'files'
         return str(subj_qs), str(exp_qs), str(scan_qs), str( files_qs ), scan_type_label, resource_label
 
+
     def _select_objects( self, subj_qs: str, exp_qs: str, scan_qs: str, files_qs: str ) -> Tuple[object, object, object]:
         subj_inst = self.xnat_connection.server.select( str( subj_qs ) )
         assert not subj_inst.exists(), f'Subject already exists with the uri:\n{subj_inst}'         # type: ignore
@@ -120,14 +118,16 @@ class ExperimentData():
         assert not scan_inst.exists(), f'Scan already exists with the uri:\n{scan_inst}'            # type: ignore
         return subj_inst, exp_inst, scan_inst
 
-    def write( self, zip_dest: Opt[Path] = None, print_out: Opt[bool] = False ) -> Path:    raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
+
+    def write( self, zip_dest: Opt[Path] = None, verbose: Opt[bool] = False ) -> Path:    raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
     
-    def publish_to_xnat( self, zipped_ffn: Path, schema_prefix_str: str, delete_zip: Opt[bool] = True, print_out: Opt[bool] = False ):
+
+    def publish_to_xnat( self, zipped_ffn: Path, schema_prefix_str: str, delete_zip: Opt[bool] = True, verbose: Opt[bool] = False ):
         assert os.path.isfile( zipped_ffn ), "The specified zip file does not exist."
         acceptable_strings = ['rf', 'esv', 'otherDicom']
         assert schema_prefix_str in acceptable_strings, f'Your inputted schema prefix string is not in the list of acceptable strings:\n{acceptable_strings}'
         try:
-            if print_out:
+            if verbose:
                 print( f'\t...Pushing {schema_prefix_str} Session Data to XNAT...' )
             subj_qs, exp_qs, scan_qs, files_qs, scan_type_label, resource_label = self._generate_queries( scan_type_label='DICOM_MP4', resource_label='RAW' )
             subj_inst, exp_inst, scan_inst = self._select_objects( subj_qs, exp_qs, scan_qs, files_qs )
@@ -145,27 +145,30 @@ class ExperimentData():
             scan_inst.resource( resource_label ).put_zip( zipped_ffn )                              # type: ignore
             if delete_zip is True:
                 os.remove( zipped_ffn )
-            if print_out is True:
+            if verbose is True:
                 print( f'\t\t...esvSession succesfully uploaded to XNAT!' )
                 print( f'\t...Zipped file deleted!\n')
         except Exception as e:
             print( f'\tError: could not publish to xnat.\n{e}' )
             raise
 
-    def catalog_new_data( self, print_out: Opt[bool] = False ):
-        self.metatables.save( print_out=print_out )
-        if print_out is True:
+
+    def catalog_new_data( self, verbose: Opt[bool] = False ):
+        self.metatables.save( verbose=verbose ) # commenting out until i figure out whether we need to save locally and on xnat or just one or the other
+        if verbose is True:
             print( f'\t...Metatables successfully updated to reflect new subject uid and image hashes.' )
 
-    def write_publish_catalog_subroutine( self, schema_prefix_str: str, zipped_ffn: Opt[Path] = None, print_out: Opt[bool] = False, delete_zip: Opt[bool] = True ):
+
+    def write_publish_catalog_subroutine( self, schema_prefix_str: str, zipped_ffn: Opt[Path] = None, verbose: Opt[bool] = False, delete_zip: Opt[bool] = True ):
         try:
-            zipped_ffn = self.write( print_out=print_out )
+            zipped_ffn = self.write( verbose=verbose )
         except:
             if zipped_ffn is not None:
                 os.remove( zipped_ffn ) # remove zipped file if it was created.
             raise
-        self.publish_to_xnat( zipped_ffn=zipped_ffn, schema_prefix_str=schema_prefix_str, print_out=print_out, delete_zip=delete_zip )
-        self.catalog_new_data()
+        self.publish_to_xnat( zipped_ffn=zipped_ffn, schema_prefix_str=schema_prefix_str, verbose=verbose, delete_zip=delete_zip )
+        self.catalog_new_data( verbose=verbose )
+        self.metatables.push_to_xnat( verbose=verbose )
 
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -174,8 +177,8 @@ class SourceRFSession( ExperimentData ): # to-do: Need to detail past and presen
     ''' '''
     def __init__( self,
                 dcm_dir: Path, login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables, acquisition_site: str, group: str,
-                series_desc: Opt[str] = None, usability: Opt[str] = None, past_upload_data: Opt[pd.DataFrame] = None ):
-        super().__init__( pn=dcm_dir, login=login, xnat_connection=xnat_connection, metatables=metatables, acquisition_site=acquisition_site, group=group ) # Call the __init__ method of the base class
+                series_desc: Opt[str] = None, usability: Opt[str] = None, past_upload_data: Opt[pd.DataFrame] = None, resource_files: Opt[list] = None ):
+        super().__init__( pn=dcm_dir, login=login, xnat_connection=xnat_connection, metatables=metatables, acquisition_site=acquisition_site, group=group, resource_files=resource_files ) # Call the __init__ method of the base class
         self._series_description, self._usability, self._past_upload_data = series_desc, usability, past_upload_data
         self._validate_series_description_input()
         self._validate_usability_input()
@@ -255,6 +258,7 @@ class SourceRFSession( ExperimentData ): # to-do: Need to detail past and presen
     def _validate_past_upload_data_input( self, past_upload_data: Opt[pd.DataFrame] = None ):
         if self._past_upload_data is None:          self._past_upload_data = pd.DataFrame() # to-do: this should be a dataframe with a specific structure
         
+
     def _check_session_validity( self ): # Invalid only when empty or all shots are invalid -- to-do: may also want to check that instance num and time are monotonically increasing
         # valid_rows = self.df[ self.df['IS_VALID'] ].copy()
         # assert self.label, 'Cannot check duplicate without a rfsession label.'
@@ -266,6 +270,7 @@ class SourceRFSession( ExperimentData ): # to-do: Need to detail past and presen
         assert self.df['SERIES_TIME'].nunique() == 1, f'Dicom metadata produced different SERIES_TIME values across the files for this performance -- should only be one:\n{self._df["SERIES_TIME"]}'
         self._datetime = USCentralDateTime( self.df.at[0,'DATE'] + ' ' + self.df.at[0, 'SERIES_TIME'] )
     
+
     def _derive_experiment_uid( self ):
         '''Original dicom data should have the same Series Instance UID for all dicom files. The Instance number is the file name.'''
         series_instance_uids = []
@@ -276,9 +281,10 @@ class SourceRFSession( ExperimentData ): # to-do: Need to detail past and presen
         if series_instance_uids.nunique() == 1: # Use the uid that was found within the metadata
             self._uid = series_instance_uids.at[0]
         else:                                   # Either multiple uid's were found in the metadata, or none were found. In either case, generate a new one to guarantee uniqueness.
-            self._generate_session_uid()
+            self._assign_experiment_uid()
             self._deal_with_inconsistent_series_instance_uid()
     
+
     def _deal_with_inconsistent_series_instance_uid( self ): # overwrite inconsisten series instance uid information in the metadata.
         for idx, row in self.df.iterrows():
             if row['IS_VALID']: # Copy the value for 'SeriesInstanceUID' to a new private tag; add new private tags detailing this change
@@ -289,6 +295,7 @@ class SourceRFSession( ExperimentData ): # to-do: Need to detail past and presen
                 self._df.at[idx,'DICOM'].metadata.add_new( ( 0x0019, 0x1004 ), 'DA', datetime.today().strftime( '%Y%m%d' ) )
                 self._df.at[idx,'DICOM'].metadata.SeriesInstanceUID = self.uid
 
+
     def __str__( self ) -> str:
         select_cols = ['FN','NEW_FN', 'IS_VALID', 'INSTANCE_TIME']
         df = self.df[select_cols].copy()
@@ -298,7 +305,7 @@ class SourceRFSession( ExperimentData ): # to-do: Need to detail past and presen
             return f' -- {self.__class__.__name__} --\nUID:\t{None}\nAcquisition Site:\t{self.acquisition_site}\nGroup:\t\t\t{self.group}\nDate-Time:\t\t{None}\nValid:\t{self.is_valid}\n{df.head()}...{df.tail()}'
 
 
-    def write( self, zip_dest: Opt[str] = None, print_out: Opt[bool] = False ) -> Path:
+    def write( self, zip_dest: Opt[str] = None, verbose: Opt[bool] = False ) -> Path:
         assert self.is_valid, f"Session is invalid; could be for several reasons. try evaluating whether all of the image hash_strings already exist in the matatable."
         if zip_dest is None:
             zip_dest = self.login.tmp_data_dir
@@ -308,16 +315,16 @@ class SourceRFSession( ExperimentData ): # to-do: Need to detail past and presen
         write_d = os.path.join( zip_dest, self.uid )
         subject_info = { 'ACQUISITION_SITE': self.metatables.get_uid( table_name='ACQUISITION_SITES', item_name=self.acquisition_site ),
                         'GROUP': self.metatables.get_uid( table_name='GROUPS', item_name=self.group ) }
-        self.metatables.add_new_item( table_name='SUBJECTS', item_name=self.uid, extra_columns_values=subject_info, print_out=print_out ) # type: ignore
+        self.metatables.add_new_item( table_name='SUBJECTS', item_name=self.uid, extra_columns_values=subject_info, verbose=verbose ) # type: ignore
         with tempfile.TemporaryDirectory() as tmp_dir:
             for _, row in self.df.iterrows():
                 if row['IS_VALID']:
                     dcmwrite( os.path.join( tmp_dir, row['NEW_FN'] ), row['DICOM'].metadata )
                     img_info = { 'SUBJECT': self.metatables.get_uid( table_name='SUBJECTS', item_name=self.uid ), 'INSTANCE_NUM': row['NEW_FN'] }
-                    self.metatables.add_new_item( table_name='IMAGE_HASHES', item_name=row['DICOM'].image.hash_str, extra_columns_values=img_info, print_out=print_out ) # type: ignore
+                    self.metatables.add_new_item( table_name='IMAGE_HASHES', item_name=row['DICOM'].image.hash_str, extra_columns_values=img_info, verbose=verbose ) # type: ignore
             shutil.make_archive( write_d, 'zip', tmp_dir )
         
-        if print_out is True:
+        if verbose is True:
             num_valid = self.df['IS_VALID'].sum()
             print( f'\t...Zipped folder of ({num_valid}/{len( self.df )}) dicom files successfully written to: {write_d}.zip' )
         return Path( write_d + '.zip' )
@@ -330,9 +337,9 @@ class SourceESVSession( ExperimentData ):
     '''Class representing the XNAT Experiment for Endoscopy Videos. Inherits from ExperimentData.'''
     def __init__( self, pn: Path, login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables,
                         acquisition_site: str, group: str, datetime: USCentralDateTime,
-                        series_desc: Opt[str] = None, usability: Opt[str] = None, past_upload_data: Opt[pd.DataFrame] = None,
+                        series_desc: Opt[str] = None, usability: Opt[str] = None, past_upload_data: Opt[pd.DataFrame] = None, resource_files: Opt[list] = None
                 ):
-        super().__init__( pn=pn, login=login, xnat_connection=xnat_connection, metatables=metatables, acquisition_site=acquisition_site, group=group ) # Call the __init__ method of the base class
+        super().__init__( pn=pn, login=login, xnat_connection=xnat_connection, metatables=metatables, acquisition_site=acquisition_site, group=group, resource_files=resource_files ) # Call the __init__ method of the base class
         self._series_description, self._usability, self._past_upload_data = series_desc, usability, past_upload_data
         self._datetime, self._df = datetime, pd.DataFrame()
         assert os.path.isdir( pn ), f"Inputted path must be a valid directory; inputted path: {pn}"
@@ -347,7 +354,7 @@ class SourceESVSession( ExperimentData ):
     def _mine_session_metadata( self ):
         assert self.df.empty is False, 'Dataframe of dicom files is empty.'
         # self._derive_experiment_datetime() # should be inputted for now because I'm not sure how to derive this from images and mp4s unless we use directory names, which aren't reliable
-        self._derive_experiment_uid()
+        self._assign_experiment_uid()
         
         # For each row, generate a new file name now that we have a session label.
         for idx in range( len( self.df ) ): # to-do: BUG - for some reason the iterrows() enumerator creates a row variable that cannot be accessed -- error occurs because the str method is overridden somewhere...
@@ -361,6 +368,7 @@ class SourceESVSession( ExperimentData ):
                 else:
                     raise ValueError( f"Unrecognized object type: {type( self.df.loc[idx, 'OBJECT'] )}." )
 
+
     def _validate_series_description_input( self ):
         if self._series_description is None:        self._series_description = 'ESV_SOURCE_IMAGES'
     def _validate_usability_input( self, ):
@@ -368,13 +376,11 @@ class SourceESVSession( ExperimentData ):
     def _validate_past_upload_data_input( self, past_upload_data: Opt[pd.DataFrame] = None ):
         if self._past_upload_data is None:          self._past_upload_data = pd.DataFrame() # to-do: this should be a dataframe with a specific structure
         
-    def _derive_experiment_uid( self ):
-        '''Original dicom data should have the same Series Instance UID for all dicom files. The Instance number is the file name.'''
-        self._generate_session_uid()
 
     def _init_esv_session_dataframe( self ):
         df_cols = { 'FN': 'str', 'NEW_FN': 'str', 'OBJECT': 'object', 'TYPE': 'str', 'IS_VALID': 'bool'}
         self._df = pd.DataFrame( {col: pd.Series( dtype=dt ) for col, dt in df_cols.items()} )
+
 
     def _populate_df( self ):
         # Read in mp4 data
@@ -414,8 +420,10 @@ class SourceESVSession( ExperimentData ):
     def _check_session_validity( self ): # Invalid only when empty or all shots are invalid -- to-do: may also want to check that instance num and time are monotonically increasing
         self._is_valid = True if self.df['IS_VALID'].any() and not self.metatables.item_exists( table_name='SUBJECTS', item_name=self.uid ) else False
 
+
     @property
     def mp4( self )     -> ArthroVideo:     return self._mp4
+
 
     def __str__( self ):
         select_cols = ['NEW_FN', 'IS_VALID', 'TYPE']
@@ -425,11 +433,13 @@ class SourceESVSession( ExperimentData ):
         else:
             return f' -- {self.__class__.__name__} --\nUID:\t{None}\nAcquisition Site:\t{self.acquisition_site}\nGroup:\t\t\t{self.group}\nDate-Time:\t\t{None}\nValid:\t\t\t{self.is_valid}\n{df.head()}\n...\n{df.tail()}'
 
+
     def __del__( self ):    
         try:    self.mp4.__del__()
         except: pass
 
-    def write( self, zip_dest: Opt[Path] = None, print_out: Opt[bool] = False ) -> Path:
+
+    def write( self, zip_dest: Opt[Path] = None, verbose: Opt[bool] = False ) -> Path:
         ''' Method adds the subject and image info to the metatables at the same time so we can ensure no duplicates reach 'publish_to_xnat() '''
         assert self.is_valid, f"Session is invalid; could be for several reasons. try evaluating whether all of the image hash_strings already exist in the matatable."
         if zip_dest is None:
@@ -440,7 +450,7 @@ class SourceESVSession( ExperimentData ):
         # Add the subject to the metatables
         subject_info = { 'ACQUISITION_SITE': self.metatables.get_uid( table_name='ACQUISITION_SITES', item_name=self.acquisition_site ),
                         'GROUP': self.metatables.get_uid( table_name='GROUPS', item_name=self.group ) }
-        self.metatables.add_new_item( table_name='SUBJECTS', item_name=self.uid, extra_columns_values=subject_info, print_out=print_out ) # type: ignore
+        self.metatables.add_new_item( table_name='SUBJECTS', item_name=self.uid, extra_columns_values=subject_info, verbose=verbose ) # type: ignore
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_dir = tmp_dir
             for idx in range( len( self.df ) ): # Iterate through each row in the DataFrame, writing each to a temp directory before we zip it up and delete the unzipped folder.
@@ -450,13 +460,13 @@ class SourceESVSession( ExperimentData ):
                         img_ffn = os.path.join( tmp_dir, str( self.df.loc[idx, 'NEW_FN'] ) )
                         dcmwrite( img_ffn, file_obj_rep.metadata ) # type: ignore
                         img_info = { 'SUBJECT': self.metatables.get_uid( table_name='SUBJECTS', item_name=self.uid ), 'INSTANCE_NUM': self.df.loc[idx, 'NEW_FN'] }
-                        self.metatables.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, extra_columns_values=img_info, print_out=print_out ) # type: ignore
+                        self.metatables.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, extra_columns_values=img_info, verbose=verbose ) # type: ignore
                     elif isinstance( file_obj_rep, ArthroVideo ): # Don't need to add this to metatables because the diagnostic images (frames from the video) should suffice.
                         vid_ffn = os.path.join( self.pn, str( self.df.loc[idx,'FN'] ) + '.mp4' )
                         shutil.copy( vid_ffn, os.path.join( tmp_dir, str( self.df.loc[idx, 'NEW_FN'] ) ) )
             shutil.make_archive( write_d, 'zip', tmp_dir )
         
-        if print_out is True:
+        if verbose is True:
             num_valid = self.df['IS_VALID'].sum() 
             print( f'\t...Zipped folder of ({num_valid}/{len( self.df )}) dicom and mp4 files successfully written to: {write_d}.zip' )
         return Path( write_d + '.zip' )

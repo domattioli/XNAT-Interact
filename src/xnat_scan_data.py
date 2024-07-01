@@ -1,32 +1,21 @@
-import json
 import os
-import glob
-import re
 from typing import Optional as Opt, Tuple, Union
 import cv2
-import io
 import base64
-import numpy as np
 import requests
-import hashlib
+
+import numpy as np
 import pandas as pd
 
 from datetime import datetime
-from dateutil import parser
-import pytz
-
 
 from pydicom.dataset import FileDataset as pydicomFileDataset, FileMetaDataset as pydicomFileMetaDataset
 from pydicom.uid import UID as dcmUID, ExplicitVRLittleEndian, ImplicitVRLittleEndian
 from pydicom import Dataset, Sequence, dcmread, dcmwrite
 # from pydicom.uid import is_valid_uid as dcm_is_valid_uid # no function exists -- chatgpt is wrong
 
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
-import matplotlib.pyplot as plt
-
-import shutil
-import tempfile
 
 from src.utilities import LibrarianUtilities, MetaTables, USCentralDateTime, ImageHash
 
@@ -34,7 +23,6 @@ from src.utilities import LibrarianUtilities, MetaTables, USCentralDateTime, Ima
 # Define list for allowable imports from this module -- do not want to import _local_variables.
 __all__ = ['ScanFile', 'SourceDicomDeIdentified', 'MTurkSemanticSegmentation', 'ArthroDiagnosticImage', 'ArthroVideo']
 
-redacted_string = "REDACTED PYTHON-TO-XNAT UPLOAD SCRIPT"
 
 ## Base class for scan files, designed for inheritence.
 class ScanFile( LibrarianUtilities ):
@@ -151,7 +139,7 @@ class ArthroDiagnosticImage( ScanFile ):
         date_now_str, time_now_str = str( datetime.now().strftime( '%Y%m%d' ) ), str( datetime.now().strftime( '%H%M%S' ) )
         date_img_str, time_img_str = str( self.datetime.date ), str( self.datetime.time )
         ds = pydicomFileDataset( self.new_ffn, {}, file_meta=file_meta, preamble=b"\0" * 128)
-        ds.PatientName, ds.PatientID = redacted_string, redacted_string
+        ds.PatientName, ds.PatientID = self.redacted_string, self.redacted_string
         ds.ContentDate, ds.ContentTime = date_now_str, time_now_str
         ds.StudyDate, ds.StudyTime = date_img_str, time_img_str
         ds.StudyInstanceUID = dcmUID( parent_uid.replace( '_', '.' ) )
@@ -254,7 +242,7 @@ class SourceDicomDeIdentified( ScanFile ):
 
     def _person_names_callback( self, dcm_data, data_element ):
         if data_element.VR == "PN":
-            data_element.value = redacted_string
+            data_element.value = self.redacted_string
 
     def _curves_callback( self, dcm_data, data_element ):
         if data_element.tag.group & 0xFF00 == 0x5000:

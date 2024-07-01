@@ -7,22 +7,20 @@ import numpy as np
 import pandas as pd
 
 from datetime import datetime
-from datetime import datetime
 from dateutil import parser
-from datetime import datetime
 import pytz
 
 import hashlib
+
+import tempfile
 
 from pyxnat import Interface
 from pyxnat.core.resources import Project as pyxnatProject
 
 from typing import Optional as Opt, Union, Tuple, List as typehintList, Dict as typehintDict, AnyStr as typehintAnyStr
 
-# potentially unused:
-import pydicom
-from pydicom.uid import UID as pydicomUID, generate_uid as generate_pydicomUID
-from pathlib import Path, PurePosixPath
+from pydicom.uid import generate_uid as generate_pydicomUID
+from pathlib import Path
 
 
 import matplotlib.pyplot as plt
@@ -30,6 +28,7 @@ import matplotlib.pyplot as plt
 
 # Define list for allowable imports from this module -- do not want to import _local_variables.
 __all__ = ['LibrarianUtilities', 'XNATLogin', 'MetaTables', 'XNATConnection', 'USCentralDateTime', 'ImageHash']
+
 
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -57,17 +56,26 @@ class _local_variables:
 
     def _set_local_variables( self ) -> dict:
         repo_dir = os.getcwd()
+        
+        # DO NOT DELETE! This is the only place where these local variables/paths are defined.
+        # xnat_project_name = 'domSandBox' # original
+        xnat_project_name = 'GROK_AHRQ_real'
+        meta_tables_fn = 'MetaTables.json'
         doc_dir = os.path.join( repo_dir, 'doc' )
-        # doc_dir = os.path.join(os.path.dirname(repo_dir), 'doc' )
         data_dir = doc_dir.replace( 'doc', 'data' )
         template_img_dir = os.path.join( data_dir, 'image_templates', 'unwanted_dcm_image_template.png' )
+        # tmp_data_dir = os.path.join( data_dir, 'tmp' )
+        tmp_data_dir = tempfile.mkdtemp()
+        redacted_string = "REDACTED PYTHON-TO-XNAT UPLOAD SCRIPT"
+
         local_vars =  { 'doc_dir': doc_dir,
                         'data_dir': data_dir,
-                        'tmp_data_dir': os.path.join( data_dir, 'tmp' ),
+                        'tmp_data_dir': tmp_data_dir,
                         'cataloged_resources_ffn': os.path.join( doc_dir, r'cataloged_resources.json' ),
-                        'meta_tables_ffn': os.path.join( data_dir, 'meta_tables.json' ),
+                        'meta_tables_fn': meta_tables_fn,
+                        'meta_tables_ffn': os.path.join( tmp_data_dir, meta_tables_fn ), # local file for storing all meta information
                         'required_login_keys': ['USERNAME', 'PASSWORD', 'URL'],
-                        'xnat_project_name': 'domSandBox',
+                        'xnat_project_name': xnat_project_name,
                         'xnat_project_url': 'https://rpacs.iibi.uiowa.edu/xnat/',
                         'default_meta_table_columns' : ['NAME', 'UID', 'CREATED_DATE_TIME', 'CREATED_BY'],
                         'template_img_dir' : template_img_dir,
@@ -83,7 +91,8 @@ class _local_variables:
                                                 'SubmitTime', 'AutoApprovalTime', 'ApprovalTime', 'RejectionTime',
                                                 'RequesterFeedback', 'WorkTimeInSeconds', 'LifetimeApprovalRate',
                                                 'Last30DaysApprovalRate', 'Last7DaysApprovalRate', 'Input.image_url',
-                                                'Approve','Reject']
+                                                'Approve','Reject'],
+                        'redacted_string': redacted_string
                         }
         # local_vars.template_img_hash = ImageHash( local_vars.template_img_dir ).hashed_img
         return local_vars
@@ -106,6 +115,8 @@ class LibrarianUtilities:
     @property
     def cataloged_resources_ffn( self ) -> str:         return self.local_variables.cataloged_resources_ffn
     @property
+    def meta_tables_fn( self ) -> str:                  return self.local_variables.meta_tables_fn
+    @property
     def meta_tables_ffn( self ) -> str:                 return self.local_variables.meta_tables_ffn
     @property
     def required_login_keys( self ) -> list:            return self.local_variables.required_login_keys
@@ -125,12 +136,17 @@ class LibrarianUtilities:
     def required_img_size_for_hashing( self ) -> tuple: return self.local_variables.required_img_size_for_hashing
     @property
     def mturk_batch_col_names( self ) -> list:          return self.local_variables.mturk_batch_col_names
+    @property
+    def redacted_string( self ) -> str:                 return self.local_variables.redacted_string
+
+    @property
+    def now_datetime( self )        -> str:             return datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
     
     def convert_all_kwarg_strings_to_uppercase( **kwargs ):
         return {k: v.upper() if isinstance(v, str) else v for k, v in kwargs.items()}
 
-    def generate_uid( self ) -> str: return str( generate_pydicomUID() ).replace( '.', '_' )
-
+    def generate_uid( self ) -> str: return str( generate_pydicomUID( prefix=None, entropy_srcs=[self.now_datetime] ) ).replace( '.', '_' )
+                                                
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for validating xnat login information
@@ -152,11 +168,13 @@ class XNATLogin( LibrarianUtilities ):
         print( test2 )
     '''
 
-    def __init__( self, input_info: dict ):
+    def __init__( self, input_info: dict, verbose: Opt[bool] = False ):
         super().__init__()  # Call the __init__ method of the base class
         self._validated_username, self._validated_password = '', '', 
         self._is_valid, self._user_role = False, ''
         self._validate_login( input_info )
+        if verbose:
+            print( self )
 
     def _validate_login( self, input_info ): # If all checks pass, set _is_valid to True and deal login info
         assert len( input_info ) == 3, f"Provided login info dictionary must only have the following three key-value pairs: {self.required_login_keys}"
@@ -183,6 +201,92 @@ class XNATLogin( LibrarianUtilities ):
 
     # def doc( self ) -> str: return self.__doc__
 
+#--------------------------------------------------------------------------------------------------------------------------
+## Class for establishing a connection to the xnat server with specific credentials.
+class XNATConnection( LibrarianUtilities ):
+    '''
+    to-do: document explanation of class
+
+    # Example usage:
+    my_login_info = {'URL': 'https://rpacs.iibi.uiowa.edu/xnat/', 'USERNAME': '...', 'PASSWORD': '...'}
+    my_login = XNATLogin( login_info )
+    my_connection = XNATConnection( my_login, my ) 
+    print( my_connection )
+    # my_connection = XNATConnection( my_login, my, stay_connected=True ) 
+    # print( my_connection )
+    '''
+    def __init__( self, login_info: XNATLogin, stay_connected: bool = False, verbose: Opt[bool] = False ):
+        assert login_info.is_valid, f"Provided login info must be validated before accessing xnat server: {login_info}"
+        super().__init__()  # Call the __init__ method of the base clas
+        self._login_info, self._project_handle = login_info, None
+        self._is_verified, self._session_uid, self._is_open = False, self.generate_uid(), stay_connected
+        self._verify_login()
+        if stay_connected:
+            self.server.disconnect()
+            # self.server = None
+        if verbose:
+            print( self )
+
+
+    @property
+    def login_info( self ) -> XNATLogin:    return self._login_info
+    @property
+    def server( self ) -> Interface:        return self._server
+    @property
+    def project_query_str( self ) -> str:   return self._project_query_str
+    @property
+    def project_handle( self ) -> pyxnatProject:  return self._project_handle # type: ignore
+    @property
+    def is_verified( self ) -> bool:        return self._is_verified
+    @property
+    def is_open( self ) -> bool:            return self._is_open
+    @property
+    def get_user( self ) -> Opt[str]:       return self.login_info.validated_username
+    @property
+    def get_password( self ) -> Opt[str]:   return self.login_info.validated_password
+    @property
+    def session_uid( self ) -> str:         return self._session_uid
+
+
+    def _verify_login( self ):
+        self._server = self._establish_connection()
+        self._grab_project_handle() # If more tests in the future, separate as its own function.
+        self._is_verified = True
+
+
+    def _establish_connection( self ) -> Interface:     return Interface( server=self.xnat_project_url, user=self.get_user, password=self.get_password )
+
+
+    def _grab_project_handle( self ):
+        self._project_query_str = '/project/' + self.xnat_project_name
+        project_handle = self.server.select( self.project_query_str )
+        if project_handle.exists(): # type: ignore
+            self._project_handle = project_handle
+
+
+    def close( self ):
+        if hasattr( self, '_server' ):
+            self._server.disconnect()
+        self._open = False
+        print( f"\n\t*Prior connection to XNAT server, '{self.session_uid}', has been closed -- local metatable data will be deleted!\n" )
+
+
+    def __del__( self ):
+        self.close() # Close the server connection ***AND*** delete the metatables local data to enforce user to always pull it from the server first.
+        if os.path.exists( self.meta_tables_ffn ):      os.remove( self.meta_tables_ffn )
+
+    def __enter__( self ):                              return self
+
+    def __exit__( self, exc_type, exc_value, traceback ): self.close()
+
+    def __str__( self ) -> str:
+        connection_status = "Open" if self.is_open else "Closed"
+        return (f"-- XNAT Connection --\n"
+                f"Status:\t\t{connection_status}\n"
+                f"Signed-in:\t{self.get_user}\n"
+                # f"UID:\t\t{self.uid}\n"
+                f"Project:\t{self.project_handle}\n" )
+    
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for cataloging all seen data and user info.
@@ -214,7 +318,8 @@ class MetaTables( LibrarianUtilities ):
     # Example usage (if not building from scratch, try adding a new table other than those listed above):
     my_login_info = { 'USERNAME': '...', 'PASSWORD' : '...', 'URL' : 'https://rpacs.iibi.uiowa.edu/xnat/' }
     my_login = XNATLogin( my_login_info )
-    mt = MetaTables( my_login )
+    my_connection = XNATConnection( my_login )
+    mt = MetaTables( my_login, my_connection )
     print( mt )
 
     # Create some new tables -- convention is for inputs to be plural. Will automatically caps everything
@@ -224,30 +329,32 @@ class MetaTables( LibrarianUtilities ):
     mt.add_new_item( table_name='hello', item_name='world' )
     # mt.save()
     '''
-    def __init__( self, login_info: XNATLogin, print_out: Opt[bool] = False ):
+    def __init__( self, login_info: XNATLogin, xnat_connection: XNATConnection, verbose: Opt[bool] = False ):
         assert login_info.is_valid, f"Provided login info must be validated before accessing metatables: {login_info}"
+        assert xnat_connection.is_open, f"Provided xnat connection must be open before accessing metatables: {xnat_connection}"
         super().__init__()  # Call the __init__ method of the base class to ensure that we inherit all those local variables
-        self._login_info = login_info
-        if os.path.isfile( self.meta_tables_ffn ):
-            self._load( print_out )
-        else:
+        self._login_info, self._xnat_connection = login_info, xnat_connection
+        # Need to try to pull it from the xnat server if it exists, otherwise create it from scratch.
+        try:
+            self.pull_from_xnat( verbose=verbose )
+        except:
             self._instantiate_json_file()
             self._initialize_metatables()
-            # self.save( print_out ) # Commenting out bc I cant figure out how to initialize a table like Subjects, which require extra_columns, and maintain those extra columns after the save, ie the json dumps method will drop that info. Need to init it outside of this and then add our first subject then we can save.
+            self.push_to_xnat( verbose )
+            
 
-
     @property
-    def login_info( self )          -> XNATLogin:   return self._login_info
+    def login_info( self )          -> XNATLogin:       return self._login_info
     @property
-    def tables( self )              -> dict:        return self._tables
+    def xnat_connection( self )     -> XNATConnection:  return self._xnat_connection
     @property
-    def metadata( self )            -> dict:        return self._metadata
+    def tables( self )              -> dict:            return self._tables
     @property
-    def accessor_username( self )   -> str:         return str( self.login_info.validated_username ).upper() 
+    def metadata( self )            -> dict:            return self._metadata
+    @property
+    def accessor_username( self )   -> str:             return str( self.login_info.validated_username ).upper() 
     @property
     def accessor_uid( self )        -> str:             return self.get_uid( 'REGISTERED_USERS', self.accessor_username )
-    @property
-    def now_datetime( self )        -> str:         return datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
 
 
     #==========================================================PRIVATE METHODS==========================================================
@@ -257,14 +364,16 @@ class MetaTables( LibrarianUtilities ):
         # assert self.accessor_uid is not None, f'BUG: shouldnt arrive to this point in the code without having an established username; receive: {self.accessor_uid}.' # commenting out on 6/19/2024 bc this function should only be called once, when I (dom) need to create the metatables.json file in the first place.
         assert self.login_info.validated_username.lower() == 'dmattioli', f'Only user DMATTIOLI can instantiate the metatables.json file.'
         now_datetime = self.now_datetime
-        default_users = { 'DMATTIOLI':              [self.generate_uid(), now_datetime, self.accessor_uid] }
-        if self.accessor_username not in ( k.upper() for k in default_users.keys() ):
-            default_users[self.accessor_username] = [self.generate_uid(), now_datetime, 'INIT']
+        dmattioli_uid_init = self.generate_uid()
+        default_users = { 'DMATTIOLI'.upper(): [dmattioli_uid_init, now_datetime, dmattioli_uid_init] }
+        # if self.accessor_username not in ( k.upper() for k in default_users.keys() ):
+        #     default_users[self.accessor_username] = [self.generate_uid(), now_datetime, 'INIT']
         data = [[name] + info for name, info in default_users.items()]
         self._tables = {    'REGISTERED_USERS': pd.DataFrame( data, columns=self.default_meta_table_columns ) }
         self._metadata = {  'CREATED': now_datetime,
                             'LAST_MODIFIED': now_datetime,
-                            'CREATED_BY': self.accessor_uid }
+                            'CREATED_BY': self.accessor_uid,
+                            'TABLE_EXTRA_COLUMNS': {} }
             
 
     def _initialize_metatables( self ) -> None:
@@ -304,36 +413,86 @@ class MetaTables( LibrarianUtilities ):
         self.add_new_item( 'registered_users', 'ezwilliams' )
 
 
-    def _load( self, print_out: Opt[bool] = False ) -> None:
+    def _load( self, local_meta_tables_ffn: Opt[Path], verbose: Opt[bool] = False ) -> None:
         assert self.login_info.is_valid, f"Provided login info must be validated before loading metatables: {self.login_info}"
-        with open( self.meta_tables_ffn, 'r' ) as f:
+        if local_meta_tables_ffn is None:
+            load_ffn = self.meta_tables_ffn
+        else:
+            assert os.path.isfile( local_meta_tables_ffn ), f"Provided file path must be a valid file: {local_meta_tables_ffn}"
+            load_ffn = local_meta_tables_ffn
+        with open( load_ffn, 'r' ) as f:
             data = json.load( f )
         self._tables = { name: pd.DataFrame.from_records( table ) for name, table in data['tables'].items()}
         self._metadata = data['metadata']
-        if print_out:
-            print( f'SUCCESS! -- Loaded metatables from: {self.meta_tables_ffn}' )
+        if verbose:
+            print( f'SUCCESS! -- Loaded metatables from: {load_ffn}' )
     
 
-    def _update_metadata( self ) -> None:                   self.metadata.update( {'LAST_MODIFIED': self.now_datetime, 'CREATED_BY': self.accessor_uid} )
+    def _update_metadata( self, new_table_extra_columns: Opt[dict] = None ) -> None:
+        self.metadata.update( {'LAST_MODIFIED': self.now_datetime, 'CREATED_BY': self.accessor_uid} )
+        if new_table_extra_columns is not None:
+            for k, v in new_table_extra_columns.items():
+                assert isinstance( v, list ), f'Extra column names for Table "{k}" must be a list of strings.'
+                assert all( isinstance( c, str ) for c in v ), f'Extra column names for Table "{k}" must be a list of strings.'
+                assert len( v ) > 0, f'List for Table "{k}" must have at least one extra column name.'
+                assert k not in self.metadata['TABLE_EXTRA_COLUMNS'], f'Cannot add Table "{k}" more than once.'
+                self._metadata['TABLE_EXTRA_COLUMNS'][k] = [c.upper() for c in v]
     
 
     def _init_table_w_default_cols( self ) -> pd.DataFrame: return pd.DataFrame( columns=self.default_meta_table_columns ).assign( CREATED_DATE_TIME=self.now_datetime, CREATED_BY=self.accessor_uid )
     
 
-    def _validate_login_for_important_functions( self ) -> None:
+    def _validate_login_for_important_functions( self ) ->  None:
         assert self.login_info.is_valid, f"Provided login info must be validated before accessing metatables: {self.login_info}"
         assert self.is_user_registered(), f'User {self.accessor_uid} must first be registed before saving metatables.'
         assert self.get_name( table_name='REGISTERED_USERS', item_uid=self.accessor_uid ) == 'DMATTIOLI', f'Invalid credentials for saving metatables data.'
     
+    
+    def _custom_json_serializer( self, data, indent=4 ):
+        def serialize( obj, depth=0 ):
+            if isinstance( obj, dict ):
+                items = [f'\n{" " * (depth + indent)}"{k}": {serialize(v, depth + indent)}' for k, v in obj.items()]
+                return f'{{{",".join(items)}\n{" " * depth}}}'
+            elif isinstance( obj, list ):
+                items = [serialize(v, depth) for v in obj]  # Keep depth unchanged for arrays
+                return f'[{", ".join(items)}]'
+            elif isinstance( obj, str ):    return json.dumps( obj )
+            else:                           return str( obj )
+        return serialize( data )
+
 
     #==========================================================PUBLIC METHODS==========================================================
-    def save( self, print_out: Opt[bool] = False ) -> None: # Convert all tables to JSON; Write the data to the file
+    def pull_from_xnat( self, write_ffn: Opt[Path]=None, verbose: Opt[bool] = False ) -> Opt[Path]:
+        if write_ffn is None:
+            write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'MetaTables' ).file( self.meta_tables_fn ).get_copy( str( self.meta_tables_ffn ) )
+        else:
+            assert isinstance( write_ffn, Path ), f"Provided write file path must be a valid Path object: {write_ffn}"
+            assert write_ffn.suffix == '.json', f"Provided write file path must have a '.json' extension: {write_ffn}"
+            write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'MetaTables' ).file( self.meta_tables_fn ).get_copy( str( write_ffn ) )
+        self._load( write_ffn, verbose )
+        if verbose:
+            print( f'\t...Metatables successfully populated from XNAT data.' )
+        return write_ffn
+
+
+    def push_to_xnat( self, verbose: Opt[bool] = False ) -> None:
+        self.save( verbose )
+        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'MetaTables' ).file( self.meta_tables_fn ).put( self.meta_tables_ffn, content='DO_NOT_DELETE', format='JSON', tags='UNIQUE_IDs', overwrite=True )
+        if verbose is True:
+            print( f'\t...Metatables successfully updated on XNAT.' )
+
+
+
+    def save( self, verbose: Opt[bool] = False ) -> None: # Convert all tables to JSON; Write the data to the file
+        '''Only saves locally. To save to the server, all the 'catalog_new_data' method(s) in the experiment class(es) must be called.'''
         self._validate_login_for_important_functions()
         tables_json = {name: df.to_dict( 'records' ) for name, df in self.tables.items()}
         data = {'metadata': self.metadata, 'tables': tables_json }
+        # json_str = json.dumps( data, indent=2, separators=( ',', ':' ) )
+        json_str = self._custom_json_serializer( data )
         with open( self.meta_tables_ffn, 'w' ) as f:
-            json.dump( data, f, indent=4 )
-        if print_out:
+            f.write( json_str )
+        if verbose:
             print( f'SUCCESS! --- saved metatables to: {self.meta_tables_ffn}' )
 
 
@@ -343,11 +502,11 @@ class MetaTables( LibrarianUtilities ):
         return user_name.upper() in self.tables['REGISTERED_USERS']['NAME'].values
 
 
-    def register_new_user( self, user_name: str, print_out: Opt[bool] = False ):
+    def register_new_user( self, user_name: str, verbose: Opt[bool] = False ):
         self._validate_login_for_important_functions()
         if not self.is_user_registered( user_name ):
             self.add_new_item( 'REGISTERED_USERS', user_name )
-        if print_out:
+        if verbose:
             print( f'SUCCESS! --- Registered new user: {user_name}' )
 
 
@@ -356,7 +515,10 @@ class MetaTables( LibrarianUtilities ):
 
 
     def list_of_all_items_in_table( self, table_name: str ) -> list:
-        return list( self.tables[table_name.upper()]['NAME'] )
+        if table_name.upper() in self.tables and not self.tables[table_name.upper()].empty:
+            return list (self.tables[table_name.upper()]['NAME'] )
+        else:   return [] # Return an empty list if the table does not exist or is empty
+            
 
 
     def table_exists( self, table_name: str ) -> bool:
@@ -367,7 +529,7 @@ class MetaTables( LibrarianUtilities ):
         return not self.tables[table_name.upper()].empty and item_name.upper() in self.tables[table_name.upper()].values
 
 
-    def add_new_table( self, table_name: str, extra_column_names: Opt[typehintList[str]] = None, print_out: Opt[bool] = False ) -> None:
+    def add_new_table( self, table_name: str, extra_column_names: Opt[typehintList[str]] = None, verbose: Opt[bool] = False ) -> None:
         assert self.is_user_registered(), f"User '{self.accessor_username}' must first be registed before adding new items."
         table_name = table_name.upper()
         assert not self.table_exists( table_name ), f'Cannot add table "{table_name}" because it already exists.'
@@ -375,12 +537,14 @@ class MetaTables( LibrarianUtilities ):
         if extra_column_names: # checks if it is not None and if the dict is not empty
             for c in extra_column_names: 
                 self._tables[table_name][c.upper()] = pd.Series([None] * len(self._tables[table_name])) # don't forget to convert new column name to uppercase
-        self._update_metadata()
-        if print_out:
+            self._update_metadata( new_table_extra_columns={table_name: extra_column_names} )
+        else:
+            self._update_metadata()
+        if verbose:
             print( f'SUCCESS! --- Added new "{table_name}" table' )
 
 
-    def add_new_item( self, table_name: str, item_name: str, extra_columns_values: Opt[typehintDict[str, str]] = None, print_out: Opt[bool] = False ) -> None:
+    def add_new_item( self, table_name: str, item_name: str, extra_columns_values: Opt[typehintDict[str, str]] = None, verbose: Opt[bool] = False ) -> None:
         assert self.is_user_registered(), f"User '{self.accessor_username}' must first be registed before adding new items."
         table_name, item_name = table_name.upper(), item_name.upper(),
         assert self.table_exists( table_name ), f"Cannot add item '{item_name}' to table '{table_name}' because that table does not yet exist.\n\tTry creating the new table before adding '{item_name}' as a new item."
@@ -400,7 +564,7 @@ class MetaTables( LibrarianUtilities ):
 
         self._tables[table_name] = pd.concat( [self.tables[table_name], new_data], ignore_index=True )
         self._update_metadata()
-        if print_out:
+        if verbose:
             print( f'\tSUCCESS! --- Added "{item_name}" to table "{table_name}"' )
 
 
@@ -439,90 +603,6 @@ class MetaTables( LibrarianUtilities ):
         return '\n'.join( output )
 
     # def doc( self ) -> str: return self.__doc__
-
-#--------------------------------------------------------------------------------------------------------------------------
-## Class for establishing a connection to the xnat server with specific credentials.
-class XNATConnection( LibrarianUtilities ):
-    '''
-    to-do: document explanation of class
-
-    # Example usage:
-    my_login_info = {'URL': 'https://rpacs.iibi.uiowa.edu/xnat/', 'USERNAME': '...', 'PASSWORD': '...'}
-    my_login = XNATLogin( login_info )
-    mt = MetaTables( my_login )
-    my_connection = XNATConnection( my_login, my ) 
-    print( my_connection )
-    # my_connection = XNATConnection( my_login, my, stay_connected=True ) 
-    # print( my_connection )
-    '''
-    def __init__( self, login_info: XNATLogin, meta_tables: MetaTables, stay_connected: bool = False ):
-        assert login_info.is_valid, f"Provided login info must be validated before accessing metatables: {login_info}"
-        super().__init__()  # Call the __init__ method of the base clas
-        self._login_info, self.meta_tables, self._project_handle = login_info, meta_tables, None
-        self._is_verified, self._session_uid, self._open = False, self.generate_uid(), stay_connected
-        self._verify_login()
-        if stay_connected:
-            self.server.disconnect()
-            # self.server = None
-
-
-    @property
-    def login_info( self ) -> XNATLogin:    return self._login_info
-    @property
-    def server( self ) -> Interface:        return self._server
-    @property
-    def project_query_str( self ) -> str:   return self._project_query_str
-    @property
-    def project_handle( self ) -> pyxnatProject:  return self._project_handle # type: ignore
-    @property
-    def is_verified( self ) -> bool:        return self._is_verified
-    @property
-    def open( self ) -> bool:               return self._open
-    @property
-    def get_user( self ) -> Opt[str]:       return self.login_info.validated_username
-    @property
-    def get_password( self ) -> Opt[str]:   return self.login_info.validated_password
-    @property
-    def session_uid( self ) -> str:         return self._session_uid
-
-
-    def _verify_login( self, stay_connected: bool = False ):
-        self._server = self._establish_connection()
-        self._grab_project_handle() # If more tests in the future, separate as its own function.
-        self._is_verified = True
-
-
-    def _establish_connection( self ) -> Interface:
-        return Interface( server=self.xnat_project_url, user=self.get_user, password=self.get_password )
-
-
-    def _grab_project_handle( self ):
-        self._project_query_str = '/project/' + self.xnat_project_name
-        project_handle = self.server.select( self.project_query_str )
-        if project_handle.exists(): # type: ignore
-            self._project_handle = project_handle
-
-
-    def close( self ):
-        if hasattr( self, '_server' ):
-            self._server.disconnect()
-        self._open = False
-        print( f'!!!'*3 + f"\n\tConnection '{self.session_uid}' to XNAT server has been closed -- any unsaved metatable data will be lost!\n" + '!!!'*3 )
-
-
-    def __del__( self ):    self.close()
-
-    def __enter__( self ):  return self
-
-    def __exit__( self, exc_type, exc_value, traceback ): self.close()
-
-    def __str__( self ) -> str:
-        connection_status = "Open" if self.open else "Closed"
-        return (f"-- XNAT Connection --\n"
-                f"Status:\t\t{connection_status}\n"
-                f"Signed-in:\t{self.get_user}\n"
-                # f"UID:\t\t{self.uid}\n"
-                f"Project:\t{self.project_handle}\n" )
 
 
 #--------------------------------------------------------------------------------------------------------------------------

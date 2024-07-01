@@ -1,30 +1,8 @@
-import json
 import os
-import glob
-import re
-from typing import Optional as Opt, Tuple, Union
-import cv2
-import io
-import base64
-import numpy as np
-import requests
-import hashlib
-import pandas as pd
+from typing import List, Dict, Any, Tuple, Optional as Opt, Union
 
 from datetime import datetime, date as dtdate, time as dttime
 from dateutil import parser
-import pytz
-
-import uuid
-
-from pydicom.dataset import FileDataset as pydicomFileDataset
-from pydicom import Dataset, Sequence, dcmread, dcmwrite, uid as dcmUID
-
-
-from typing import List, Dict, Any, Tuple, Optional as Opt, Union
-
-import shutil
-import tempfile
 
 from src.utilities import LibrarianUtilities, MetaTables, USCentralDateTime, XNATLogin, XNATConnection
 

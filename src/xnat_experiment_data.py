@@ -11,6 +11,8 @@ from datetime import datetime
 from pydicom.dataset import FileDataset as pydicomFileDataset
 from pydicom import Dataset, Sequence, dcmread, dcmwrite
 
+import pyxnat
+
 from pathlib import Path, PurePosixPath
 import shutil
 import tempfile
@@ -135,14 +137,17 @@ class ExperimentData():
             # Create the items in stepwise fashion -- to-do: can't figure out how to create all in one go instead of attrs.mset(), it wouldn't work properly
             subj_inst.create()                                                                      # type: ignore
             subj_inst.attrs.mset( { f'xnat:subjectData/GROUP': self.group } )                       # type: ignore
-            exp_inst.create( **{    f'experiments': f'xnat:{schema_prefix_str}SessionData' })          # type: ignore
+            exp_inst.create( **{    f'experiments': f'xnat:{schema_prefix_str}SessionData' })       # type: ignore
             exp_inst.attrs.mset( {  f'xnat:experimentData/ACQUISITION_SITE': self.acquisition_site, # type: ignore
                                     f'xnat:experimentData/DATE': self.datetime.date } )
-            scan_inst.create( **{   f'scans': f'xnat:{schema_prefix_str}ScanData' } )                  # type: ignore
-            scan_inst.attrs.mset( { f'xnat:{schema_prefix_str}ScanData/TYPE': scan_type_label,       # type: ignore
+            scan_inst.create( **{   f'scans': f'xnat:{schema_prefix_str}ScanData' } )               # type: ignore
+            scan_inst.attrs.mset( { f'xnat:{schema_prefix_str}ScanData/TYPE': scan_type_label,      # type: ignore
                                     f'xnat:{schema_prefix_str}ScanData/SERIES_DESCRIPTION': self.series_description,
                                     f'xnat:imageScanData/NOTE': 'LAST_EDITED: ' + USCentralDateTime( datetime.now().strftime( '%Y-%m-%d %H:%M:%S' ) ).verbose } )
-            scan_inst.resource( resource_label ).put_zip( zipped_ffn )                              # type: ignore
+
+            # # need to also publish the resource file(s)
+            self.push_intake_form_as_resource_to_xnat( subj_inst=subj_inst, verbose=verbose )
+
             if delete_zip is True:
                 os.remove( zipped_ffn )
             if verbose is True:
@@ -151,6 +156,19 @@ class ExperimentData():
         except Exception as e:
             print( f'\tError: could not publish to xnat.\n{e}' )
             raise
+
+
+    def push_intake_form_as_resource_to_xnat( self, subj_inst, verbose: Opt[bool] = False ):
+        if self.resource_files is not None:
+            if verbose:
+                print( f'\t\t...Uploading resource files...' )
+            
+            assert len( self.resource_files ) == 0, f'BUG: resource_files is assumed to have at-maximum one file, but it has {len( self.resource_files )} files.'
+            folder_name= r'INTAKE'
+            content_label = r'TEXT'
+            format_label = r'JSON'
+            uploaded_file_name = 'OR_DATA_INTAKE_FORM.txt'
+            subj_inst.resource( folder_name ).file( uploaded_file_name ).insert( self.resource_files[0], content=content_label, format=format_label, tags='IntakeForm' ) # type: ignore
 
 
     def catalog_new_data( self, verbose: Opt[bool] = False ):

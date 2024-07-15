@@ -215,13 +215,21 @@ class XNATConnection( LibrarianUtilities ):
     # my_connection = XNATConnection( my_login, my, stay_connected=True ) 
     # print( my_connection )
     '''
+    _instance = None
+
+    def __new__( cls, *args, **kwargs ): # Only one instance of this class should be allowed to exist at a time.
+        if cls._instance is not None:
+            cls._instance.__del__()  # Explicitly call __del__ on the existing instance
+        cls._instance = super(XNATConnection, cls).__new__(cls)
+        return cls._instance
+
     def __init__( self, login_info: XNATLogin, stay_connected: bool = False, verbose: Opt[bool] = False ):
         assert login_info.is_valid, f"Provided login info must be validated before accessing xnat server: {login_info}"
         super().__init__()  # Call the __init__ method of the base clas
         self._login_info, self._project_handle = login_info, None
         self._is_verified, self._session_uid, self._is_open = False, self.generate_uid(), stay_connected
         self._verify_login()
-        if stay_connected:
+        if stay_connected is False:
             self.server.disconnect()
             # self.server = None
         if verbose:
@@ -274,6 +282,7 @@ class XNATConnection( LibrarianUtilities ):
     def __del__( self ):
         self.close() # Close the server connection ***AND*** delete the metatables local data to enforce user to always pull it from the server first.
         if os.path.exists( self.meta_tables_ffn ):      os.remove( self.meta_tables_ffn )
+        XNATConnection._instance = None
 
     def __enter__( self ):                              return self
 
@@ -283,7 +292,7 @@ class XNATConnection( LibrarianUtilities ):
         connection_status = "Open" if self.is_open else "Closed"
         return (f"-- XNAT Connection --\n"
                 f"Status:\t\t{connection_status}\n"
-                f"Signed-in:\t{self.get_user}\n"
+                f"Signed-in as:\t{self.get_user}\n"
                 # f"UID:\t\t{self.uid}\n"
                 f"Project:\t{self.project_handle}\n" )
     
@@ -341,6 +350,8 @@ class MetaTables( LibrarianUtilities ):
             self._instantiate_json_file()
             self._initialize_metatables()
             self.push_to_xnat( verbose )
+        if verbose:
+            print( self )
             
 
     @property
@@ -519,7 +530,6 @@ class MetaTables( LibrarianUtilities ):
             return list (self.tables[table_name.upper()]['NAME'] )
         else:   return [] # Return an empty list if the table does not exist or is empty
             
-
 
     def table_exists( self, table_name: str ) -> bool:
         return table_name.upper() in self.list_of_all_tables()
@@ -755,3 +765,4 @@ class ImageHash( LibrarianUtilities ):
 
     def dummy_image( self ) -> np.ndarray:
         return np.full( self.required_img_size_for_hashing, np.nan )
+

@@ -346,6 +346,7 @@ class MetaTables( LibrarianUtilities ):
         # Need to try to pull it from the xnat server if it exists, otherwise create it from scratch.
         try:
             self.pull_from_xnat( verbose=verbose )
+
         except:
             self._instantiate_json_file()
             self._initialize_metatables()
@@ -369,6 +370,16 @@ class MetaTables( LibrarianUtilities ):
 
 
     #==========================================================PRIVATE METHODS==========================================================
+    def _reinitialize_metatables_with_extra_columns( self ) -> None:
+        # iterate through each table in self._tables and ensure that all columns denoted in self.metadata['TABLE_EXTRA_COLUMNS'] are present.
+        for table_name, table in self._tables.items():
+            if table_name in self.metadata['TABLE_EXTRA_COLUMNS']:
+                print( 'table_name: ', table_name)
+                for col in self.metadata['TABLE_EXTRA_COLUMNS'][table_name]:
+                    print( 'col in table: ', col in table.columns )
+                    if col not in table.columns:
+                        table[col] = None
+    
     def _instantiate_json_file( self ):
         '''#Instantiate with a registered users table.'''
         assert self.login_info.is_valid, f"Provided login info must be validated before loading metatables: {self.login_info}"
@@ -483,6 +494,8 @@ class MetaTables( LibrarianUtilities ):
         self._load( write_ffn, verbose )
         if verbose:
             print( f'\t...Metatables successfully populated from XNAT data.' )
+        
+        self._reinitialize_metatables_with_extra_columns()
         return write_ffn
 
 
@@ -563,7 +576,7 @@ class MetaTables( LibrarianUtilities ):
         new_item_uid = self.generate_uid()
         if extra_columns_values: # convert keys to uppercase, make sure all inputted keys were defined when the table was added as new.
             extra_columns_values = {k.upper(): v for k, v in extra_columns_values.items()}
-            assert all( k in self.tables[table_name].columns for k in extra_columns_values.keys() ), f"Provided extra column names must exist in the table: {table_name}"
+            assert all( k in self.tables[table_name].columns for k in extra_columns_values.keys() ), f"Provided extra column names {extra_columns_values.keys()} must exist in the table: {table_name}"
             all_cols = set( self.tables[table_name].columns )
             default_cols = list( self.default_meta_table_columns )
             missing_cols = all_cols.difference( default_cols + list( extra_columns_values.keys() ) )

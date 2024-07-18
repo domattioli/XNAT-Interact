@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import json
 from typing import List, Dict, Any, Tuple, Optional as Opt, Union
 
@@ -305,61 +306,61 @@ class ORDataIntakeForm( ResourceFile ):
         
 
     def _create_text_file_reconstruction( self ):
-        save_ffn = os.path.join( self.metatables.tmp_data_dir, 'OR_DATA_INTAKE_FORM.txt' )
         json_str = json.dumps( self.running_text_file, indent=4 )
-        with open( save_ffn, 'w' ) as f:
+        with open( self.saved_ffn, 'w' ) as f:
             f.write( json_str )
-            print( f' -- SUCCESS -- OR Data Intake Form saved to:\t{save_ffn}' )
+            print( f' -- SUCCESS -- OR Data Intake Form saved to:\t{self.saved_ffn}' )
 
-
     @property
-    def running_text_file( self )                       -> dict:        return self._running_text_file
+    def saved_ffn( self )                               -> Path:                    return Path( os.path.join( self.metatables.tmp_data_dir, 'OR_DATA_INTAKE_FORM.txt' ) )
     @property
-    def form_is_available( self )                       -> bool:        return self._form_available
+    def running_text_file( self )                       -> dict:                    return self._running_text_file
     @property
-    def filer_name( self )                              -> Opt[str]:    return self._filer_name
+    def form_is_available( self )                       -> bool:                    return self._form_available
     @property
-    def operation_date( self )                          -> Opt[str]:    return self._operation_date
+    def filer_name( self )                              -> Opt[str]:                return self._filer_name
     @property
-    def institution_name( self )                        -> Opt[str]:    return self._institution_name
+    def operation_date( self )                          -> Opt[str]:                return self._operation_date
     @property
-    def acquisition_site( self )                        -> Opt[str]:    return self._institution_name
+    def institution_name( self )                        -> Opt[str]:                return self._institution_name
     @property
-    def ortho_procedure_type( self )                    -> Opt[str]:    return self._ortho_procedure_type # Trauma or arthro
+    def acquisition_site( self )                        -> Opt[str]:                return self._institution_name
     @property
-    def ortho_procedure_name( self )                    -> Opt[str]:    return acceptable_ortho_procedure_names[self._ortho_procedure_name] # type: ignore
+    def ortho_procedure_type( self )                    -> Opt[str]:                return self._ortho_procedure_type # Trauma or arthro
     @property
-    def group( self )                                   -> Opt[str]:    return acceptable_ortho_procedure_names[self._ortho_procedure_name] # type: ignore
+    def ortho_procedure_name( self )                    -> Opt[str]:                return acceptable_ortho_procedure_names[self._ortho_procedure_name] # type: ignore
     @property
-    def epic_start_time( self )                         -> Opt[str]:    return self._epic_start_time
+    def group( self )                                   -> Opt[str]:                return acceptable_ortho_procedure_names[self._ortho_procedure_name] # type: ignore
     @property
-    def datetime( self )                                -> Opt[USCentralDateTime]:    return USCentralDateTime( f'{self.operation_date} {self.epic_start_time}' )
+    def epic_start_time( self )                         -> Opt[str]:                return self._epic_start_time
+    @property
+    def datetime( self )                                -> Opt[USCentralDateTime]:  return USCentralDateTime( f'{self.operation_date} {self.epic_start_time}' )
     @property   
-    def epic_end_time( self )                           -> Opt[str]:    return self._epic_end_time
+    def epic_end_time( self )                           -> Opt[str]:                return self._epic_end_time
     @property
-    def side_of_patient_body( self )                    -> Opt[str]:    return self._side_of_patient_body
+    def side_of_patient_body( self )                    -> Opt[str]:                return self._side_of_patient_body
     @property
-    def OR_location( self )                             -> Opt[str]:    return self._OR_location
+    def OR_location( self )                             -> Opt[str]:                return self._OR_location
     @property
-    def supervising_surgeon_hawk_id( self )             -> Opt[str]:    return self._supervising_surgeon_hawk_id
+    def supervising_surgeon_hawk_id( self )             -> Opt[str]:                return self._supervising_surgeon_hawk_id
     @property
-    def supervising_surgeon_presence( self )            -> Opt[str]:    return self._supervising_surgeon_presence # Present, retrospective, other
+    def supervising_surgeon_presence( self )            -> Opt[str]:                return self._supervising_surgeon_presence # Present, retrospective, other
     @property
-    def performing_surgeon_hawk_id( self )              -> Opt[str]:    return self._performing_surgeon_hawk_id
+    def performing_surgeon_hawk_id( self )              -> Opt[str]:                return self._performing_surgeon_hawk_id
     @property
-    def performer_year_in_residency( self )             -> Opt[int]:    return self._performer_year_in_residency
+    def performer_year_in_residency( self )             -> Opt[int]:                return self._performer_year_in_residency
     @property
-    def performer_was_assisted( self )                  -> Opt[bool]:   return self._performer_was_assisted
+    def performer_was_assisted( self )                  -> Opt[bool]:               return self._performer_was_assisted
     @property
-    def performer_num_of_similar_logged_cases( self )   -> Opt[int]:    return self._performer_num_of_similar_logged_cases
+    def performer_num_of_similar_logged_cases( self )   -> Opt[int]:                return self._performer_num_of_similar_logged_cases
     @property
-    def performance_enumerated_task_performer( self )   -> Opt[dict]:   return self._performance_enumerated_task_performer
+    def performance_enumerated_task_performer( self )   -> Opt[dict]:               return self._performance_enumerated_task_performer
     @property
-    def list_unusual_features_of_performance( self )    -> Opt[str]:    return self._list_unusual_features_of_performance
+    def list_unusual_features_of_performance( self )    -> Opt[str]:                return self._list_unusual_features_of_performance
     @property
-    def diagnostic_notes( self )                        -> Opt[str]:    return self._diagnostic_notes
+    def diagnostic_notes( self )                        -> Opt[str]:                return self._diagnostic_notes
     @property
-    def misc_surgical_performance_comments( self )      -> Opt[str]:    return self._misc_surgical_performance_comments # body habitus, pre-existing conditions, specific technical struggles, damage to tissue, non-technical issues, anything that happened before/after the procedure began 
+    def misc_surgical_performance_comments( self )      -> Opt[str]:                return self._misc_surgical_performance_comments # body habitus, pre-existing conditions, specific technical struggles, damage to tissue, non-technical issues, anything that happened before/after the procedure began 
     
     @property
     def assessment_title( self )    -> Opt[str]:    return self._assessment_title

@@ -163,18 +163,13 @@ class ExperimentData():
             if verbose:
                 print( f'\t\t...Uploading resource files...' )
             
-            assert len( self.resource_files ) == 0, f'BUG: resource_files is assumed to have at-maximum one file, but it has {len( self.resource_files )} files.'
+            assert len( self.resource_files ) == 1, f'BUG: resource_files is assumed to have at-maximum one file, but it has {len( self.resource_files )} files.'
             folder_name= r'INTAKE'
             content_label = r'TEXT'
             format_label = r'JSON'
             uploaded_file_name = 'OR_DATA_INTAKE_FORM.txt'
-            subj_inst.resource( folder_name ).file( uploaded_file_name ).insert( self.resource_files[0], content=content_label, format=format_label, tags='IntakeForm' ) # type: ignore
-
-
-    def catalog_new_data( self, verbose: Opt[bool] = False ):
-        self.metatables.save( verbose=verbose ) # commenting out until i figure out whether we need to save locally and on xnat or just one or the other
-        if verbose is True:
-            print( f'\t...Metatables successfully updated to reflect new subject uid and image hashes.' )
+            with open( self.resource_files[0].saved_ffn, 'r' ) as f:
+                subj_inst.resource( folder_name ).file( uploaded_file_name ).insert( f.read(), content=content_label, format=format_label, tags='IntakeForm' ) # type: ignore
 
 
     def write_publish_catalog_subroutine( self, schema_prefix_str: str, zipped_ffn: Opt[Path] = None, verbose: Opt[bool] = False, delete_zip: Opt[bool] = True ):
@@ -185,7 +180,6 @@ class ExperimentData():
                 os.remove( zipped_ffn ) # remove zipped file if it was created.
             raise
         self.publish_to_xnat( zipped_ffn=zipped_ffn, schema_prefix_str=schema_prefix_str, verbose=verbose, delete_zip=delete_zip )
-        self.catalog_new_data( verbose=verbose )
         self.metatables.push_to_xnat( verbose=verbose )
 
 
@@ -435,6 +429,7 @@ class SourceESVSession( ExperimentData ):
                 else:
                     hash_strs.add( row['OBJECT'].image.hash_str )
         
+        
     def _check_session_validity( self ): # Invalid only when empty or all shots are invalid -- to-do: may also want to check that instance num and time are monotonically increasing
         self._is_valid = True if self.df['IS_VALID'].any() and not self.metatables.item_exists( table_name='SUBJECTS', item_name=self.uid ) else False
 
@@ -469,6 +464,8 @@ class SourceESVSession( ExperimentData ):
         subject_info = { 'ACQUISITION_SITE': self.metatables.get_uid( table_name='ACQUISITION_SITES', item_name=self.acquisition_site ),
                         'GROUP': self.metatables.get_uid( table_name='GROUPS', item_name=self.group ) }
         self.metatables.add_new_item( table_name='SUBJECTS', item_name=self.uid, extra_columns_values=subject_info, verbose=verbose ) # type: ignore
+        print( self.metatables.list_of_all_items_in_table( table_name='SUBJECTS' ) )
+        self.metatables.get_uid( table_name='SUBJECTS', item_name=self.uid )
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_dir = tmp_dir
             for idx in range( len( self.df ) ): # Iterate through each row in the DataFrame, writing each to a temp directory before we zip it up and delete the unzipped folder.

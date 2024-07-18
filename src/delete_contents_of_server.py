@@ -4,9 +4,9 @@ from pyxnat import Interface
 
 def delete_subjects( server: str, username: str, password: str ):
     with Interface( server=server, user=username, password=password ) as xnat:
-        all_s_names = xnat.select( '/projects/domSandBox/subjects/*' ).get() # type: ignore
+        all_s_names = xnat.select( '/projects/GROK_AHRQ_real/subjects/*' ).get() # type: ignore
         for s in all_s_names:
-            si = xnat.select( '/projects/domSandBox/subjects/' + s )
+            si = xnat.select( '/projects/GROK_AHRQ_real/subjects/' + s )
             try:
                 si.delete() # type: ignore
             except:

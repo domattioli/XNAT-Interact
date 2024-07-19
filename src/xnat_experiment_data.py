@@ -463,9 +463,7 @@ class SourceESVSession( ExperimentData ):
         # Add the subject to the metatables
         subject_info = { 'ACQUISITION_SITE': self.metatables.get_uid( table_name='ACQUISITION_SITES', item_name=self.acquisition_site ),
                         'GROUP': self.metatables.get_uid( table_name='GROUPS', item_name=self.group ) }
-        self.metatables.add_new_item( table_name='SUBJECTS', item_name=self.uid, extra_columns_values=subject_info, verbose=verbose ) # type: ignore
-        print( self.metatables.list_of_all_items_in_table( table_name='SUBJECTS' ) )
-        self.metatables.get_uid( table_name='SUBJECTS', item_name=self.uid )
+        self.metatables.add_new_item( table_name='SUBJECTS', item_name=self.uid, extra_columns_values=subject_info, verbose=verbose ) 
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_dir = tmp_dir
             for idx in range( len( self.df ) ): # Iterate through each row in the DataFrame, writing each to a temp directory before we zip it up and delete the unzipped folder.

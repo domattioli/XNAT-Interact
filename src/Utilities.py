@@ -289,12 +289,10 @@ class XNATConnection( LibrarianUtilities ):
     def __exit__( self, exc_type, exc_value, traceback ): self.close()
 
     def __str__( self ) -> str:
-        connection_status = "Open" if self.is_open else "Closed"
-        return (f"-- XNAT Connection --\n"
-                f"Status:\t\t{connection_status}\n"
-                f"Signed-in as:\t{self.get_user}\n"
+        return (f"-- XNAT Connection: {'Open' if self.is_open else 'Closed'} --\n"
+                f"\tSigned-in as:\t{self.get_user}\n"
                 # f"UID:\t\t{self.uid}\n"
-                f"Project:\t{self.project_handle}\n" )
+                f"\tProject:\t{self.project_handle}" )
     
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -345,11 +343,11 @@ class MetaTables( LibrarianUtilities ):
         self._login_info, self._xnat_connection = login_info, xnat_connection
         # Need to try to pull it from the xnat server if it exists, otherwise create it from scratch.
         try:
-            self.pull_from_xnat( verbose=verbose )
+            self.pull_from_xnat( verbose=False )
         except:
             self._instantiate_json_file()
             self._initialize_metatables()
-            self.push_to_xnat( verbose )
+            self.push_to_xnat( verbose=False )
         if verbose:                         print( self )
             
 
@@ -362,15 +360,18 @@ class MetaTables( LibrarianUtilities ):
     @property
     def metadata( self )            -> dict:            return self._metadata
     @property
-    def accessor_username( self )   -> str:             return str( self.login_info.validated_username ).upper() 
+    def accessor_username( self )   -> str:             return self.login_info.validated_username.upper() 
     @property
     def accessor_uid( self )        -> str:             return self.get_uid( 'REGISTERED_USERS', self.accessor_username )
-
 
     #==========================================================PRIVATE METHODS==========================================================
     def _reinitialize_metatables_with_extra_columns( self ) -> None:
         # iterate through each table in self._tables and ensure that all columns denoted in self.metadata['TABLE_EXTRA_COLUMNS'] are present.
         for table_name, table in self._tables.items():
+            # Ensure default meta table columns are present
+            for col in self.default_meta_table_columns:
+                if col not in table.columns:
+                    table[col] = None
             if table_name in self.metadata['TABLE_EXTRA_COLUMNS']:
                 for col in self.metadata['TABLE_EXTRA_COLUMNS'][table_name]:
                     if col not in table.columns:
@@ -380,7 +381,7 @@ class MetaTables( LibrarianUtilities ):
         '''#Instantiate with a registered users table.'''
         assert self.login_info.is_valid, f"Provided login info must be validated before loading metatables: {self.login_info}"
         # assert self.accessor_uid is not None, f'BUG: shouldnt arrive to this point in the code without having an established username; receive: {self.accessor_uid}.' # commenting out on 6/19/2024 bc this function should only be called once, when I (dom) need to create the metatables.json file in the first place.
-        assert self.login_info.validated_username.lower() == 'dmattioli', f'Only user DMATTIOLI can instantiate the metatables.json file.'
+        assert self.login_info.validated_username.upper() == 'DMATTIOLI', f'Only user DMATTIOLI can instantiate the metatables.json file.'
         now_datetime = self.now_datetime
         dmattioli_uid_init = self.generate_uid()
         default_users = { 'DMATTIOLI'.upper(): [dmattioli_uid_init, now_datetime, dmattioli_uid_init] }
@@ -488,8 +489,7 @@ class MetaTables( LibrarianUtilities ):
             assert write_ffn.suffix == '.json', f"Provided write file path must have a '.json' extension: {write_ffn}"
             write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'MetaTables' ).file( self.meta_tables_fn ).get_copy( str( write_ffn ) )
         self._load( write_ffn, verbose )
-        if verbose:
-            print( f'\t...Metatables successfully populated from XNAT data.' )
+        if verbose:                     print( f'\t...Metatables successfully populated from XNAT data.' )
         
         self._reinitialize_metatables_with_extra_columns()
         return write_ffn
@@ -498,9 +498,7 @@ class MetaTables( LibrarianUtilities ):
     def push_to_xnat( self, verbose: Opt[bool] = False ) -> None:
         self.save( verbose )
         self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'MetaTables' ).file( self.meta_tables_fn ).put( self.meta_tables_ffn, content='DO_NOT_DELETE', format='JSON', tags='UNIQUE_IDs', overwrite=True )
-        if verbose is True:
-            print( f'\t...Metatables successfully updated on XNAT.' )
-
+        if verbose is True:             print( f'\t...Metatables successfully updated on XNAT.' )
 
 
     def save( self, verbose: Opt[bool] = False ) -> None: # Convert all tables to JSON; Write the data to the file
@@ -512,8 +510,7 @@ class MetaTables( LibrarianUtilities ):
         json_str = self._custom_json_serializer( data )
         with open( self.meta_tables_ffn, 'w' ) as f:
             f.write( json_str )
-        if verbose:
-            print( f'SUCCESS! --- saved metatables to: {self.meta_tables_ffn}' )
+        if verbose:                     print( f'SUCCESS! --- saved metatables to: {self.meta_tables_ffn}' )
 
 
     def is_user_registered( self, user_name: Opt[str] = None ) -> bool:
@@ -526,8 +523,7 @@ class MetaTables( LibrarianUtilities ):
         self._validate_login_for_important_functions()
         if not self.is_user_registered( user_name ):
             self.add_new_item( 'REGISTERED_USERS', user_name )
-        if verbose:
-            print( f'SUCCESS! --- Registered new user: {user_name}' )
+        if verbose:                     print( f'SUCCESS! --- Registered new user: {user_name}' )
 
 
     def list_of_all_tables( self ) -> list:
@@ -555,12 +551,11 @@ class MetaTables( LibrarianUtilities ):
         self._tables[table_name] = self._init_table_w_default_cols()
         if extra_column_names: # checks if it is not None and if the dict is not empty
             for c in extra_column_names: 
-                self._tables[table_name][c.upper()] = pd.Series([None] * len(self._tables[table_name])) # don't forget to convert new column name to uppercase
+                self._tables[table_name][c.upper()] = pd.Series( [None] * len( self._tables[table_name] ) ) # don't forget to convert new column name to uppercase
             self._update_metadata( new_table_extra_columns={table_name: extra_column_names} )
         else:
             self._update_metadata()
-        if verbose:
-            print( f'SUCCESS! --- Added new "{table_name}" table' )
+        if verbose:                     print( f'SUCCESS! --- Added new "{table_name}" table' )
 
 
     def add_new_item( self, table_name: str, item_name: str, extra_columns_values: Opt[typehintDict[str, str]] = None, verbose: Opt[bool] = False ) -> None:
@@ -568,33 +563,22 @@ class MetaTables( LibrarianUtilities ):
         table_name, item_name = table_name.upper(), item_name.upper(),
         assert self.table_exists( table_name ), f"Cannot add item '{item_name}' to table '{table_name}' because that table does not yet exist.\n\tTry creating the new table before adding '{item_name}' as a new item."
         assert not self.item_exists( table_name, item_name ), f'Cannot add item "{item_name}" to Table "{table_name}" because it already exists.'
+        
+        # Ensure all provided extra column names exist in the table, considering case-insensitivity
+        if extra_columns_values:            extra_columns_values = {k.upper(): v for k, v in extra_columns_values.items()}
+        table_columns_upper = [col.upper() for col in self.tables[table_name].columns]
+        assert extra_columns_values is None or all( k in table_columns_upper for k in extra_columns_values.keys()), f"Provided extra column names '{extra_columns_values.keys()}' must exist in table '{table_name}'"
 
         new_item_uid = self.generate_uid()
         if extra_columns_values: # convert keys to uppercase, make sure all inputted keys were defined when the table was added as new.
-            extra_columns_values = {k.upper(): v for k, v in extra_columns_values.items()}
-            assert all( k in self.tables[table_name].columns for k in extra_columns_values.keys() ), f"Provided extra column names {extra_columns_values.keys()} must exist in the table: {table_name}"
-            
-            all_cols = set( self.tables[table_name].columns )
-            default_cols = set( self.default_meta_table_columns )
-            # missing_cols = all_cols.difference( default_cols + list( extra_columns_values.keys() ) )
-            missing_cols = all_cols.difference(default_cols.union(extra_columns_values.keys()))
-            assert missing_cols == set(), f"All non-default columns in the table must be defined when adding a new item; missing value definition for: {missing_cols}"
-            
-            # new_data = pd.DataFrame( [[item_name, new_item_uid, self.now_datetime, self.accessor_uid, *extra_columns_values.values()]], columns=self.tables[table_name].columns )
-            # Prepare columns and data for DataFrame creation
-            columns_order = list(default_cols) + list( extra_columns_values.keys() )
-            data_values = [item_name, new_item_uid, self.now_datetime, self.accessor_uid] + list( extra_columns_values.values() )
-            
-            # Create DataFrame with dynamically adjusted columns and data
-            new_data = pd.DataFrame([data_values], columns=columns_order)
-
+            # Add the new row to the table, using the default columns and the extra columns
+            new_data = pd.DataFrame( [ [item_name, new_item_uid, self.now_datetime, self.accessor_uid] + list( extra_columns_values.values() ) ], columns=self.tables[table_name].columns)
         else: # No inserted data for extra columns
-            new_data = pd.DataFrame( [[item_name, new_item_uid, self.now_datetime, self.accessor_uid]], columns=self.tables[table_name].columns )
+            new_data = pd.DataFrame( [ [item_name, new_item_uid, self.now_datetime, self.accessor_uid] ], columns=self.tables[table_name].columns )
 
         self._tables[table_name] = pd.concat( [self.tables[table_name], new_data], ignore_index=True )
         self._update_metadata()
-        if verbose:
-            print( f'\tSUCCESS! --- Added "{item_name}" to table "{table_name}"' )
+        if verbose:                     print( f'\tSUCCESS! --- Added "{item_name}" to table "{table_name}"' )
 
 
     def get_uid( self, table_name: str, item_name: str ) -> str:
@@ -609,29 +593,22 @@ class MetaTables( LibrarianUtilities ):
         return str( self.tables[table_name].loc[self.tables[table_name]['UID'] == item_uid, 'NAME'].values[0] )
 
 
+    def get_table( self, table_name: str ) -> pd.DataFrame:
+        table_name = table_name.upper()
+        assert self.table_exists( table_name ), f"Table '{table_name}' does not exist."
+        return self.tables[table_name]
+
+
     def __str__( self ) -> str:
         output = [f'\n-- MetaTables -- Accessed by: {self.accessor_username}']
         output.append( f'   *Last Modified: {self.metadata["LAST_MODIFIED"]}')
+        table_info = pd.DataFrame(columns=['Table Name', '# Items', '# Columns'])
         for table_name, table_data in self.tables.items():
-            # if table_name == 'REGISTERED_USERS':
-            #     continue  # Skip the 'REGISTERED_USERS' table
-            output.append( f'\tTable: {table_name}')
-            if table_data.empty:
-                output.append( '\t--Empty--' )
-            else:
-                if len( table_data ) > 5: # If the table has more than 5 rows, print only the first and last two rows
-                    for idx, row in table_data.head(2).iterrows():
-                        output.append( f'\t{idx+1:<5}{row["NAME"]:<50}')
-                    output.append( '\t...' )
-                    for idx, row in table_data.tail(2).iterrows():
-                        output.append( f'\t{idx+1:<5}{row["NAME"]:<50}')
-                else: # If the table has 5 or fewer rows, print all rows
-                    for idx, row in table_data.iterrows():
-                        output.append( f'\t{idx+1:<5}{row["NAME"]:<50}')
-            output.append('')  # Add a new line after each table
+            new_row_df = pd.DataFrame([[table_name, len(table_data), len(table_data.columns)]], 
+                                    columns=['Table Name', '# Items', '# Columns'])
+            table_info = pd.concat([table_info, new_row_df], ignore_index=True)
+        output.append( '\n'.join('\t' + line for line in table_info.to_string( index=False ).split('\n') ) )
         return '\n'.join( output )
-
-    # def doc( self ) -> str: return self.__doc__
 
 
 #--------------------------------------------------------------------------------------------------------------------------

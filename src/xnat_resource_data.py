@@ -70,7 +70,7 @@ class ORDataIntakeForm( ResourceFile ):
         # Required inputs -- user must at the very least acknowledge that they do not have the information
         self._filer_name, self._operation_date, self._form_available = '', '', False
         self._institution_name, self._ortho_procedure_type, self._ortho_procedure_namem, self._epic_start_time = '', '', '', ''
-        self._storage_device_name_and_type, self._radiology_contact_date, self._radiology_contact_time, self._relevant_folder = None, None, None, '' # While required, it would be good to show a "null" value in the json file if this is truly unknown.
+        self._storage_device_name_and_type, self._radiology_contact_date, self._radiology_contact_time, self._relevant_folder = None, None, None, Path('') # While required, it would be good to show a "null" value in the json file if this is truly unknown.
         self._scan_quality = ''
 
         # Information that may not be knowable if the data is older, so we will allow for None values
@@ -306,7 +306,7 @@ class ORDataIntakeForm( ResourceFile ):
         while not os.path.exists( full_path_name ):#or not full_path_name.lower() in ['', 'escape', 'exit', 'stop', 'quit', 'n/a', 'na', 'unknown', 'none', 'not applicable']:
             print( f'!!!!!Input directory path is not accessible on this system!!!!!\n\tPlease double-check the validity of that directory and try again.' )
             full_path_name = input( '\t(31/35)\tPlease enter the full directory name of the folder containing the case data:\n\t' )
-        self._relevant_folder = full_path_name
+        self._relevant_folder = Path( full_path_name )
 
         print( f'\n\t(32/35)\tWas radiology contacted for this procedure?\n\tEnter "1" for Yes, "2" for No, or "3" for Unknown.' )
         radiology_contacted = self.prompt_until_valid_answer_given( 'Radiology Contact Information', acceptable_options=['1', '2', '3'] )
@@ -403,5 +403,5 @@ class ORDataIntakeForm( ResourceFile ):
     @property
     def radiology_contact_time( self )          -> Opt[str]:    return self._radiology_contact_time
     @property
-    def relevant_folder( self )                 -> str:         return self._relevant_folder
+    def relevant_folder( self )                 -> Path:         return self._relevant_folder
     

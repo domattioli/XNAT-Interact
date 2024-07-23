@@ -1,10 +1,13 @@
 import os
 from pathlib import Path
-import json
+
 from typing import List, Dict, Any, Tuple, Optional as Opt, Union
 
 from datetime import datetime, date as dtdate, time as dttime
 from dateutil import parser
+
+import json
+from collections import OrderedDict
 
 from src.utilities import LibrarianUtilities, MetaTables, USCentralDateTime, XNATLogin, XNATConnection, USCentralDateTime
 
@@ -53,17 +56,59 @@ class InvalidInputError( Exception ):
 
 
 class ORDataIntakeForm( ResourceFile ):
-    def __init__( self, metatables: MetaTables, login: XNATLogin ):
-        super().__init__( metatables=metatables, login=login ) # Call the __init__ method of the base class
-        self._init_all_fields()
-        self._prompt_user_for_filer_name_and_operation_date()
-        self._prompt_user_for_scan_quality()
-        self._prompt_user_for_surgical_procedure_info()
-        self._prompt_user_for_skills_assessment_info()
-        self._prompt_user_for_storage_device_info()
-        self._create_text_file_reconstruction()
-        self._subject_uid = None # This must be set during the import methods of the corresponding class in xnat_experiment_data.py.
+    def __init__( self, metatables: MetaTables, login: XNATLogin, ffn: Opt[str]=None, verbose: Opt[bool]=False ):
+        if ffn:
+            self._read_from_file( ffn, verbose=verbose )
+            return
+        else:
+            super().__init__( metatables=metatables, login=login ) # Call the __init__ method of the base class
+            self._init_all_fields()
+            self._prompt_user_for_filer_name_and_operation_date()
+            self._prompt_user_for_scan_quality()
+            self._prompt_user_for_surgical_procedure_info()
+            self._prompt_user_for_skills_assessment_info()
+            self._prompt_user_for_storage_device_info()
+            self._create_text_file_reconstruction( verbose=verbose )
+            self._subject_uid = None # This must be set during the import methods of the corresponding class in xnat_experiment_data.py.
 
+
+    def _read_from_file( self, ffn: str, verbose: Opt[bool]=False ) -> None:
+        self._running_text_file = json.load( open( ffn ) )
+
+        # Minimally Required information (if paper form was available when processed)
+        self._subject_uid = self.running_text_file['SUBJECT_UID']
+        self._filer_name = self.running_text_file['FILER_NAME']
+        self._form_available = self.running_text_file['FORM_AVAILABLE_FOR_PERFORMANCE']
+        self._operation_date = self.running_text_file['OPERATION_DATE']
+        self._scan_quality = self.running_text_file['SCAN_QUALITY']
+        self._institution_name = self.running_text_file['SURGICAL_PROCEDURE_INFO']['INSTITUTION_NAME']
+        self._ortho_procedure_type = self.running_text_file['SURGICAL_PROCEDURE_INFO']['PROCEDURE_TYPE']
+        self._ortho_procedure_name = self.running_text_file['SURGICAL_PROCEDURE_INFO']['PROCEDURE_NAME']
+        self._epic_start_time = self.running_text_file['SURGICAL_PROCEDURE_INFO']['EPIC_START_TIME']
+        self._side_of_patient_body = self.running_text_file['SURGICAL_PROCEDURE_INFO']['PATIENT_SIDE']
+        self._storage_device_name_and_type = self.running_text_file['STORAGE_DEVICE_INFO']['STORAGE_DEVICE_NAME_AND_TYPE']
+        self._radiology_contact_date = self.running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_DATE']
+        self._radiology_contact_time = self.running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_TIME']
+        self._relevant_folder = self.running_text_file['STORAGE_DEVICE_INFO']['RELEVANT_FOLDER']
+
+        try:
+            self._epic_end_time = self.running_text_file['SURGICAL_PROCEDURE_INFO']['EPIC_END_TIME']
+            self._OR_location = self.running_text_file['SURGICAL_PROCEDURE_INFO']['OR_LOCATION']
+            self._supervising_surgeon_hawk_id = self.running_text_file['SURGICAL_PROCEDURE_INFO']['SUPERVISING_SURGEON_UID']
+            self._supervising_surgeon_presence = self.running_text_file['SURGICAL_PROCEDURE_INFO']['SUPERVISING_SURGEON_PRESENCE']
+            self._performing_surgeon_hawk_id = self.running_text_file['SURGICAL_PROCEDURE_INFO']['PERFORMING_SURGEON_UID']
+            self._performer_year_in_residency = self.running_text_file['SURGICAL_PROCEDURE_INFO']['PERFORMER_YEAR_IN_RESIDENCY']
+            self._performer_was_assisted = self.running_text_file['SURGICAL_PROCEDURE_INFO']['PERFORMER_WAS_ASSISTED']
+            self._performer_num_of_similar_logged_cases = self.running_text_file['SURGICAL_PROCEDURE_INFO']['PERFORMER_NUM_OF_SIMILAR_LOGGED_CASES']
+            self._performance_enumerated_task_performer = self.running_text_file['SURGICAL_PROCEDURE_INFO']['PERFORMANCE_ENUMERATED_TASK_PERFORMER']
+            self._list_unusual_features_of_performance = self.running_text_file['SURGICAL_PROCEDURE_INFO']['LIST_UNUSUAL_FEATURES']
+            self._diagnostic_notes = self.running_text_file['SURGICAL_PROCEDURE_INFO']['DIAGNOSTIC_NOTES']
+            self._misc_surgical_performance_comments = self.running_text_file['SURGICAL_PROCEDURE_INFO']['MISC_PROCEDURE_COMMENTS']
+            self._assessment_title = self.running_text_file['SKILLS_ASSESSMENT_INFO']['ASSESSMENT_TITLE']
+            self._assessor_hawk_id = self.running_text_file['SKILLS_ASSESSMENT_INFO']['ASSESSOR_UID']
+            self._assessment_details = self.running_text_file['SKILLS_ASSESSMENT_INFO']['ASSESSMENT_DETAILS']
+        except Exception as e:
+            if verbose: print( f'\t--- Only minimally required fields were found in the inputted form.' )
 
 
     def _init_all_fields( self ):
@@ -79,7 +124,10 @@ class ORDataIntakeForm( ResourceFile ):
         self._performer_was_assisted, self._performer_num_of_similar_logged_cases, self._performance_enumerated_task_performer = None, None, None
         self._list_unusual_features_of_performance, self._diagnostic_notes, self._misc_surgical_performance_comments = None, None, None
         self._assessment_title, self._assessor_hawk_id, self._assessment_details = None, None, None
-        self._running_text_file = {'UPLOAD_DATE': datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat() }
+        key_order = ['FORM_LAST_MODIFIED', 'OPERATION_DATE', 'SUBJECT_UID', 'FILER_HAWKID', 'FORM_AVAILABLE_FOR_PERFORMANCE', 'SCAN_QUALITY',
+                     'SURGICAL_PROCEDURE_INFO', 'SKILLS_ASSESSMENT_INFO', 'STORAGE_DEVICE_INFO']
+        self._running_text_file = OrderedDict( ( k, acceptable_ortho_procedure_names[k]) for k in key_order if k in acceptable_ortho_procedure_names )
+        self._running_text_file['FORM_LAST_MODIFIED'] = datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
 
 
     def prompt_until_valid_answer_given( self, selection_name: str, acceptable_options: list ) -> str:
@@ -106,9 +154,10 @@ class ORDataIntakeForm( ResourceFile ):
             self._form_available = False
             self._epic_start_time = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%S') # Assign midnight as the default start time
         
-        self._running_text_file['FILER_NAME'] = str( self.filer_name )
+        self._running_text_file['FILER_HAWKID'] = str( self.filer_name )
         self._running_text_file['FORM_AVAILABLE_FOR_PERFORMANCE'] = str( self.form_is_available )
         self._running_text_file['OPERATION_DATE'] = str( self.operation_date )
+        self._running_text_file['SUBJECT_UID'] = str( self.subject_uid )
     
     
     def get_time_input( self, prompt ) -> str:
@@ -322,12 +371,16 @@ class ORDataIntakeForm( ResourceFile ):
                                                             'RELEVANT_FOLDER': self.relevant_folder}
         
 
-    def _create_text_file_reconstruction( self ):
+    def _create_text_file_reconstruction( self, verbose: Opt[bool]=False ) -> None:
         json_str = json.dumps( self.running_text_file, indent=4 )
         with open( self.saved_ffn, 'w' ) as f:
             f.write( json_str )
-            print( f' -- SUCCESS -- OR Data Intake Form saved to:\t{self.saved_ffn}' )
+            if verbose:     print( f' -- SUCCESS -- OR Data Intake Form saved to:\t{self.saved_ffn}' )
     
+
+    def update_reconstruction( self, verbose: Opt[bool]=False ):
+        self._running_text_file['FORM_LAST_MODIFIED'] = datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
+        self._create_text_file_reconstruction( verbose=verbose )
     
 
     @property
@@ -405,3 +458,8 @@ class ORDataIntakeForm( ResourceFile ):
     @property
     def relevant_folder( self )                 -> Path:         return self._relevant_folder
     
+    def __str__( self ) -> str:
+        # Print out the json formatted information as it would be shown in a text file.
+        out_str = f'\t-- OR Data Intake Form --\n'
+        out_str += json.dumps( self.running_text_file, indent=4 )
+        return out_str

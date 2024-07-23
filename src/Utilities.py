@@ -59,7 +59,8 @@ class _local_variables:
         
         # DO NOT DELETE! This is the only place where these local variables/paths are defined.
         # xnat_project_name = 'domSandBox' # original
-        xnat_project_name = 'GROK_AHRQ_real'
+        # xnat_project_name = 'GROK_AHRQ_real' # another corrupted project.
+        xnat_project_name = 'GROK_AHRQ_main'
         meta_tables_fn = 'MetaTables.json'
         doc_dir = os.path.join( repo_dir, 'doc' )
         data_dir = doc_dir.replace( 'doc', 'data' )
@@ -497,7 +498,7 @@ class MetaTables( LibrarianUtilities ):
 
     def push_to_xnat( self, verbose: Opt[bool] = False ) -> None:
         self.save( verbose )
-        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'MetaTables' ).file( self.meta_tables_fn ).put( self.meta_tables_ffn, content='DO_NOT_DELETE', format='JSON', tags='UNIQUE_IDs', overwrite=True )
+        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'MetaTables' ).file( self.meta_tables_fn ).put( self.meta_tables_ffn, content='METADATA', format='JSON', tags='DOC', overwrite=True )
         if verbose is True:             print( f'\t...Metatables successfully updated on XNAT.' )
 
 
@@ -623,6 +624,7 @@ class USCentralDateTime():
     print( USCentralDateTime( 'nonsense time o'clock' ) )
     '''
     def __init__( self, dt_str: str ):
+        if dt_str == '':    dt_str = '1900-01-01 00:00:00'
         self._date, self._time, self._dt = '', '', None
         self._raw_dt_str = dt_str
         self._parse_date_time()

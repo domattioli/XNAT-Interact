@@ -420,21 +420,21 @@ class ORDataIntakeForm( ResourceFile ):
     @property
     def form_is_available( self )                       -> bool:                    return self._form_available
     @property
-    def filer_name( self )                              -> Opt[str]:                return self._filer_name
+    def filer_name( self )                              -> str:                     return self._filer_name
     @property
-    def operation_date( self )                          -> Opt[str]:                return self._operation_date
+    def operation_date( self )                          -> str:                     return self._operation_date
     @property
-    def institution_name( self )                        -> Opt[str]:                return self._institution_name
+    def institution_name( self )                        -> str:                     return self._institution_name
     @property
-    def acquisition_site( self )                        -> Opt[str]:                return self._institution_name
+    def acquisition_site( self )                        -> str:                     return self._institution_name
     @property
     def ortho_procedure_type( self )                    -> str:                     return self._ortho_procedure_type # Trauma or arthro
     @property
-    def ortho_procedure_name( self )                    -> Opt[str]:                return self._ortho_procedure_name # type: ignore
+    def ortho_procedure_name( self )                    -> str:                     return self._ortho_procedure_name # type: ignore
     @property
-    def group( self )                                   -> Opt[str]:                return self._ortho_procedure_name # type: ignore
+    def group( self )                                   -> str:                     return self._ortho_procedure_name # type: ignore
     @property
-    def scan_quality( self )                            -> Opt[str]:                return self._scan_quality
+    def scan_quality( self )                            -> str:                     return self._scan_quality
     @property
     def epic_start_time( self )                         -> str:                     return self._epic_start_time
     @property

@@ -70,10 +70,8 @@ class ORDataIntakeForm( ResourceFile ):
 
         # Init dict (and future json-formatted text file) with required keys.
         self._init_all_fields()
-        self._saved_ffn = metatables.tmp_data_dir / Path( self._uid )/ self.filename
-        print( self.saved_ffn )
-        print( self.saved_ffn.parent)
-        if not os.path.exists( self._saved_ffn.parent ): os.makedirs( self.saved_ffn.parent )
+        self._saved_ffn = metatables.tmp_data_dir / Path( self._uid ) / self.filename
+        if not os.path.exists( self.saved_ffn.parent ): os.makedirs( self.saved_ffn.parent )
         
 
         # Either read in the inputted text file and distribute that data, or prompt the user for the data.
@@ -398,6 +396,14 @@ class ORDataIntakeForm( ResourceFile ):
             if verbose:     print( f' -- SUCCESS -- OR Data Intake Form saved to:\t{self.saved_ffn}' )
 
 
+    def push_to_xnat( self, subj_inst, verbose: Opt[bool] = False ):
+        if verbose:     print( f'\t\t...Uploading resource files...' )
+        with open( self.saved_ffn, 'r' ) as f:
+            subj_inst.resource( 'INTAKE_FORM' ).file( self.filename ).insert( f.read(), content='TEXT', format='JSON', tags='DOC' ) # type: ignore
+
+
+    
+
     @staticmethod
     def _custom_serializer( obj ) -> str:
         if isinstance( obj, WindowsPath ):
@@ -407,8 +413,6 @@ class ORDataIntakeForm( ResourceFile ):
 
     @property
     def running_text_file( self )                       -> dict:                    return self._running_text_file
-    @property
-    def scan_quality( self )                            -> Opt[str]:                return self._scan_quality
     @property
     def filename( self )                                -> Path:                    return Path( 'RECONSTRUCTED_OR_DATA_INTAKE_FORM.json' )
     @property
@@ -430,9 +434,14 @@ class ORDataIntakeForm( ResourceFile ):
     @property
     def group( self )                                   -> Opt[str]:                return self._ortho_procedure_name # type: ignore
     @property
+    def scan_quality( self )                            -> Opt[str]:                return self._scan_quality
+    @property
     def epic_start_time( self )                         -> str:                     return self._epic_start_time
     @property
-    def datetime( self )                                -> Opt[USCentralDateTime]:  return USCentralDateTime( f'{self.operation_date} {self.epic_start_time}' )
+    def datetime( self )                                -> USCentralDateTime:
+        assert self.operation_date, 'Operation Date must be set before calling the IntakeForm datetime property.'
+        assert self.epic_start_time, 'Epic Start Time must be set before calling the IntakeForm datetime property.'
+        return USCentralDateTime( f'{self.operation_date} {self.epic_start_time}' )
     @property   
     def epic_end_time( self )                           -> Opt[str]:                return self._epic_end_time
     @property

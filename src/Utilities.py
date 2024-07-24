@@ -104,45 +104,51 @@ class _local_variables:
 class LibrarianUtilities:
     def __init__( self ):
         self._local_variables = _local_variables()
+        self._uid = self.generate_uid()
     
     @property
-    def local_variables( self ) -> _local_variables:    return self._local_variables
+    def uid( self )                             -> str:                 return self._uid
     @property
-    def tmp_data_dir( self ) -> Path:                    return self.local_variables.tmp_data_dir
+    def local_variables( self )                 -> _local_variables:    return self._local_variables
     @property
-    def cataloged_resources_ffn( self ) -> str:         return self.local_variables.cataloged_resources_ffn
+    def tmp_data_dir( self )                    -> Path:                return self.local_variables.tmp_data_dir
     @property
-    def meta_tables_fn( self ) -> str:                  return self.local_variables.meta_tables_fn
+    def cataloged_resources_ffn( self )         -> str:                 return self.local_variables.cataloged_resources_ffn
     @property
-    def meta_tables_ffn( self ) -> str:                 return self.local_variables.meta_tables_ffn
+    def meta_tables_fn( self )                  -> str:                 return self.local_variables.meta_tables_fn
     @property
-    def required_login_keys( self ) -> list:            return self.local_variables.required_login_keys
+    def meta_tables_ffn( self )                 -> str:                 return self.local_variables.meta_tables_ffn
     @property
-    def xnat_project_name( self ) -> str:               return self.local_variables.xnat_project_name
+    def required_login_keys( self )             -> list:                return self.local_variables.required_login_keys
     @property
-    def xnat_project_url( self ) -> str:                return self.local_variables.xnat_project_url
+    def xnat_project_name( self )               -> str:                 return self.local_variables.xnat_project_name
     @property
-    def default_meta_table_columns( self ) -> list:     return self.local_variables.default_meta_table_columns
+    def xnat_project_url( self )                -> str:                 return self.local_variables.xnat_project_url
     @property
-    def template_img_dir( self ) -> str:                return self.local_variables.template_img_dir
+    def default_meta_table_columns( self )      -> list:                return self.local_variables.default_meta_table_columns
     @property
-    def template_img( self ) -> np.ndarray:             return self.local_variables.template_img
+    def template_img_dir( self )                -> str:                 return self.local_variables.template_img_dir
     @property
-    def acceptable_img_dtypes( self ) -> list:          return self.local_variables.acceptable_img_dtypes
+    def template_img( self )                    -> np.ndarray:          return self.local_variables.template_img
     @property
-    def required_img_size_for_hashing( self ) -> tuple: return self.local_variables.required_img_size_for_hashing
+    def acceptable_img_dtypes( self )           -> list:                return self.local_variables.acceptable_img_dtypes
     @property
-    def mturk_batch_col_names( self ) -> list:          return self.local_variables.mturk_batch_col_names
+    def required_img_size_for_hashing( self )   -> tuple:               return self.local_variables.required_img_size_for_hashing
     @property
-    def redacted_string( self ) -> str:                 return self.local_variables.redacted_string
+    def mturk_batch_col_names( self )           -> list:                return self.local_variables.mturk_batch_col_names
+    @property
+    def redacted_string( self )                 -> str:                 return self.local_variables.redacted_string
+
 
     @property
-    def now_datetime( self )        -> str:             return datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
+    def now_datetime( self )                    -> str:                 return datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
     
+
     def convert_all_kwarg_strings_to_uppercase( **kwargs ):
         return {k: v.upper() if isinstance(v, str) else v for k, v in kwargs.items()}
 
-    def generate_uid( self ) -> str: return str( generate_pydicomUID( prefix=None, entropy_srcs=[self.now_datetime] ) ).replace( '.', '_' )
+
+    def generate_uid( self ) -> str:                                    return str( generate_pydicomUID( prefix=None, entropy_srcs=[self.now_datetime] ) ).replace( '.', '_' )
                                                 
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -181,19 +187,19 @@ class XNATLogin( LibrarianUtilities ):
         self._is_valid, self._validated_username, self._validated_password = True , validated_info['USERNAME'], validated_info['PASSWORD']
 
     @property
-    def provided_info( self ) -> dict:      return self._provided_info
+    def provided_info( self )       -> dict:    return self._provided_info
     @property
-    def is_valid( self ) -> bool:           return self._is_valid
+    def is_valid( self )            -> bool:    return self._is_valid
     @property
-    def user_role( self ) -> str:           return self._user_role
+    def user_role( self )           -> str:     return self._user_role
     @property
-    def validated_username( self ) -> str:  return self._validated_username
+    def validated_username( self )  -> str:     return self._validated_username
     @property
-    def validated_password( self ) -> str:  return self._validated_password
+    def validated_password( self )  -> str:     return self._validated_password
+
 
     def __str__( self ) -> str:
-        if self.is_valid:
-            return f"-- Validated XNATLogin --\n\tUser: {self.validated_username}\n\tServer: {self.xnat_project_url}\n"
+        if self.is_valid:                       return f"-- Validated XNATLogin --\n\tUser: {self.validated_username}\n\tServer: {self.xnat_project_url}\n"
         return f"-- Invalid XNATLogin --\n\tUser: {self.validated_username}\n\tServer: {self.xnat_project_url}\n"
 
     # def doc( self ) -> str: return self.__doc__
@@ -216,42 +222,35 @@ class XNATConnection( LibrarianUtilities ):
     _instance = None
 
     def __new__( cls, *args, **kwargs ): # Only one instance of this class should be allowed to exist at a time.
-        if cls._instance is not None:
-            cls._instance.__del__()  # Explicitly call __del__ on the existing instance
-        cls._instance = super(XNATConnection, cls).__new__(cls)
+        if cls._instance is not None:   cls._instance.__del__()  # Explicitly call __del__ on the existing instance
+        cls._instance = super( XNATConnection, cls ).__new__( cls )
         return cls._instance
 
     def __init__( self, login_info: XNATLogin, stay_connected: bool = False, verbose: Opt[bool] = False ):
         assert login_info.is_valid, f"Provided login info must be validated before accessing xnat server: {login_info}"
         super().__init__()  # Call the __init__ method of the base clas
-        self._login_info, self._project_handle = login_info, None
-        self._is_verified, self._session_uid, self._is_open = False, self.generate_uid(), stay_connected
+        self._login_info, self._project_handle, self._is_verified, self._is_open = login_info, None, False, stay_connected
         self._verify_login()
-        if stay_connected is False:
-            self.server.disconnect()
-            # self.server = None
-        if verbose:
-            print( self )
+        if stay_connected is False:         self.server.disconnect()
+        if verbose:                         print( self )
 
 
     @property
-    def login_info( self ) -> XNATLogin:    return self._login_info
+    def login_info( self )          -> XNATLogin:       return self._login_info
     @property
-    def server( self ) -> Interface:        return self._server
+    def server( self )              -> Interface:       return self._server
     @property
-    def project_query_str( self ) -> str:   return self._project_query_str
+    def project_query_str( self )   -> str:             return self._project_query_str
     @property
-    def project_handle( self ) -> pyxnatProject:  return self._project_handle # type: ignore
+    def project_handle( self )      -> pyxnatProject:   return self._project_handle # type: ignore
     @property
-    def is_verified( self ) -> bool:        return self._is_verified
+    def is_verified( self )         -> bool:            return self._is_verified
     @property
-    def is_open( self ) -> bool:            return self._is_open
+    def is_open( self )             -> bool:            return self._is_open
     @property
-    def get_user( self ) -> Opt[str]:       return self.login_info.validated_username
+    def get_user( self )            -> Opt[str]:        return self.login_info.validated_username
     @property
-    def get_password( self ) -> Opt[str]:   return self.login_info.validated_password
-    @property
-    def session_uid( self ) -> str:         return self._session_uid
+    def get_password( self )        -> Opt[str]:        return self.login_info.validated_password
 
 
     def _verify_login( self ):
@@ -274,7 +273,7 @@ class XNATConnection( LibrarianUtilities ):
         if hasattr( self, '_server' ):
             self._server.disconnect()
         self._open = False
-        print( f"\n\t*Prior connection to XNAT server, '{self.session_uid}', has been closed -- local metatable data will be deleted!\n" )
+        print( f"\n\t*Prior connection to XNAT server, '{self.uid}', has been closed -- local metatable data will be deleted!\n" )
 
 
     def __del__( self ):
@@ -284,7 +283,7 @@ class XNATConnection( LibrarianUtilities ):
 
     def __enter__( self ):                              return self
 
-    def __exit__( self, exc_type, exc_value, traceback ): self.close()
+    def __exit__( self, exc_type, exc_value, traceback ):   self.close()
 
     def __str__( self ) -> str:
         return (f"-- XNAT Connection: {'Open' if self.is_open else 'Closed'} --\n"
@@ -362,6 +361,7 @@ class MetaTables( LibrarianUtilities ):
     @property
     def accessor_uid( self )        -> str:             return self.get_uid( 'REGISTERED_USERS', self.accessor_username )
 
+
     #==========================================================PRIVATE METHODS==========================================================
     def _reinitialize_metatables_with_extra_columns( self ) -> None:
         # iterate through each table in self._tables and ensure that all columns denoted in self.metadata['TABLE_EXTRA_COLUMNS'] are present.
@@ -375,6 +375,7 @@ class MetaTables( LibrarianUtilities ):
                     if col not in table.columns:
                         table[col] = None
     
+
     def _instantiate_json_file( self ):
         '''#Instantiate with a registered users table.'''
         assert self.login_info.is_valid, f"Provided login info must be validated before loading metatables: {self.login_info}"
@@ -636,16 +637,16 @@ class USCentralDateTime():
 
 
     @property
-    def date( self ) -> str:    return self.dt.strftime( '%Y%m%d' )
+    def date( self )    -> str:     return self.dt.strftime( '%Y%m%d' )
     @property
-    def time( self ) -> str:    return self.dt.strftime( '%H%M%S' )
+    def time( self )    -> str:     return self.dt.strftime( '%H%M%S' )
     @property
-    def dt( self ) -> datetime: return self._dt # type: ignore
+    def dt( self )      -> datetime:return self._dt # type: ignore
     @property
-    def verbose( self ) -> str:  return str( self.dt.strftime( '%Y-%m-%d %H:%M:%S' ) ) + ' US-CST'
+    def dt_str( self )  -> str:     return str( self.dt.strftime( '%Y-%m-%d %H:%M:%S' ) ) + ' US-CST'
 
 
-    def __str__( self ) -> str: return f'{self.dt} US-CST'
+    def __str__( self ) -> str:     return f'{self.dt} US-CST'
 
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -689,6 +690,7 @@ class ImageHash( LibrarianUtilities ):
         if self.metatables is not None and isinstance( self.metatables, MetaTables ):
             self._check_img_hash_metatable()
     
+
     @property
     def raw_img( self )                 -> np.ndarray:                      return self._raw_img
     @property
@@ -716,6 +718,7 @@ class ImageHash( LibrarianUtilities ):
     @property
     def in_img_hash_metatable( self )   -> bool:                            return self._in_img_hash_metatable
     
+
     def _validate_input( self, img: Opt[np.ndarray] = None ):
         if img is None:
             self._raw_img = self.template_img
@@ -724,6 +727,7 @@ class ImageHash( LibrarianUtilities ):
         assert self.raw_img.dtype in self.acceptable_img_dtypes, f'Bitdepth "{self.raw_img.dtype}" is unsupported; inputted image must be one of: {self.acceptable_img_dtypes}.'
         assert 2 <= self.raw_img.ndim <= 3, f'Inputted image must be a 2D or 3D array.'
 
+
     def _convert_to_grayscale( self ):
         if len( self.raw_img.shape ) == 3:  # Ensure that the image is in grayscale
             self._gray_img = np.mean( self.raw_img, axis=2 )
@@ -731,16 +735,20 @@ class ImageHash( LibrarianUtilities ):
         else:
             self._gray_img = self.raw_img
 
+
     def _normalize_and_convert_to_uint8( self ): # Normalize the image to the range 0-255
         self._gray_img = cv2.normalize( self.gray_img, np.zeros( self.gray_img.shape, np.uint8 ), 0, 255, cv2.NORM_MINMAX ).astype( np.uint8 )
+
 
     def _resize_image( self ):
         self._processed_img = cv2.resize( self.gray_img, self.required_img_size_for_hashing )
     
+
     def _compute_hash_str( self ):
         self._hash_str = hashlib.sha256( self.processed_img.tobytes() ).hexdigest() # alternatively: imagehash.average_hash( Image.fromarray( image ) )
         assert self.hash_str is not None and len( self.hash_str ) == 64, f'Hash string must be 64 characters long.'
     
+
     def _check_img_hash_metatable( self ): # check if it exists in the metatables
         assert self.processed_img.shape == self.required_img_size_for_hashing, f'Processed image must be of size {self.required_img_size_for_hashing} (is currently size {self.processed_img.shape}).'
         if isinstance( self.metatables, MetaTables ):
@@ -748,8 +756,10 @@ class ImageHash( LibrarianUtilities ):
         else:
             self._in_img_hash_metatable = False
     
+
     def __str__( self ) -> str:
         return f"-- ImageHash --\n\nShape:\t{self.processed_img.shape}\nDType:\t{self.processed_img.dtype}\t(min: {np.min(self.processed_img)}, max: {np.max(self.processed_img)})\nHash:\t{self.hash_str}\tIn metatables:\t{self.in_img_hash_metatable}"
+
 
     def plot( self ):
         fig, ax = plt.subplots()

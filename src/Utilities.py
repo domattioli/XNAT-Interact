@@ -66,7 +66,8 @@ class _local_variables:
         data_dir = doc_dir.replace( 'doc', 'data' )
         template_img_dir = os.path.join( data_dir, 'image_templates', 'unwanted_dcm_image_template.png' )
         # tmp_data_dir = os.path.join( data_dir, 'tmp' )
-        tmp_data_dir = tempfile.mkdtemp()
+        # tmp_data_dir = tempfile.mkdtemp( prefix='XNAT_Interact')
+        tmp_data_dir = os.path.join( tempfile.gettempdir(), 'XNAT_Interact' ) # create a directory with the software name in the user's Temp folder.
         redacted_string = "REDACTED PYTHON-TO-XNAT UPLOAD SCRIPT"
 
         local_vars =  { 'doc_dir': doc_dir,
@@ -201,6 +202,7 @@ class XNATLogin( LibrarianUtilities ):
         return f"-- Invalid XNATLogin --\n\tUser: {self.validated_username}\n\tServer: {self.xnat_project_url}\n"
 
     # def doc( self ) -> str: return self.__doc__
+
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for establishing a connection to the xnat server with specific credentials.

@@ -55,25 +55,24 @@ class _local_variables:
 
 
     def _set_local_variables( self ) -> dict:
-        repo_dir = os.getcwd()
-        
         # DO NOT DELETE! This is the only place where these local variables/paths are defined.
+        repo_dir = os.getcwd()
         # xnat_project_name = 'domSandBox' # original
         # xnat_project_name = 'GROK_AHRQ_real' # another corrupted project.
         xnat_project_name = 'GROK_AHRQ_main'
         meta_tables_fn = 'MetaTables.json'
-        doc_dir = os.path.join( repo_dir, 'doc' )
-        data_dir = doc_dir.replace( 'doc', 'data' )
-        template_img_dir = os.path.join( data_dir, 'image_templates', 'unwanted_dcm_image_template.png' )
+        # doc_dir = os.path.join( repo_dir, 'doc' )
+        # data_dir = doc_dir.replace( 'doc', 'data' )
+        template_img_dir = os.path.join( repo_dir, 'data', 'image_templates', 'unwanted_dcm_image_template.png' )
         # tmp_data_dir = os.path.join( data_dir, 'tmp' )
         # tmp_data_dir = tempfile.mkdtemp( prefix='XNAT_Interact')
         tmp_data_dir = os.path.join( tempfile.gettempdir(), 'XNAT_Interact' ) # create a directory with the software name in the user's Temp folder.
         redacted_string = "REDACTED PYTHON-TO-XNAT UPLOAD SCRIPT"
 
-        local_vars =  { 'doc_dir': doc_dir,
-                        'data_dir': data_dir,
+        local_vars =  {
+                        # 'doc_dir': doc_dir,
+                        # 'data_dir': data_dir,
                         'tmp_data_dir': tmp_data_dir,
-                        'cataloged_resources_ffn': os.path.join( doc_dir, r'cataloged_resources.json' ),
                         'meta_tables_fn': meta_tables_fn,
                         'meta_tables_ffn': os.path.join( tmp_data_dir, meta_tables_fn ), # local file for storing all meta information
                         'required_login_keys': ['USERNAME', 'PASSWORD', 'URL'],
@@ -109,11 +108,7 @@ class LibrarianUtilities:
     @property
     def local_variables( self ) -> _local_variables:    return self._local_variables
     @property
-    def doc_dir( self ) -> str:                         return self.local_variables.doc_dir
-    @property
-    def data_dir( self ) -> str:                        return self.local_variables.data_dir
-    @property
-    def tmp_data_dir( self ) -> str:                    return self.local_variables.tmp_data_dir
+    def tmp_data_dir( self ) -> Path:                    return self.local_variables.tmp_data_dir
     @property
     def cataloged_resources_ffn( self ) -> str:         return self.local_variables.cataloged_resources_ffn
     @property

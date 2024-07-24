@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 
 
 # Define list for allowable imports from this module -- do not want to import _local_variables.
-__all__ = ['LibrarianUtilities', 'XNATLogin', 'MetaTables', 'XNATConnection', 'USCentralDateTime', 'ImageHash']
+__all__ = ['UIDandMetaInfo', 'XNATLogin', 'MetaTables', 'XNATConnection', 'USCentralDateTime', 'ImageHash']
 
 
 
@@ -101,7 +101,7 @@ class _local_variables:
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Base class for all utitlities to inherit from.
-class LibrarianUtilities:
+class UIDandMetaInfo:
     def __init__( self ):
         self._local_variables = _local_variables()
         self._uid = self.generate_uid()
@@ -153,7 +153,7 @@ class LibrarianUtilities:
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for validating xnat login information
-class XNATLogin( LibrarianUtilities ):
+class XNATLogin( UIDandMetaInfo ):
     '''XNATLogin( input_info = {'URL': '...', 'USERNAME': '...', 'PASSWORD': '...'} )
         A class for storing data that is necessary for logging into the XNAT RPACS server.
         For provided login dictionary, ensure that:
@@ -207,7 +207,7 @@ class XNATLogin( LibrarianUtilities ):
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for establishing a connection to the xnat server with specific credentials.
-class XNATConnection( LibrarianUtilities ):
+class XNATConnection( UIDandMetaInfo ):
     '''
     to-do: document explanation of class
 
@@ -294,7 +294,7 @@ class XNATConnection( LibrarianUtilities ):
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for cataloging all seen data and user info.
-class MetaTables( LibrarianUtilities ):
+class MetaTables( UIDandMetaInfo ):
     '''
     Class for accessing and updating meta information for subjects and experiments. Think of it as a psuedo-relational database.
         Note: all inputted new tables and items are automatically capitalized on the backend to ensure no duplicates.
@@ -651,7 +651,7 @@ class USCentralDateTime():
 
 #--------------------------------------------------------------------------------------------------------------------------
 # Class for representing images as unique hashes.
-class ImageHash( LibrarianUtilities ):
+class ImageHash( UIDandMetaInfo ):
     def __init__( self, reference_table: Opt[MetaTables]=None, img: Opt[np.ndarray] = None ):
         '''ImageHash()
         A class for creating a unique hash for an image. A list of seen-hashes will allow us to prevent duplicate images in the db.
@@ -671,7 +671,7 @@ class ImageHash( LibrarianUtilities ):
         To-do: If need be, revisit the init to require only an image ffn so we can use cv2 ro imread it into a predictable way, i.e., rgb not bgr.
 
         # Example usage:
-        tst1 = ImageHash( reference_table( XNatLogin( {...} ) ) ) # computes hash using the template dicom image stored in the LibrarianUtilities attributes.
+        tst1 = ImageHash( reference_table( XNatLogin( {...} ) ) ) # computes hash using the template dicom image stored in the UIDandMetaInfo attributes.
         tst2 = ImageHash( reference_table( XNatLogin( {...} ) ), np.uint32( tst1.raw_img ) )
         tst3 = ImageHash( reference_table( XNatLogin( {...} ) ), np.int16(  tst1.raw_img ) )
         print( tst1 )

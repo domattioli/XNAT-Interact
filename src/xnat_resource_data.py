@@ -1,5 +1,5 @@
 import os
-from pathlib import Path
+from pathlib import Path, WindowsPath
 
 from typing import List, Dict, Any, Tuple, Optional as Opt, Union
 
@@ -32,20 +32,23 @@ acceptable_ortho_procedure_names = {'1A': 'OPEN_REDUCTION_HIP_FRACTURE–DYNAMIC
 }
 
 
+ordered_keys_of_intake_text_file = ['FORM_LAST_MODIFIED', 'OPERATION_DATE', 'SUBJECT_UID', 'FILER_HAWKID', 'FORM_AVAILABLE_FOR_PERFORMANCE', 'SCAN_QUALITY',
+                                    'SURGICAL_PROCEDURE_INFO', 'SKILLS_ASSESSMENT_INFO', 'STORAGE_DEVICE_INFO', 'INFO_DERIVED_FROM_ORIGINAL_FILE_METADATA']
+
 class ResourceFile( LibrarianUtilities ):
+    """This can represent a resource at any level, e.g., project, subject, experiment, scan, etc."""
     def __init__( self, metatables: MetaTables, login: XNATLogin ):
-        self._running_text_file = {}
-        self._metatables = metatables
-        assert self.metatables.is_user_registered( login.validated_username ), f'User with HAWKID {login.validated_username} is not registered in the system!'
-        self._login = login
+        assert metatables.is_user_registered( login.validated_username ), f'User with HAWKID {login.validated_username} is not registered in the system!'
+        self._assign_uid( metatables=metatables )
         
-        
-    def __str__( self )             -> str:         return '-----'*5 + f'\nOR Data Intake Form\n' + '-----'*5 + '\n\n'
 
     @property
-    def running_text_file( self )   -> dict:        return self._running_text_file
-    @property
-    def metatables( self )          -> MetaTables:  return self._metatables
+    def uid( self )                 -> str:         return self._uid
+
+    def _assign_uid( self, metatables: MetaTables ):self._uid = metatables.generate_uid()
+    def _init_all_fields( self )    -> None:        raise NotImplementedError( 'This method must be implemented in the subclass.' ) # This is a placeholder for the subclass to implement
+        
+    def __str__( self )             -> str:         return '-----'*5 + f'\nOR Data Intake Form\n' + '-----'*5 + '\n\n'
 
 
 class InvalidInputError( Exception ):
@@ -56,27 +59,43 @@ class InvalidInputError( Exception ):
 
 
 class ORDataIntakeForm( ResourceFile ):
-    def __init__( self, metatables: MetaTables, login: XNATLogin, ffn: Opt[str]=None, verbose: Opt[bool]=False ):
+    """
+    This class is for describing a subject-experiment intake, i.e., a subject's source data experiment.
+    It is intended to be used for the OR Data Intake Form, which is a paper form that is filled out by someone immediately after a surgical procedure.
+    The form is then used to create a text file that is used to populate the XNAT database with the relevant information.
+    The UID generated represents the subject and the source data experiment.
+    """
+    def __init__( self, metatables: MetaTables, login: XNATLogin, ffn: Opt[str]=None, verbose: Opt[bool]=False, write_to_file: Opt[bool]=False ):
         super().__init__( metatables=metatables, login=login ) # Call the __init__ method of the base class
+
+        # Init dict (and future json-formatted text file) with required keys.
+        self._init_all_fields()
+        self._saved_ffn = metatables.tmp_data_dir / Path( self._uid )/ self.filename
+        print( self.saved_ffn )
+        print( self.saved_ffn.parent)
+        if not os.path.exists( self._saved_ffn.parent ): os.makedirs( self.saved_ffn.parent )
+        
+
+        # Either read in the inputted text file and distribute that data, or prompt the user for the data.
         if ffn:
             self._read_from_file( ffn, verbose=verbose )
             return
         else:
-            self._init_all_fields()
-            self._prompt_user_for_filer_name_and_operation_date()
-            self._prompt_user_for_scan_quality()
-            self._prompt_user_for_surgical_procedure_info()
-            self._prompt_user_for_skills_assessment_info()
-            self._prompt_user_for_storage_device_info()
+            self._prompt_user_for_filer_name_and_operation_date( metatables=metatables )
+            self._prompt_user_for_scan_quality(  )
+            self._prompt_user_for_surgical_procedure_info( metatables=metatables )
+            self._prompt_user_for_skills_assessment_info( metatables=metatables )
+            self._prompt_user_for_storage_device_info(  )
+            if write_to_file: self.construct_digital_file( verbose=verbose )
             # self._create_text_file_reconstruction( verbose=verbose ) # commenting out bc we want it saved to a temp folder corresponding to this subject
-            self._subject_uid = None # This must be set during the import methods of the corresponding class in xnat_experiment_data.py.
 
 
     def _read_from_file( self, ffn: str, verbose: Opt[bool]=False ) -> None:
+        if verbose: print( f'\n\t--- Initializing IntakeFrom from {ffn} ---' )
         self._running_text_file = json.load( open( ffn ) )
 
         # Minimally Required information (if paper form was available when processed)
-        self._subject_uid = self.running_text_file['SUBJECT_UID']
+        self._uid = self.running_text_file['SUBJECT_UID'] # Overwrites generated uid in base class
         self._filer_name = self.running_text_file['FILER_NAME']
         self._form_available = self.running_text_file['FORM_AVAILABLE_FOR_PERFORMANCE']
         self._operation_date = self.running_text_file['OPERATION_DATE']
@@ -91,7 +110,7 @@ class ORDataIntakeForm( ResourceFile ):
         self._radiology_contact_time = self.running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_TIME']
         self._relevant_folder = Path( self.running_text_file['STORAGE_DEVICE_INFO']['RELEVANT_FOLDER'] )
 
-        try:
+        try: # Optional fields that may not be present in the inputted form (if the filer did not have this info when originally creating the digitized version)
             self._epic_end_time = self.running_text_file['SURGICAL_PROCEDURE_INFO']['EPIC_END_TIME']
             self._OR_location = self.running_text_file['SURGICAL_PROCEDURE_INFO']['OR_LOCATION']
             self._supervising_surgeon_hawk_id = self.running_text_file['SURGICAL_PROCEDURE_INFO']['SUPERVISING_SURGEON_UID']
@@ -124,9 +143,7 @@ class ORDataIntakeForm( ResourceFile ):
         self._performer_was_assisted, self._performer_num_of_similar_logged_cases, self._performance_enumerated_task_performer = None, None, None
         self._list_unusual_features_of_performance, self._diagnostic_notes, self._misc_surgical_performance_comments = None, None, None
         self._assessment_title, self._assessor_hawk_id, self._assessment_details = None, None, None
-        key_order = ['FORM_LAST_MODIFIED', 'OPERATION_DATE', 'SUBJECT_UID', 'FILER_HAWKID', 'FORM_AVAILABLE_FOR_PERFORMANCE', 'SCAN_QUALITY',
-                     'SURGICAL_PROCEDURE_INFO', 'SKILLS_ASSESSMENT_INFO', 'STORAGE_DEVICE_INFO']
-        self._running_text_file = OrderedDict( ( k, acceptable_ortho_procedure_names[k]) for k in key_order if k in acceptable_ortho_procedure_names )
+        self._running_text_file = OrderedDict( ( k, acceptable_ortho_procedure_names[k]) for k in ordered_keys_of_intake_text_file if k in acceptable_ortho_procedure_names )
         self._running_text_file['FORM_LAST_MODIFIED'] = datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
 
 
@@ -138,14 +155,14 @@ class ORDataIntakeForm( ResourceFile ):
                 print( f'\t--- Invalid entry for {selection_name}! Please enter one of the options listed above.' )
     
 
-    def _prompt_user_for_filer_name_and_operation_date( self ):
-        possible_user_hawkids = self.metatables.list_of_all_items_in_table( 'REGISTERED_USERS' )
+    def _prompt_user_for_filer_name_and_operation_date( self, metatables: MetaTables ) -> None: 
+        possible_user_hawkids = metatables.list_of_all_items_in_table( 'REGISTERED_USERS' )
         print( f'\t(1/35)\tHAWKID of the Form Filer\t--\tPlease enter a HawkID from the following list:\t{possible_user_hawkids}' )
-        filer_hawkid = self.prompt_until_valid_answer_given( 'HawkID of the Form Filer', acceptable_options=possible_user_hawkids )
+        filer_hawkid = self.prompt_until_valid_answer_given( 'HawkID of the Form Filer', acceptable_options=possible_user_hawkids ) # to-do: allow user to just input an integer instead of type out hawkid?
         self._filer_name = filer_hawkid.upper()
 
         print( '\n\t(2/35)\tIs there an OR Data Intake Form available for this procedure?\n\tEnter "1" for Yes or "2" for No' )
-        form_available = self.prompt_until_valid_answer_given( 'Form Availability', acceptable_options=['1', '2'] )
+        form_available = self.prompt_until_valid_answer_given( 'Form Availability', acceptable_options=['1', '2'] ) # to-do: Automate acceptable_options based on the type of input expected bc we may change the metatables values for this and then these prompts wont reflect those changes.
 
         self._operation_date = parser.parse( input( '\n\t(3/35)\tPlease enter the Operation Date (YYYY-MM-DD):\t' ) ).date().strftime( '%Y-%m-%d' )
         if form_available == '1':
@@ -157,7 +174,7 @@ class ORDataIntakeForm( ResourceFile ):
         self._running_text_file['FILER_HAWKID'] = str( self.filer_name )
         self._running_text_file['FORM_AVAILABLE_FOR_PERFORMANCE'] = str( self.form_is_available )
         self._running_text_file['OPERATION_DATE'] = str( self.operation_date )
-        self._running_text_file['SUBJECT_UID'] = str( self.subject_uid )
+        self._running_text_file['SUBJECT_UID'] = str( self.uid )
     
     
     def get_time_input( self, prompt ) -> str:
@@ -179,11 +196,11 @@ class ORDataIntakeForm( ResourceFile ):
         self._running_text_file['SCAN_QUALITY'] = self.scan_quality # type: ignore -- not sure why this is giving a type error. runs fine in spite of it.
 
 
-    def _prompt_user_for_surgical_procedure_info( self ): # Make sure fields that might be stored in the metatables are all completely capitalized
+    def _prompt_user_for_surgical_procedure_info( self, metatables: MetaTables ): # Make sure fields that might be stored in the metatables are all completely capitalized
         print( f'\n--- Surgical Procedure Information ---' )
         local_dict = {}
 
-        acceptable_institutions = self.metatables.list_of_all_items_in_table( table_name='ACQUISITION_SITES' )
+        acceptable_institutions = metatables.list_of_all_items_in_table( table_name='ACQUISITION_SITES' )
         print( f'\t(5/35)\tInstitution Name\t--\tPlease Copy-and-Paste from the following list:\t{acceptable_institutions}' )
         self._institution_name = self.prompt_until_valid_answer_given( 'Institution Name', acceptable_options=acceptable_institutions )
         local_dict['INSTITUTION_NAME'] = self.institution_name
@@ -237,19 +254,19 @@ class ORDataIntakeForm( ResourceFile ):
             self._OR_location = input( '\n\t(12/35)\tOperating Room Name/Location:\t' ).upper()
             local_dict['OR_LOCATION'] = self.OR_location
 
-            print( f'\n\t(13/35)\tSupervising Surgeon HawkID\t--\tPlease select from the following list:\t{self.metatables.list_of_all_items_in_table( "Surgeons" )}' )
-            supervising_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'Supervising Surgeon\'s HAWKID', acceptable_options=self.metatables.list_of_all_items_in_table( 'Surgeons' ) )
+            print( f'\n\t(13/35)\tSupervising Surgeon HawkID\t--\tPlease select from the following list:\t{metatables.list_of_all_items_in_table( "Surgeons" )}' )
+            supervising_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'Supervising Surgeon\'s HAWKID', acceptable_options=metatables.list_of_all_items_in_table( 'Surgeons' ) )
 
             print( f"\n\t(14/35)\tSupervising Surgeon Presence\t--\tEnter '1' for Present, '2' for Retrospective Review, or '3' for Other:" )
             supervising_surgeon_presence = self.prompt_until_valid_answer_given( 'Supervising Surgeon Presence', acceptable_options=['1', '2', '3'] )
             if supervising_surgeon_presence == '1':     self._supervising_surgeon_presence = 'Present'.upper()
             elif supervising_surgeon_presence == '2':   self._supervising_surgeon_presence = 'Retrospective Review'.upper()
             else: raise ValueError( 'You indicated other for the supervision surgeon presence; please contact the data librarian to clarify this before proceding!' )
-            self._supervising_surgeon_hawk_id, self._supervising_surgeon_presence = self.metatables.get_uid( 'Surgeons', supervising_surgeon_hawk_id ), supervising_surgeon_presence
+            self._supervising_surgeon_hawk_id, self._supervising_surgeon_presence = metatables.get_uid( 'Surgeons', supervising_surgeon_hawk_id ), supervising_surgeon_presence
             local_dict['SUPERVISING_SURGEON_UID'], local_dict['SUPERVISING_SURGEON_PRESENCE'] = self.supervising_surgeon_hawk_id, self.supervising_surgeon_presence
 
-            print( f'\n\t(15/35)\tPerforming Surgeon HawkID\t--\tPlease select from the following list:\t{self.metatables.list_of_all_items_in_table( "Surgeons" )}' )
-            performing_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'tPerforming Surgeon\'s HAWKID', acceptable_options=self.metatables.list_of_all_items_in_table( 'Surgeons' ) )
+            print( f'\n\t(15/35)\tPerforming Surgeon HawkID\t--\tPlease select from the following list:\t{metatables.list_of_all_items_in_table( "Surgeons" )}' )
+            performing_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'tPerforming Surgeon\'s HAWKID', acceptable_options=metatables.list_of_all_items_in_table( 'Surgeons' ) )
 
             performer_year_in_residency = input( f'\n\t(16/35)\tPerforming Surgeon\'s Years in Residency: ' )
             assert performer_year_in_residency.isdigit(), 'Invalid entry for Performing Surgeon\'s Years in Residency! Must be an integer.'
@@ -261,14 +278,14 @@ class ORDataIntakeForm( ResourceFile ):
                 performer_num_of_similar_logged_cases = input( f'\n\t(18/35)\tPerforming Surgeon\'s # of Similar Cases Logged (if none, enter "0"):\t' )
                 self._performer_num_of_similar_logged_cases     = int( performer_num_of_similar_logged_cases )
             else: self._performer_num_of_similar_logged_cases   = None
-            self._performing_surgeon_hawk_id, self._performer_year_in_residency = self.metatables.get_uid( 'Surgeons', performing_surgeon_hawk_id ), int( performer_year_in_residency )
+            self._performing_surgeon_hawk_id, self._performer_year_in_residency = metatables.get_uid( 'Surgeons', performing_surgeon_hawk_id ), int( performer_year_in_residency )
             local_dict['PERFORMING_SURGEON_UID'], local_dict['PERFORMER_YEAR_IN_RESIDENCY'], local_dict['PERFORMER_NUM_OF_SIMILAR_LOGGED_CASES'] = self.performing_surgeon_hawk_id, self.performer_year_in_residency, self.performer_num_of_similar_logged_cases
 
             print( f'\n\t(19/35)\tWas the Performing Surgeon Assisted?\tEnter "1" for Yes or "2" for No.' )
             performer_was_assisted = self.prompt_until_valid_answer_given( 'Performing Surgeon Assistance', acceptable_options=['1', '2'] )
             if performer_was_assisted == '1':
                 self._performer_was_assisted = True
-                dict_performance_enumerated_tasks = self._prompt_user_for_n_surgical_tasks_and_hawkids()
+                dict_performance_enumerated_tasks = self._prompt_user_for_n_surgical_tasks_and_hawkids( metatables=metatables )
 
                 # If any of the values in the dict are empty, replace them with None
                 for key, value in dict_performance_enumerated_tasks.items():
@@ -302,9 +319,9 @@ class ORDataIntakeForm( ResourceFile ):
         self._running_text_file['SURGICAL_PROCEDURE_INFO'] = local_dict # type: ignore
     
 
-    def _prompt_user_for_n_surgical_tasks_and_hawkids( self ) -> dict:
+    def _prompt_user_for_n_surgical_tasks_and_hawkids( self, metatables: MetaTables ) -> dict:
         num_tasks = int( input( '\t(20/35)\tHow many surgeons participated in the procedure?\n\tEnter an integer:\t' ) )
-        print( f'\tSelect from the following list of hawkIDs:\n\t\t{self.metatables.list_of_all_items_in_table( "Surgeons" )}')
+        print( f'\tSelect from the following list of hawkIDs:\n\t\t{metatables.list_of_all_items_in_table( "Surgeons" )}')
         assert num_tasks > 0, 'Invalid number of surgeons! Must be a positive integer.'
         task_performers = {}
         for i in range( num_tasks ):
@@ -312,12 +329,12 @@ class ORDataIntakeForm( ResourceFile ):
             elif i == 1:    hawkid = input( f'\t\t2nd HAWKID:\t' )
             elif i == 2:    hawkid = input( f'\t\t3rd HAWKID:\t' )
             else:           hawkid = input( f'\t\t{i+1}th HAWKID:\t' )
-            assert self.metatables.item_exists( table_name='Surgeons', item_name=hawkid ), f'HAWKID {hawkid} is not a registered surgeon in the system. Please enter a valid HAWKID.\nRegistered surgeon hawkids:\n{self.metatables.list_of_all_items_in_table( "Surgeons" )}'
-            task_performers[self.metatables.get_uid(table_name='SURGEONS', item_name=hawkid)] = input( f'\t\t\tEnter the task(s) performed by "{hawkid.upper()}":\t' )
+            assert metatables.item_exists( table_name='Surgeons', item_name=hawkid ), f'HAWKID {hawkid} is not a registered surgeon in the system. Please enter a valid HAWKID.\nRegistered surgeon hawkids:\n{metatables.list_of_all_items_in_table( "Surgeons" )}'
+            task_performers[metatables.get_uid(table_name='SURGEONS', item_name=hawkid)] = input( f'\t\t\tEnter the task(s) performed by "{hawkid.upper()}":\t' )
         return task_performers
 
 
-    def _prompt_user_for_skills_assessment_info( self ):
+    def _prompt_user_for_skills_assessment_info( self, metatables: MetaTables ):
         if self.form_is_available:
             print( f'\n\n--- Skills Assessment Information ---' )
         
@@ -328,9 +345,9 @@ class ORDataIntakeForm( ResourceFile ):
                 assessment_requested, assessment_title = True, input( '\n\t(25/32)\tPlease enter the full name of the requested assessment:\t' ).upper()
 
 
-                print( f'\n\t(27/35)\tAssessing Surgeon\'s HawkID --\tPlease select from the following list:\n\t\t{self.metatables.list_of_all_items_in_table( "Surgeons" )}' )
-                assessor_hawkid = self.prompt_until_valid_answer_given( 'Assessing Surgeon\'s HAWKID', acceptable_options=self.metatables.list_of_all_items_in_table( 'Surgeons' ) )
-                assessor_hawkid = self.metatables.get_uid( table_name='SURGEONS', item_name=assessor_hawkid )
+                print( f'\n\t(27/35)\tAssessing Surgeon\'s HawkID --\tPlease select from the following list:\n\t\t{metatables.list_of_all_items_in_table( "Surgeons" )}' )
+                assessor_hawkid = self.prompt_until_valid_answer_given( 'Assessing Surgeon\'s HAWKID', acceptable_options=metatables.list_of_all_items_in_table( 'Surgeons' ) )
+                assessor_hawkid = metatables.get_uid( table_name='SURGEONS', item_name=assessor_hawkid )
 
                 print( f'\n\t(28/35)\tDo you have any additional details about the assessment (e.g., date of assessment, score, etc.)?\n\tEnter "1" for Yes or "2" for No.')
                 known_details = self.prompt_until_valid_answer_given( 'Additional Assessment Details', acceptable_options=['1', '2'])
@@ -372,32 +389,30 @@ class ORDataIntakeForm( ResourceFile ):
                                                             'RELEVANT_FOLDER': self.relevant_folder}
         
 
-    def create_text_file_reconstruction( self, verbose: Opt[bool]=False ) -> None:
-        json_str = json.dumps( self.running_text_file, indent=4 )
+    def construct_digital_file( self, verbose: Opt[bool]=False ) -> None:
+        assert self._uid, 'UID must be set before calleding the IntakeForm saved full file name.'
+        self._running_text_file['FORM_LAST_MODIFIED'] = datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
+        json_str = json.dumps( self.running_text_file, indent=4, default=ORDataIntakeForm._custom_serializer )
         with open( self.saved_ffn, 'w' ) as f:
             f.write( json_str )
             if verbose:     print( f' -- SUCCESS -- OR Data Intake Form saved to:\t{self.saved_ffn}' )
-    
 
-    def update_reconstruction( self, verbose: Opt[bool]=False ):
-        self._running_text_file['FORM_LAST_MODIFIED'] = datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
-        self.create_text_file_reconstruction( verbose=verbose )
-    
+
+    @staticmethod
+    def _custom_serializer( obj ) -> str:
+        if isinstance( obj, WindowsPath ):
+            return str( obj )  # Convert WindowsPath to string
+        raise TypeError( f"Object of type {obj.__class__.__name__} is not JSON serializable ")
+
 
     @property
-    def subject_uid( self )                             -> Opt[str]:                return self._subject_uid
-    @subject_uid.setter
-    def subject_uid( self, value: str )                 -> None:                    self._subject_uid = value
+    def running_text_file( self )                       -> dict:                    return self._running_text_file
     @property
     def scan_quality( self )                            -> Opt[str]:                return self._scan_quality
     @property
     def filename( self )                                -> Path:                    return Path( 'RECONSTRUCTED_OR_DATA_INTAKE_FORM.json' )
     @property
-    def saved_ffn( self )                               -> Path:
-        assert self.subject_uid, 'Subject UID must be set before calleding the IntakeForm saved full file name.'
-        return self.metatables.tmp_data_dir / Path( self.subject_uid )/ self.filename
-    @property
-    def running_text_file( self )                       -> dict:                    return self._running_text_file
+    def saved_ffn( self )                               -> Path:                    return self._saved_ffn
     @property
     def form_is_available( self )                       -> bool:                    return self._form_available
     @property
@@ -446,24 +461,25 @@ class ORDataIntakeForm( ResourceFile ):
     def misc_surgical_performance_comments( self )      -> Opt[str]:                return self._misc_surgical_performance_comments # body habitus, pre-existing conditions, specific technical struggles, damage to tissue, non-technical issues, anything that happened before/after the procedure began 
     
     @property
-    def assessment_title( self )    -> Opt[str]:    return self._assessment_title
+    def assessment_title( self )                        -> Opt[str]:                return self._assessment_title
     @property
-    def assessor_hawk_id( self )    -> Opt[str]:    return self._assessor_hawk_id
+    def assessor_hawk_id( self )                        -> Opt[str]:                return self._assessor_hawk_id
     @property
-    def assessment_details( self )  -> Opt[str]:    return self._assessment_details
+    def assessment_details( self )                      -> Opt[str]:                return self._assessment_details
 
     @property
-    def name_of_storage_device( self )          -> Opt[str]:    return self._storage_device_name_and_type
+    def name_of_storage_device( self )                  -> Opt[str]:                return self._storage_device_name_and_type
     @property
-    def radiology_contact_date( self )          -> Opt[str]:    return self._radiology_contact_date
+    def radiology_contact_date( self )                  -> Opt[str]:                return self._radiology_contact_date
     @property
-    def radiology_contact_time( self )          -> Opt[str]:    return self._radiology_contact_time
+    def radiology_contact_time( self )                  -> Opt[str]:                return self._radiology_contact_time
     @property
-    def relevant_folder( self )                 -> Path:        return self._relevant_folder
+    def relevant_folder( self )                         -> Path:                    return self._relevant_folder
     
+
     def __str__( self ) -> str:
         # Print out the json formatted information as it would be shown in a text file.
-        json_str = json.dumps(self.running_text_file, indent=4)
+        json_str = json.dumps( self.running_text_file, indent=4 )
         lines = json_str.split('\n')
         out_str = f'\t-- OR Data Intake Form --\n'
         for line in lines:

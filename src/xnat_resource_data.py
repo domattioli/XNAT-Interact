@@ -57,18 +57,18 @@ class InvalidInputError( Exception ):
 
 class ORDataIntakeForm( ResourceFile ):
     def __init__( self, metatables: MetaTables, login: XNATLogin, ffn: Opt[str]=None, verbose: Opt[bool]=False ):
+        super().__init__( metatables=metatables, login=login ) # Call the __init__ method of the base class
         if ffn:
             self._read_from_file( ffn, verbose=verbose )
             return
         else:
-            super().__init__( metatables=metatables, login=login ) # Call the __init__ method of the base class
             self._init_all_fields()
             self._prompt_user_for_filer_name_and_operation_date()
             self._prompt_user_for_scan_quality()
             self._prompt_user_for_surgical_procedure_info()
             self._prompt_user_for_skills_assessment_info()
             self._prompt_user_for_storage_device_info()
-            self._create_text_file_reconstruction( verbose=verbose )
+            # self._create_text_file_reconstruction( verbose=verbose ) # commenting out bc we want it saved to a temp folder corresponding to this subject
             self._subject_uid = None # This must be set during the import methods of the corresponding class in xnat_experiment_data.py.
 
 
@@ -89,7 +89,7 @@ class ORDataIntakeForm( ResourceFile ):
         self._storage_device_name_and_type = self.running_text_file['STORAGE_DEVICE_INFO']['STORAGE_DEVICE_NAME_AND_TYPE']
         self._radiology_contact_date = self.running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_DATE']
         self._radiology_contact_time = self.running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_TIME']
-        self._relevant_folder = self.running_text_file['STORAGE_DEVICE_INFO']['RELEVANT_FOLDER']
+        self._relevant_folder = Path( self.running_text_file['STORAGE_DEVICE_INFO']['RELEVANT_FOLDER'] )
 
         try:
             self._epic_end_time = self.running_text_file['SURGICAL_PROCEDURE_INFO']['EPIC_END_TIME']
@@ -199,7 +199,8 @@ class ORDataIntakeForm( ResourceFile ):
         options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_ortho_procedure_name_options.items()] )
 
         print( f'\n\t(7/35)\tOrtho Procedure Name\t--\tPlease select from the following options:\n{options_str}')
-        self._ortho_procedure_name = self.prompt_until_valid_answer_given( 'Ortho Procedure Name', acceptable_options = list( acceptable_ortho_procedure_name_options ) )
+        procedure_name_key = self.prompt_until_valid_answer_given( 'Ortho Procedure Name', acceptable_options = list( acceptable_ortho_procedure_name_options ) )
+        self._ortho_procedure_name = acceptable_ortho_procedure_name_options[procedure_name_key]
         local_dict['PROCEDURE_NAME'] = str( self.ortho_procedure_name ) # type: ignore
 
         if self.form_is_available:
@@ -371,7 +372,7 @@ class ORDataIntakeForm( ResourceFile ):
                                                             'RELEVANT_FOLDER': self.relevant_folder}
         
 
-    def _create_text_file_reconstruction( self, verbose: Opt[bool]=False ) -> None:
+    def create_text_file_reconstruction( self, verbose: Opt[bool]=False ) -> None:
         json_str = json.dumps( self.running_text_file, indent=4 )
         with open( self.saved_ffn, 'w' ) as f:
             f.write( json_str )
@@ -380,7 +381,7 @@ class ORDataIntakeForm( ResourceFile ):
 
     def update_reconstruction( self, verbose: Opt[bool]=False ):
         self._running_text_file['FORM_LAST_MODIFIED'] = datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
-        self._create_text_file_reconstruction( verbose=verbose )
+        self.create_text_file_reconstruction( verbose=verbose )
     
 
     @property
@@ -390,9 +391,11 @@ class ORDataIntakeForm( ResourceFile ):
     @property
     def scan_quality( self )                            -> Opt[str]:                return self._scan_quality
     @property
-    def filename( self )                                -> str:                     return 'RECONSTRUCTED_OR_DATA_INTAKE_FORM.json'
+    def filename( self )                                -> Path:                    return Path( 'RECONSTRUCTED_OR_DATA_INTAKE_FORM.json' )
     @property
-    def saved_ffn( self )                               -> Path:                    return Path( os.path.join( self.metatables.tmp_data_dir, self.filename ) )
+    def saved_ffn( self )                               -> Path:
+        assert self.subject_uid, 'Subject UID must be set before calleding the IntakeForm saved full file name.'
+        return self.metatables.tmp_data_dir / Path( self.subject_uid )/ self.filename
     @property
     def running_text_file( self )                       -> dict:                    return self._running_text_file
     @property
@@ -408,9 +411,9 @@ class ORDataIntakeForm( ResourceFile ):
     @property
     def ortho_procedure_type( self )                    -> str:                     return self._ortho_procedure_type # Trauma or arthro
     @property
-    def ortho_procedure_name( self )                    -> Opt[str]:                return acceptable_ortho_procedure_names[self._ortho_procedure_name] # type: ignore
+    def ortho_procedure_name( self )                    -> Opt[str]:                return self._ortho_procedure_name # type: ignore
     @property
-    def group( self )                                   -> Opt[str]:                return acceptable_ortho_procedure_names[self._ortho_procedure_name] # type: ignore
+    def group( self )                                   -> Opt[str]:                return self._ortho_procedure_name # type: ignore
     @property
     def epic_start_time( self )                         -> str:                     return self._epic_start_time
     @property
@@ -456,10 +459,14 @@ class ORDataIntakeForm( ResourceFile ):
     @property
     def radiology_contact_time( self )          -> Opt[str]:    return self._radiology_contact_time
     @property
-    def relevant_folder( self )                 -> Path:         return self._relevant_folder
+    def relevant_folder( self )                 -> Path:        return self._relevant_folder
     
     def __str__( self ) -> str:
         # Print out the json formatted information as it would be shown in a text file.
+        json_str = json.dumps(self.running_text_file, indent=4)
+        lines = json_str.split('\n')
         out_str = f'\t-- OR Data Intake Form --\n'
-        out_str += json.dumps( self.running_text_file, indent=4 )
+        for line in lines:
+            if line.strip() not in ['{', '}', '},']:
+                out_str += line + '\n'
         return out_str

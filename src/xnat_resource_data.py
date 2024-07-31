@@ -9,7 +9,7 @@ from dateutil import parser
 import json
 from collections import OrderedDict
 
-from src.utilities import LibrarianUtilities, MetaTables, USCentralDateTime, XNATLogin, XNATConnection, USCentralDateTime
+from src.utilities import UIDandMetaInfo, MetaTables, USCentralDateTime, XNATLogin, USCentralDateTime
 
 import pytz
 
@@ -35,17 +35,14 @@ acceptable_ortho_procedure_names = {'1A': 'OPEN_REDUCTION_HIP_FRACTURE–DYNAMIC
 ordered_keys_of_intake_text_file = ['FORM_LAST_MODIFIED', 'OPERATION_DATE', 'SUBJECT_UID', 'FILER_HAWKID', 'FORM_AVAILABLE_FOR_PERFORMANCE', 'SCAN_QUALITY',
                                     'SURGICAL_PROCEDURE_INFO', 'SKILLS_ASSESSMENT_INFO', 'STORAGE_DEVICE_INFO', 'INFO_DERIVED_FROM_ORIGINAL_FILE_METADATA']
 
-class ResourceFile( LibrarianUtilities ):
+
+class ResourceFile( UIDandMetaInfo ):
     """This can represent a resource at any level, e.g., project, subject, experiment, scan, etc."""
     def __init__( self, metatables: MetaTables, login: XNATLogin ):
         assert metatables.is_user_registered( login.validated_username ), f'User with HAWKID {login.validated_username} is not registered in the system!'
-        self._assign_uid( metatables=metatables )
+        super().__init__() # Call the __init__ method of the base class to create a uid for this instance
         
 
-    @property
-    def uid( self )                 -> str:         return self._uid
-
-    def _assign_uid( self, metatables: MetaTables ):self._uid = metatables.generate_uid()
     def _init_all_fields( self )    -> None:        raise NotImplementedError( 'This method must be implemented in the subclass.' ) # This is a placeholder for the subclass to implement
         
     def __str__( self )             -> str:         return '-----'*5 + f'\nOR Data Intake Form\n' + '-----'*5 + '\n\n'

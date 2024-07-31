@@ -29,7 +29,7 @@ __all__ = ['ScanFile', 'SourceDicomDeIdentified', 'MTurkSemanticSegmentation', '
 ## Base class for scan files, designed for inheritence.
 class ScanFile( UIDandMetaInfo ):
     def __init__( self, intake_form: ORDataIntakeForm, ffn: Path ):
-        super().__init__()  # Call the __init__ method of the base class
+        super().__init__() # Call the __init__ method of the base class to create a uid for this instance
         assert os.path.isfile( ffn ), f'Inputted file not found: {ffn}'
         self._intake_form, self._ffn = intake_form, ffn
         self._new_ffn, self._metadata, self._image, self._derived_metadata, self._datetime, self._is_valid = '', None, None, {}, None, False

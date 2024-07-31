@@ -63,19 +63,17 @@ class ORDataIntakeForm( ResourceFile ):
     The UID generated represents the subject and the source data experiment.
     """
     def __init__( self, metatables: MetaTables, login: XNATLogin, ffn: Opt[str]=None, verbose: Opt[bool]=False, write_to_file: Opt[bool]=False ):
-        super().__init__( metatables=metatables, login=login ) # Call the __init__ method of the base class
+        super().__init__( metatables=metatables, login=login ) # Call the __init__ method of the base class -- bug:? goes all the way to our utility class and generates a uid.
 
         # Init dict (and future json-formatted text file) with required keys.
         self._init_all_fields()
-        self._saved_ffn = metatables.tmp_data_dir / Path( self._uid ) / self.filename
-        if not os.path.exists( self.saved_ffn.parent ): os.makedirs( self.saved_ffn.parent )
         
-
         # Either read in the inputted text file and distribute that data, or prompt the user for the data.
         if ffn:
             self._read_from_file( ffn, verbose=verbose )
             return
         else:
+            if not os.path.exists( self.saved_ffn.parent ): os.makedirs( self.saved_ffn.parent )
             self._prompt_user_for_filer_name_and_operation_date( metatables=metatables )
             self._prompt_user_for_scan_quality(  )
             self._prompt_user_for_surgical_procedure_info( metatables=metatables )
@@ -83,11 +81,15 @@ class ORDataIntakeForm( ResourceFile ):
             self._prompt_user_for_storage_device_info(  )
             if write_to_file: self.construct_digital_file( verbose=verbose )
             # self._create_text_file_reconstruction( verbose=verbose ) # commenting out bc we want it saved to a temp folder corresponding to this subject
+        
+            # Need to identify the save-to location for the json file; if successfully read from file, use that, else, use the generated uid.
+            self._saved_ffn = metatables.tmp_data_dir / Path( self.uid ) / self.filename
 
 
     def _read_from_file( self, ffn: str, verbose: Opt[bool]=False ) -> None:
         if verbose: print( f'\n\t--- Initializing IntakeFrom from {ffn} ---' )
-        self._running_text_file = json.load( open( ffn ) )
+        with open( ffn, 'r', encoding='cp1252' ) as jf:
+            self._running_text_file = json.loads( jf.read() )
 
         # Minimally Required information (if paper form was available when processed)
         self._uid = self.running_text_file['SUBJECT_UID'] # Overwrites generated uid in base class
@@ -104,6 +106,7 @@ class ORDataIntakeForm( ResourceFile ):
         self._radiology_contact_date = self.running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_DATE']
         self._radiology_contact_time = self.running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_TIME']
         self._relevant_folder = Path( self.running_text_file['STORAGE_DEVICE_INFO']['RELEVANT_FOLDER'] )
+        self._saved_ffn = Path( ffn )
 
         try: # Optional fields that may not be present in the inputted form (if the filer did not have this info when originally creating the digitized version)
             self._epic_end_time = self.running_text_file['SURGICAL_PROCEDURE_INFO']['EPIC_END_TIME']
@@ -396,7 +399,7 @@ class ORDataIntakeForm( ResourceFile ):
     def push_to_xnat( self, subj_inst, verbose: Opt[bool] = False ):
         if verbose:     print( f'\t\t...Uploading resource files...' )
         with open( self.saved_ffn, 'r' ) as f:
-            subj_inst.resource( 'INTAKE_FORM' ).file( self.filename ).insert( f.read(), content='TEXT', format='JSON', tags='DOC' ) # type: ignore
+            subj_inst.resource( 'INTAKE_FORM' ).file( self.filename.str ).insert( f.read(), content='TEXT', format='JSON', tags='DOC' ) # type: ignore
 
 
     
@@ -411,9 +414,13 @@ class ORDataIntakeForm( ResourceFile ):
     @property
     def running_text_file( self )                       -> dict:                    return self._running_text_file
     @property
+    def saved_ffn( self )                               -> Path:                    return self._saved_ffn
+    @property
+    def saved_ffn_str( self )                           -> str:                     return str( self.saved_ffn )
+    @property
     def filename( self )                                -> Path:                    return Path( 'RECONSTRUCTED_OR_DATA_INTAKE_FORM.json' )
     @property
-    def saved_ffn( self )                               -> Path:                    return self._saved_ffn
+    def filename_str( self )                            -> str:                     return str( self.filename )
     @property
     def form_is_available( self )                       -> bool:                    return self._form_available
     @property

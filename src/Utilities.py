@@ -149,7 +149,7 @@ class UIDandMetaInfo:
 
 
     def generate_uid( self )                    -> str:                 return str( generate_pydicomUID( prefix=None, entropy_srcs=[self.now_datetime] ) ).replace( '.', '_' )
-    def is_valid_pydcom_uid( self, uid_str: str )   -> bool:            return pydicom_UID( uid_str.replace( '.', '_' ) ).is_valid
+    def is_valid_pydcom_uid( self, uid_str: str )   -> bool:            return pydicom_UID( uid_str.replace( '_', '.' ) ).is_valid
                                                 
 
 #--------------------------------------------------------------------------------------------------------------------------

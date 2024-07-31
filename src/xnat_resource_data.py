@@ -146,7 +146,8 @@ class ORDataIntakeForm( ResourceFile ):
         self._running_text_file['FORM_LAST_MODIFIED'] = datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
 
 
-    def prompt_until_valid_answer_given( self, selection_name: str, acceptable_options: list ) -> str:
+    @staticmethod
+    def prompt_until_valid_answer_given( selection_name: str, acceptable_options: list ) -> str:
         while True:
             user_input = input( f'\tAnswer:\t' )
             if user_input.upper() in acceptable_options: return user_input.upper()

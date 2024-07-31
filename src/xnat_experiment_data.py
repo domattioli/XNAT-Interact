@@ -377,7 +377,7 @@ class SourceESVSession( ExperimentData ):
         assert self.is_valid, f"Session is invalid; could be for several reasons. try evaluating whether all of the image hash_strings already exist in the matatable."
 
         # Add the subject to the metatables
-        metatables.add_new_item( table_name='SUBJECTS', item_name=self.intake_form.uid, verbose=verbose,
+        metatables.add_new_item( table_name='SUBJECTS', item_name=self.intake_form.uid, item_uid=self.intake_form.uid, verbose=verbose,
                                 extra_columns_values={ 'ACQUISITION_SITE': metatables.get_uid( table_name='ACQUISITION_SITES', item_name=self.intake_form.acquisition_site ),
                                                       'GROUP': metatables.get_uid( table_name='GROUPS', item_name=self.intake_form.group ) }
                                 )

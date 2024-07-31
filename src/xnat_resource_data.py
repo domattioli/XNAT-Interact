@@ -157,11 +157,11 @@ class ORDataIntakeForm( ResourceFile ):
 
     def _prompt_user_for_filer_name_and_operation_date( self, metatables: MetaTables ) -> None: 
         possible_user_hawkids = metatables.list_of_all_items_in_table( 'REGISTERED_USERS' )
-        print( f'\t(1/35)\tHAWKID of the Form Filer\t--\tPlease enter a HawkID from the following list:\t{possible_user_hawkids}' )
+        print( f'\n\t(1/35)\tHAWKID of the Form Filer\t--\tPlease enter a HawkID from the following list:\t{possible_user_hawkids}' )
         filer_hawkid = self.prompt_until_valid_answer_given( 'HawkID of the Form Filer', acceptable_options=possible_user_hawkids ) # to-do: allow user to just input an integer instead of type out hawkid?
         self._filer_name = filer_hawkid.upper()
 
-        print( '\n\t(2/35)\tDo you have a *Paper* Intake Form available filled-out for this procedure?\n\tEnter "1" for Yes or "2" for No' )
+        print( '\n\t(2/35)\tDo you have a *PAPER* Intake Form available filled-out for this procedure?\t--\tEnter "1" for Yes or "2" for No' )
         form_available = self.prompt_until_valid_answer_given( 'Form Availability', acceptable_options=['1', '2'] ) # to-do: Automate acceptable_options based on the type of input expected bc we may change the metatables values for this and then these prompts wont reflect those changes.
 
         self._operation_date = parser.parse( input( '\n\t(3/35)\tPlease enter the Operation Date (YYYY-MM-DD):\t' ) ).date().strftime( '%Y-%m-%d' )
@@ -397,7 +397,7 @@ class ORDataIntakeForm( ResourceFile ):
         json_str = json.dumps( self.running_text_file, indent=4, default=ORDataIntakeForm._custom_serializer )
         with open( self.saved_ffn, 'w' ) as f:
             f.write( json_str )
-            if verbose:     print( f' -- SUCCESS -- OR Data Intake Form saved to:\t{self.saved_ffn}' )
+            if verbose:     print( f' -- SUCCESS -- OR Data Intake Form saved to:\t{self.saved_ffn}\n' )
 
 
     def push_to_xnat( self, subj_inst, verbose: Opt[bool] = False ):

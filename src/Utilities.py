@@ -510,10 +510,20 @@ class MetaTables( UIDandMetaInfo ):
         return write_ffn
 
 
+    def ensure_primary_keys_validity( self ) -> None:
+        '''Ensure that Subjects found in Image Hashes table are also found in the Subjects table.'''
+        # Test 1: Ensure that all subjects in the Image Hashes table are also in the Subjects table
+        unique_referenced_subject_uids = self._tables['IMAGE_HASHES']['SUBJECT'].unique()
+        unique_subjects = self.list_of_all_items_in_table( 'SUBJECTS' )
+        assert sorted( unique_referenced_subject_uids ) == sorted(unique_subjects ), 'The unique subjects in the IMAGE_HASHES table do not match the unique subjects in the SUBJECTS table'
+        # Test 2: Ensure ...
+
+
     def push_to_xnat( self, verbose: Opt[bool] = False ) -> None:
+        self.ensure_primary_keys_validity()
         self.save( verbose )
         self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'MetaTables' ).file( self.meta_tables_fn ).put( self.meta_tables_ffn, content='METADATA', format='JSON', tags='DOC', overwrite=True )
-        if verbose is True:             print( f'\t...Metatables successfully updated on XNAT.' )
+        if verbose is True:             print( f'\t...Metatables successfully updated on XNAT!' )
 
 
     def save( self, verbose: Opt[bool] = False ) -> None: # Convert all tables to JSON; Write the data to the file

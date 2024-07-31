@@ -308,8 +308,11 @@ class SourceESVSession( ExperimentData ):
 
 
     @property
-    def mp4( self )     -> ArthroVideo:     return self._mp4
-
+    def mp4( self )                             -> List[ArthroVideo]:                               return self._mp4
+    @mp4.setter
+    def mp4(self, videos: List[ArthroVideo])    -> None:
+        if isinstance(videos, list) and all(isinstance(video, ArthroVideo) for video in videos):    self._mp4 = videos
+        else:                                                                                       raise ValueError("mp4 must be a list of ArthroVideo objects.")
 
     def _mine_session_metadata( self ):
         assert self.df.empty is False, 'Dataframe of dicom files is empty.'
@@ -317,11 +320,14 @@ class SourceESVSession( ExperimentData ):
         # self._assign_experiment_uid()
         
         # For each row, generate a new file name now that we have a session label.
+        vid_count = 0
         for idx in range( len( self.df ) ): # to-do: BUG - for some reason the iterrows() enumerator creates a row variable that cannot be accessed -- error occurs because the str method is overridden somewhere...
             if self.df.loc[idx, 'IS_VALID']:
                 file_obj_rep = self.df.loc[idx, 'OBJECT']
                 if isinstance( file_obj_rep, ArthroVideo ): # video is assigned instance number 000. Our convention is to begin at 001 for image files.
-                    self._df.loc[idx, 'NEW_FN'] = file_obj_rep.generate_source_image_file_name( '000', self.intake_form.uid )
+                    if vid_count == 0:  vid_prefix, vid_count = '000', vid_count + 1 #to-do: horrendous code; need to fix this
+                    else:               vid_prefix =  str( len( self.df ) + 1 ).zfill( 3 )
+                    self._df.loc[idx, 'NEW_FN'] = file_obj_rep.generate_source_image_file_name( vid_prefix, self.intake_form.uid )
                     # self._df.loc[idx, 'NEW_FN'] = file_obj_rep.generate_source_image_file_name( '000', file_obj_rep.uid_info['Video_UID'] ) 
                     # self._df.loc[idx, 'NEW_FN'] = self.df.loc[idx, 'OBJECT'].uid_info['Video_UID']
                 elif isinstance( self.df.loc[idx, 'OBJECT'], ArthroDiagnosticImage ):
@@ -339,28 +345,31 @@ class SourceESVSession( ExperimentData ):
     def _populate_df( self, metatables: MetaTables ):
         # Read in mp4 data
         mp4_ffn = list( self.intake_form.relevant_folder.rglob("*.[mM][pP]4") )
-        assert len( mp4_ffn ) == 1, f"There should be exactly one mp4 file in the directory; found --{len( mp4_ffn )}-- mp4 files."
-        self._mp4 = ArthroVideo( vid_ffn=mp4_ffn[0], metatables=metatables, intake_form=self.intake_form )
-        assert self.mp4.is_valid, f"Could not open video file: {self.mp4.ffn}"
+        assert len( mp4_ffn ) > 0, f"There should be at least one (1) mp4 file in the directory; found {len( mp4_ffn )} mp4 files."
+        self._mp4 = [ArthroVideo( vid_ffn=ffn, metatables=metatables, intake_form=self.intake_form ) for ffn in mp4_ffn]
+        if isinstance( self.mp4, list ): # Check that all mp4 files are valid
+            for vid in self.mp4: assert vid.is_valid, f"Could not open video file: {vid.ffn}"
 
         # Read all jpg images;  sort images by their creationg date-time, append mp4 ffn to the list before we build the dataframe
         all_ffns = list( self.intake_form.relevant_folder.rglob("*.[jJ][pP][gG]") ) + list( self.intake_form.relevant_folder.rglob("*.[jJ][pP][eE][gG]") )
         if len( all_ffns ) == 0: # prompt the user to confirm that they do indeed want to proceed without any images.
-            print( f'No image files were found in the inputted folder; if this is correct, input "1" to proceed, otherwise input "0" to exit.' )
+            print( f'\tNo image files were found in the inputted folder; if this is correct, input "1" to proceed, otherwise input "0" to exit.' )
             proceed = input( f'Proceed without images ("1" for yes, "0" for no):\t')
             if proceed == '0': raise 
         # assert len( all_ffns ) > 0, f"No image files found in the inputted folder; make sure that all image files in folder have the correct ('.jpg' or '.jpeg') extension.\n\tDirectory given:  {self.intake_form.relevant_folder}."
-            all_ffns = [mp4_ffn[0]]
+            all_ffns = mp4_ffn
         else:
-            all_ffns = sorted( all_ffns, key=lambda x: os.path.getctime( x ) ) + [mp4_ffn[0]]
+            all_ffns = sorted( all_ffns, key=lambda x: os.path.getctime( x ) ) + mp4_ffn
         
         # Assemble into a dataframe
         self._init_esv_session_dataframe()
         self._df = self._df.reindex( np.arange( len( all_ffns ) ) )
+        mp4_idx = 0
         for idx, ffn in enumerate( all_ffns ):
             fn, ext = os.path.splitext( os.path.basename( ffn ) )
             if ext.lower() == '.mp4':
-                self._df.loc[idx, ['FN', 'OBJECT', 'IS_VALID', 'TYPE']] = [fn, self.mp4, self.mp4.is_valid, 'MP4']
+                self._df.loc[idx, ['FN', 'OBJECT', 'IS_VALID', 'TYPE']] = [fn, self.mp4[mp4_idx], self.mp4[mp4_idx].is_valid, 'MP4']
+                mp4_idx += 1
             elif ext.lower() in ['.jpg', '.jpeg']:
                 instance_num = str( idx+1 )
                 diag_img_obj = ArthroDiagnosticImage( img_ffn=ffn, metatables=metatables, intake_form=self.intake_form, still_num=instance_num, parent_uid=self.intake_form.uid ) 
@@ -414,7 +423,7 @@ class SourceESVSession( ExperimentData ):
                         raise ValueError( f"Object representation of file at index {idx} is {type( file_obj_rep )}, which is neither an ArthroDiagnosticImage nor an ArthroVideo object." )
                 
             # Zip these temporary directories into a slightly-less-temporary directory.
-            mp4_zip_path = os.path.join( home_dir, "mp4_file.zip" )
+            mp4_zip_path = os.path.join( home_dir, "mp4_files.zip" )
             dcm_zip_path = os.path.join( home_dir, "dicom_files.zip" )
             mp4_zip_full_path = shutil.make_archive( mp4_zip_path[:-4], 'zip', mp4_temp_dir )
             dcm_zip_full_path = shutil.make_archive( dcm_zip_path[:-4], 'zip', dcm_temp_dir )
@@ -436,6 +445,9 @@ class SourceESVSession( ExperimentData ):
             return f' -- {self.__class__.__name__} --\nUID:\t{None}\nAcquisition Site:\t{intake_form.acquisition_site}\nGroup:\t\t\t{intake_form.group}\nDate-Time:\t\t{None}\nValid:\t\t\t{self.is_valid}\n{df.head()}\n...\n{df.tail()}'
 
 
-    def __del__( self ):    
-        try:    self.mp4.__del__()
-        except: pass
+    def __del__( self ):
+        try:
+            for video in self.mp4:
+                video.__del__()
+        except Exception as e:
+            pass

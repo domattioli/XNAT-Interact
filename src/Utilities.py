@@ -400,6 +400,7 @@ class MetaTables( UIDandMetaInfo ):
         self.add_new_item( 'acquisitIon_sites', 'UNIVERSITY_OF_IOWA_HOSPITALS_AND_CLINICS' )
         self.add_new_item( 'acqUisition_sites', 'UNIVERSITY_OF_HOUSTON' )
         self.add_new_item( 'ACQUISITION_SItes', 'AMAZON_MECHANICAL_TURK' )
+        
         self.add_new_table( 'gRouPs' )
         # trauma:
         self.add_new_item( 'grOups', 'Open_reduction_hip_fracture–Dynamic_hip_screw' )
@@ -413,17 +414,30 @@ class MetaTables( UIDandMetaInfo ):
         self.add_new_item( 'grOups', 'Intramedullary_nail-Retrograde_femoral' )
         self.add_new_item( 'grOups', 'Intramedullary_nail-Tibia' )
         self.add_new_item( 'grOups', 'Scaphoid_Fracture' )
+
         # arthro
         self.add_new_item( 'groups', 'Shoulder_ARTHROSCOPY' )
         self.add_new_item( 'groups', 'KNEE_ARTHROSCOPY' )
         self.add_new_item( 'groups', 'Hip_ARTHROSCOPY' )
         self.add_new_item( 'groups', 'Ankle_ARTHROSCOPY' )
+
+        # Init tables for subjects (performances), image hashes, surgeons, and registered users (of this software)
         self.add_new_table( 'subjects', ['acquisition_site', 'group'] ) # need additional columns to reference uids from other tables
+     
         self.add_new_table( 'IMAGE_HASHES', ['subject', 'INSTANCE_NUM'] ) # need additional columns to reference uids from other tables
+
         self.add_new_table( 'Surgeons', ['first_name', 'last_name', 'middle_initial'] )
         self.add_new_item( 'surgeons', 'karamm', extra_columns_values={'first_name':'MATTHEW', 'last_name': 'KARAM', 'middle_initial': 'D' } )
         self.add_new_item( 'surgeons', 'kowalskih', extra_columns_values={'first_name':'HEATHER', 'last_name': 'KOWALSKI', 'middle_initial': 'R' } )
         self.add_new_item( 'surgeons', 'mbollier', extra_columns_values={'first_name':'MATTHEW', 'last_name': 'BOLLIER', 'middle_initial': 'J' } )
+        self.add_new_item( 'surgeons', 'wolfb', extra_columns_values={'first_name':'BRIAN', 'last_name': 'WOLF', 'middle_initial': 'R' } )
+        self.add_new_item( 'surgeons', 'rwestermann', extra_columns_values={'first_name':'ROBERT', 'last_name': 'WESTERMAN', 'middle_initial': '' } )
+        self.add_new_item( 'surgeons', 'kduchman', extra_columns_values={'first_name':'KYLE', 'last_name': 'DUCHMAN', 'middle_initial': 'R' } )
+        self.add_new_item( 'surgeons', 'tdenhartog', extra_columns_values={'first_name':'TAYLOR', 'last_name': 'DEN_HARTOG', 'middle_initial': 'J' } )
+        self.add_new_item( 'surgeons', 'cjmaly', extra_columns_values={'first_name':'CONNOR', 'last_name': 'MALY', 'middle_initial': 'J' } )
+        self.add_new_item( 'surgeons', 'ryanse', extra_columns_values={'first_name':'SARAH', 'last_name': 'RYAN', 'middle_initial': 'E' } )
+        self.add_new_item( 'surgeons', 'brwilkinson', extra_columns_values={'first_name':'BRADY', 'last_name': 'WILKINSON', 'middle_initial': 'R' } )
+
         self.add_new_item( 'registered_users', 'gthomas' )
         self.add_new_item( 'registered_users', 'andersondd' )
         self.add_new_item( 'registered_users', 'mtatum' )

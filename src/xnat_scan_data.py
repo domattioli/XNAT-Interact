@@ -34,7 +34,6 @@ class ScanFile( UIDandMetaInfo ):
         self._intake_form, self._ffn = intake_form, ffn
         self._new_ffn, self._metadata, self._image, self._derived_metadata, self._datetime, self._is_valid = '', None, None, {}, None, False
         assert self.is_valid_pydcom_uid( intake_form.uid ), f'Inputted uid must be a valid dicom uid: {intake_form.uid}'
-        self._uid = self.generate_uid()
 
 
     @property

@@ -626,8 +626,8 @@ class USCentralDateTime():
     print( 'USCentral Date: ' + tst1.date + ', time: ' + tst1.time )
     print( USCentralDateTime( 'nonsense time o'clock' ) )
     '''
-    def __init__( self, dt_str: str ):
-        if dt_str == '':    dt_str = '1900-01-01 00:00:00'
+    def __init__( self, dt_str: Opt[str] = None ):
+        if dt_str is None:    dt_str = '1900-01-01 00:00:00'
         self._date, self._time, self._dt = '', '', None
         self._raw_dt_str = dt_str
         self._parse_date_time()
@@ -642,13 +642,13 @@ class USCentralDateTime():
 
 
     @property
-    def date( self )    -> str:     return self.dt.strftime( '%Y%m%d' )
+    def date( self )    -> str:     return self.dt.date().strftime( '%Y%m%d' )
     @property
-    def time( self )    -> str:     return self.dt.strftime( '%H%M%S' )
+    def time( self )    -> str:     return self.dt.time().strftime( '%H%M%S.%f' )[:-3]
     @property
     def dt( self )      -> datetime:return self._dt # type: ignore
     @property
-    def dt_str( self )  -> str:     return str( self.dt.strftime( '%Y-%m-%d %H:%M:%S' ) ) + ' US-CST'
+    def dt_str( self )  -> str:     return str( self.dt.strftime( '%Y-%m-%d %H:%M:%S.%f' ) ) + ' US-CST'
 
 
     def __str__( self ) -> str:     return f'{self.dt} US-CST'

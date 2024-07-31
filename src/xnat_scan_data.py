@@ -105,7 +105,7 @@ class ArthroDiagnosticImage( ScanFile ):
     '''Class representing the XNAT Scan for Arthroscopic Diagnostic Images. Inherits from ScanFile.'''
     def __init__( self, img_ffn: Path, still_num: str, parent_uid: str, metatables: MetaTables, intake_form: ORDataIntakeForm ):
         super().__init__( intake_form=intake_form, ffn=img_ffn )  # Call the __init__ method of the base class
-        self._datetime, self._still_num = datetime, still_num
+        self._datetime, self._still_num = USCentralDateTime(), still_num
         self._validate_input()
         self._read_image( metatables=metatables )
         self._validate_image() 
@@ -129,12 +129,13 @@ class ArthroDiagnosticImage( ScanFile ):
     def _create_dicom_representation( self, parent_uid: str ):
         file_meta = pydicomFileMetaDataset()
         file_meta.MediaStorageSOPClassUID = dcmUID( '1.2.840.10008.5.1.4.1.1.77.1.1.1' ) # Video Endoscopic Image IOD
-        # file_meta.MediaStorageSOPInstanceUID = dcmUID( self.derived_metadata['ARTHRO_STILL_IMAGE_UID'].replace( '_', '.' ) ) #to-do: need to create a uid in metatables for this media storage data type
+        file_meta.MediaStorageSOPInstanceUID = dcmUID( self.generate_uid().replace( '_', '.' ) ) #to-do: need to create a uid in metatables for this media storage data type
         file_meta.ImplementationClassUID = dcmUID( parent_uid.replace( '_', '.' ) )
         file_meta.TransferSyntaxUID = ImplicitVRLittleEndian # Implicit VR Little Endian
         
-        date_now_str, time_now_str = str( datetime.now().strftime( '%Y%m%d' ) ), str( datetime.now().strftime( '%H%M%S' ) )
-        date_img_str, time_img_str = str( self.datetime.date ), str( self.datetime.time )
+        date_now_str, time_now_str = datetime.now().strftime( '%Y%m%d' ),   datetime.now().strftime( '%H%M%S.%f' )[:-3]
+        date_img_str, time_img_str = self.datetime.date,                    self.datetime.time
+
         ds = pydicomFileDataset( self.new_ffn, {}, file_meta=file_meta, preamble=b"\0" * 128)
         ds.PatientName, ds.PatientID = self.redacted_string, self.redacted_string
         ds.ContentDate, ds.ContentTime = date_now_str, time_now_str
@@ -142,7 +143,7 @@ class ArthroDiagnosticImage( ScanFile ):
         ds.StudyInstanceUID = dcmUID( parent_uid.replace( '_', '.' ) )
         ds.InstanceNumber = self.still_num
         ds.InstanceCreationDate, ds.InstanceCreationTime = date_img_str, '' #to-do: instance creation time is potentially gleanable from the original file info?
-        ds.SeriesInstanceUID = dcmUID( self.uid )
+        ds.SeriesInstanceUID = dcmUID( self.uid.replace( '_', '.' ) )
         ds.SeriesDescription = f'Arthro. Diagn. Img. #{self.still_num}'
 
         ds.InstitutionName = self.intake_form.acquisition_site

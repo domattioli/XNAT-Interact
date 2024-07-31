@@ -354,7 +354,7 @@ class SourceESVSession( ExperimentData ):
         all_ffns = list( self.intake_form.relevant_folder.rglob("*.[jJ][pP][gG]") ) + list( self.intake_form.relevant_folder.rglob("*.[jJ][pP][eE][gG]") )
         if len( all_ffns ) == 0: # prompt the user to confirm that they do indeed want to proceed without any images.
             print( f'\tNo image files were found in the inputted folder; if this is correct, input "1" to proceed, otherwise input "0" to exit.' )
-            proceed = input( f'Proceed without images ("1" for yes, "0" for no):\t')
+            proceed = input( f'\tAnswer:\t')
             if proceed == '0': raise 
         # assert len( all_ffns ) > 0, f"No image files found in the inputted folder; make sure that all image files in folder have the correct ('.jpg' or '.jpeg') extension.\n\tDirectory given:  {self.intake_form.relevant_folder}."
             all_ffns = mp4_ffn

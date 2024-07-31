@@ -400,7 +400,7 @@ class MetaTables( UIDandMetaInfo ):
         self.add_new_item( 'acquisitIon_sites', 'UNIVERSITY_OF_IOWA_HOSPITALS_AND_CLINICS' )
         self.add_new_item( 'acqUisition_sites', 'UNIVERSITY_OF_HOUSTON' )
         self.add_new_item( 'ACQUISITION_SItes', 'AMAZON_MECHANICAL_TURK' )
-        
+
         self.add_new_table( 'gRouPs' )
         # trauma:
         self.add_new_item( 'grOups', 'Open_reduction_hip_fracture–Dynamic_hip_screw' )
@@ -437,6 +437,7 @@ class MetaTables( UIDandMetaInfo ):
         self.add_new_item( 'surgeons', 'cjmaly', extra_columns_values={'first_name':'CONNOR', 'last_name': 'MALY', 'middle_initial': 'J' } )
         self.add_new_item( 'surgeons', 'ryanse', extra_columns_values={'first_name':'SARAH', 'last_name': 'RYAN', 'middle_initial': 'E' } )
         self.add_new_item( 'surgeons', 'brwilkinson', extra_columns_values={'first_name':'BRADY', 'last_name': 'WILKINSON', 'middle_initial': 'R' } )
+        self.add_new_item( 'surgeons', 'unknown', extra_columns_values={'first_name':'', 'last_name': '', 'middle_initial': '' } )
 
         self.add_new_item( 'registered_users', 'gthomas' )
         self.add_new_item( 'registered_users', 'andersondd' )

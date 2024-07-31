@@ -34,7 +34,7 @@ class ExperimentData():
 
         self._intake_form, self._tmp_source_data_dir = intake_form, intake_form.saved_ffn.parent / Path( 'SOURCE_DATA' ) # type: ignore
         if not os.path.exists( self.tmp_source_data_dir ):  os.makedirs( self.tmp_source_data_dir )
-        self._df, self._is_valid, self._series_description = pd.DataFrame(), False, ''    # Derived in derived classes' init method
+        self._df, self._is_valid = pd.DataFrame(), False    # Derived in derived classes' init method
 
     @property
     def intake_form( self )             -> ORDataIntakeForm:        return self._intake_form
@@ -44,8 +44,6 @@ class ExperimentData():
     def df( self )                      -> pd.DataFrame:            return self._df
     @property
     def is_valid( self )                -> bool:                    return self._is_valid
-    @property
-    def series_description( self )      -> str:                     return self._series_description
     
     def _populate_df( self ):                                       raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
     def _check_session_validity( self, metatables: MetaTables ):    raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
@@ -98,7 +96,7 @@ class ExperimentData():
                             } )
         scan_inst.create( **{   f'scans': f'xnat:{schema_prefix_str}ScanData' } )                           # type: ignore -- doesnt recognize .create() attribute of scan_inst
         scan_inst.attrs.mset( { f'xnat:{schema_prefix_str}ScanData/TYPE': scan_type_label,                  # type: ignore -- doesnt recognize .attrs attribute of scan_inst
-                                f'xnat:{schema_prefix_str}ScanData/SERIES_DESCRIPTION': self.series_description,
+                                f'xnat:{schema_prefix_str}ScanData/SERIES_DESCRIPTION': self.intake_form.ortho_procedure_type,
                                 f'xnat:{schema_prefix_str}ScanData/QUALITY': self.intake_form.scan_quality,
                                 f'xnat:imageScanData/NOTE': f'BY: {validated_login.validated_username}; AT: {USCentralDateTime(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))}'
                             } )
@@ -143,7 +141,7 @@ class ExperimentData():
 class SourceRFSession( ExperimentData ): # to-do: Need to detail past and present identifiers for a subject.
     ''' '''
     # def __init__( self, dcm_dir: Path, intake_form: ORDataIntakeForm, login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables, past_upload_data: Opt[pd.DataFrame] = None ):
-    #     super().__init__( intake_form=intake_form, login=login, xnat_connection=xnat_connection, metatables=metatables, past_upload_data=past_upload_data ) # Call the __init__ method of the base class
+    #     super().__init__( intake_form=intake_form ) # Call the __init__ method of the base class
     #     self._validate_past_upload_data_input()
     #     self._populate_df()
     #     self._check_session_validity()

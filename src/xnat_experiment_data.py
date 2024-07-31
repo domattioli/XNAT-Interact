@@ -52,29 +52,29 @@ class ExperimentData():
 
 
     #--------------------------------------------XNAT-Publishing helpers and methods----------------------------------------------------------
-    def _generate_queries( self, xnat: XNATConnection ) -> Tuple[str, str, str, str, str]:
+    def _generate_queries( self, xnat_connection: XNATConnection ) -> Tuple[str, str, str, str, str]:
         # Create query strings and select object in xnat then create the relevant objects
         exp_label = ( 'SOURCE_DATA' + '-' + self.intake_form.uid )
         scan_label = '0' #to-do: potentially an issue if there are multiple scans in a session
         # scan_type_label = scan_type_label
         # scan_type_series_description = 
         # resource_label = resource_label
-        proj_qs = '/project/' + xnat.xnat_project_name
+        proj_qs = '/project/' + xnat_connection.xnat_project_name
         proj_qs = PurePosixPath( proj_qs ) # to-doneed to revisit this because it is hard-coded but Path makes it annoying
         subj_qs = proj_qs / 'subject' / str( self.intake_form.uid )
         exp_qs = subj_qs / 'experiment' / exp_label
         scan_qs = exp_qs / 'scan' / scan_label
         files_qs = scan_qs / 'resource' / 'files'
-        resource_label = 'DATA'
+        resource_label = 'SRC'
         return str( subj_qs ), str( exp_qs ), str( scan_qs ), str( files_qs ), resource_label
 
 
-    def _select_objects( self, xnat: XNATConnection, subj_qs: str, exp_qs: str, scan_qs: str, files_qs: str ) -> Tuple[object, object, object]:
-        subj_inst = xnat.server.select( str( subj_qs ) )
+    def _select_objects( self, xnat_connection: XNATConnection, subj_qs: str, exp_qs: str, scan_qs: str, files_qs: str ) -> Tuple[object, object, object]:
+        subj_inst = xnat_connection.server.select( str( subj_qs ) )
         assert not subj_inst.exists(), f'Subject already exists with the uri:\n{subj_inst}'         # type: ignore
-        exp_inst = xnat.server.select( str( exp_qs ) )
+        exp_inst = xnat_connection.server.select( str( exp_qs ) )
         assert not exp_inst.exists(), f'Experiment already exists with the uri:\n{exp_inst}'        # type: ignore
-        scan_inst = xnat.server.select( str( scan_qs ) )
+        scan_inst = xnat_connection.server.select( str( scan_qs ) )
         assert not scan_inst.exists(), f'Scan already exists with the uri:\n{scan_inst}'            # type: ignore
         return subj_inst, exp_inst, scan_inst
 
@@ -82,12 +82,12 @@ class ExperimentData():
     def write( self, metatables: MetaTables, zip_dest: Opt[Path] = None, verbose: Opt[bool] = False )   -> Tuple[dict, MetaTables]: raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
     
 
-    def publish_to_xnat( self, xnat: XNATConnection, login: XNATLogin, zipped_data: dict, schema_prefix_str: str, scan_type_label: str, delete_zip: Opt[bool] = True, verbose: Opt[bool] = False ) -> None:
+    def publish_to_xnat( self, xnat_connection: XNATConnection, validated_login: XNATLogin, zipped_data: dict, schema_prefix_str: str, scan_type_label: str, delete_zip: Opt[bool] = True, verbose: Opt[bool] = False ) -> None:
         assert scan_type_label in ['DICOM_MP4', 'DICOM'], f'Your inputted scan type label is not in the list of acceptable strings: ["DICOM_MP4", "DICOM"]'
         assert schema_prefix_str in ['rf', 'esv', 'otherDicom'], f'Your inputted schema prefix string is not in the list of acceptable strings:\n["rf", "esv", "otherDicom"]'
         if verbose:     print( f'\t...Pushing {schema_prefix_str} Session Data to XNAT...' )
-        subj_qs, exp_qs, scan_qs, files_qs, resource_label = self._generate_queries( xnat=xnat )
-        subj_inst, exp_inst, scan_inst = self._select_objects( xnat=xnat, subj_qs=subj_qs, exp_qs=exp_qs, scan_qs=scan_qs, files_qs=files_qs )
+        subj_qs, exp_qs, scan_qs, files_qs, resource_label = self._generate_queries( xnat_connection=xnat_connection )
+        subj_inst, exp_inst, scan_inst = self._select_objects( xnat_connection=xnat_connection, subj_qs=subj_qs, exp_qs=exp_qs, scan_qs=scan_qs, files_qs=files_qs )
 
         # Create the items in stepwise fashion -- to-do: can't figure out how to create all in one go instead of attrs.mset(), it wouldn't work properly
         subj_inst.create()                                                                                  # type: ignore -- doesnt recognize .create() attribute of subj_inst
@@ -100,7 +100,7 @@ class ExperimentData():
         scan_inst.attrs.mset( { f'xnat:{schema_prefix_str}ScanData/TYPE': scan_type_label,                  # type: ignore -- doesnt recognize .attrs attribute of scan_inst
                                 f'xnat:{schema_prefix_str}ScanData/SERIES_DESCRIPTION': self.series_description,
                                 f'xnat:{schema_prefix_str}ScanData/QUALITY': self.intake_form.scan_quality,
-                                f'xnat:imageScanData/NOTE': f'BY: {login.validated_username}; AT: {USCentralDateTime(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))}'
+                                f'xnat:imageScanData/NOTE': f'BY: {validated_login.validated_username}; AT: {USCentralDateTime(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))}'
                             } )
 
         # Assuming that zipped_data is a dict w keys corresponding to the unique types of data to be pushed and the corresponding values being the file paths to the zipped data, iterate through the dict
@@ -115,21 +115,20 @@ class ExperimentData():
         # # scan_inst.resource( resource_label ).put_zip( zipped_ffn, content='IMAGE', format='DICOM', tags='POST_OP_DATA', overwrite=True )
         # scan_inst.resource( resource_label ).put_zip( zipped_ffn, content='OR_DATA', format='DICOM', tags='', overwrite=True ) # type: ignore -- doesnt recognize .resource attribute of scan instance
 
-        if delete_zip:
-            [os.remove(key) for key in zipped_data.keys()] # to-do: not sure that this actually work as intended ie deletes the files corresponding to the key names
+        if delete_zip:  [os.remove(key) for key in zipped_data.keys()] # to-do: not sure that this actually work as intended ie deletes the files corresponding to the key names
         if verbose:
             print( f'\t...{schema_prefix_str}Session succesfully pushed to XNAT!' )
             print( f'\t...Successfully deleted zip file:\n' + '\n'.join(f'\t\t{key}' for key in zipped_data.keys()) + '\n')
 
 
-    def write_publish_catalog_subroutine( self, metatables: MetaTables, xnat: XNATConnection, login: XNATLogin, schema_prefix_str: str, scan_type_label: str, verbose: Opt[bool] = False, delete_zip: Opt[bool] = True ) -> MetaTables:
+    def write_publish_catalog_subroutine( self, metatables: MetaTables, xnat_connection: XNATConnection, validated_login: XNATLogin, schema_prefix_str: str, scan_type_label: str, verbose: Opt[bool] = False, delete_zip: Opt[bool] = True ) -> MetaTables:
         try:
             zipped_data, metatables = self.write( metatables=metatables, verbose=verbose )
         except Exception as e:
             if verbose: print( f'\t!!! Failed to write zipped file; exiting without publishing to XNAT.\n\tError given:\n\t{e}' )
             raise
         try:
-            self.publish_to_xnat( xnat=xnat, login=login, zipped_data=zipped_data, schema_prefix_str=schema_prefix_str, scan_type_label=scan_type_label, verbose=verbose, delete_zip=delete_zip )
+            self.publish_to_xnat( xnat_connection=xnat_connection, validated_login=validated_login, zipped_data=zipped_data, schema_prefix_str=schema_prefix_str, scan_type_label=scan_type_label, verbose=verbose, delete_zip=delete_zip )
 
         except Exception as e:
             print( f'\tError: failed to publish to xnat.\n\t{e}' )
@@ -276,7 +275,7 @@ class SourceRFSession( ExperimentData ): # to-do: Need to detail past and presen
     #     write_d = os.path.join( zip_dest, self.uid )
     #     subject_info = { 'ACQUISITION_SITE': self.metatables.get_uid( table_name='ACQUISITION_SITES', item_name=self.acquisition_site ),
     #                     'GROUP': self.metatables.get_uid( table_name='GROUPS', item_name=self.group ) }
-    #     self.metatables.add_new_item( table_name='SUBJECTS', item_name=self.uid, extra_columns_values=subject_info, verbose=verbose ) # type: ignore
+    #     self.metatables.add_new_item( table_name='SUBJECTS', item_name=self.uid, item_uid=, extra_columns_values=subject_info, verbose=verbose ) # type: ignore
     #     with tempfile.TemporaryDirectory() as tmp_dir:
     #         for _, row in self.df.iterrows():
     #             if row['IS_VALID']:

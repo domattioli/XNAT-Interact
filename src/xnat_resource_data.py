@@ -161,7 +161,7 @@ class ORDataIntakeForm( ResourceFile ):
         filer_hawkid = self.prompt_until_valid_answer_given( 'HawkID of the Form Filer', acceptable_options=possible_user_hawkids ) # to-do: allow user to just input an integer instead of type out hawkid?
         self._filer_name = filer_hawkid.upper()
 
-        print( '\n\t(2/35)\tIs there an OR Data Intake Form available for this procedure?\n\tEnter "1" for Yes or "2" for No' )
+        print( '\n\t(2/35)\tDo you have a *Paper* Intake Form available filled-out for this procedure?\n\tEnter "1" for Yes or "2" for No' )
         form_available = self.prompt_until_valid_answer_given( 'Form Availability', acceptable_options=['1', '2'] ) # to-do: Automate acceptable_options based on the type of input expected bc we may change the metatables values for this and then these prompts wont reflect those changes.
 
         self._operation_date = parser.parse( input( '\n\t(3/35)\tPlease enter the Operation Date (YYYY-MM-DD):\t' ) ).date().strftime( '%Y-%m-%d' )
@@ -231,7 +231,7 @@ class ORDataIntakeForm( ResourceFile ):
                 else:
                     print( f'\tAttempt {num_attempts + 1} failed:\n\t\tInvalid times provided. Please use the HH:MM format.' )
                     num_attempts += 1
-            if      not valid_times:    raise InvalidInputError('Failed to provide valid start and end times after multiple attempts.')
+            if      not valid_times:    raise InvalidInputError( 'Failed to provide valid start and end times after multiple attempts.' )
             else:   self._epic_start_time, self._epic_end_time = epic_start_time, epic_end_time
             local_dict['EPIC_START_TIME'], local_dict['EPIC_END_TIME'] = self.epic_start_time, self.epic_end_time
         else:
@@ -371,10 +371,10 @@ class ORDataIntakeForm( ResourceFile ):
         
         self._storage_device_name_and_type = input( '\t(30/35)\tPlease enter the name and type of the storage device:\t' )
 
-        full_path_name = input( '\t(31/35)\tPlease enter the full directory name of the folder containing the case data:\t\t' )
+        full_path_name = input( '\t(31/35)\tPlease enter the full directory name of the *local* folder containing the case data:\t' )
         while not os.path.exists( full_path_name ):#or not full_path_name.lower() in ['', 'escape', 'exit', 'stop', 'quit', 'n/a', 'na', 'unknown', 'none', 'not applicable']:
             print( f'!!!!!Input directory path is not accessible on this system!!!!!\n\tPlease double-check the validity of that directory and try again.' )
-            full_path_name = input( '\t(31/35)\tPlease enter the full directory name of the folder containing the case data:\n\t' )
+            full_path_name = input( '\t(31/35)\tPlease enter the full directory name of the *local* folder containing the case data:\n\t' )
         self._relevant_folder = Path( full_path_name )
 
         print( f'\n\t(32/35)\tWas radiology contacted for this procedure?\n\tEnter "1" for Yes, "2" for No, or "3" for Unknown.' )
@@ -494,7 +494,7 @@ class ORDataIntakeForm( ResourceFile ):
 
     def __str__( self ) -> str:
         # Print out the json formatted information as it would be shown in a text file.
-        json_str = json.dumps( self.running_text_file, indent=4 )
+        json_str = json.dumps( self.saved_ffn_str, indent=4 )
         lines = json_str.split('\n')
         out_str = f'\t-- OR Data Intake Form --\n'
         for line in lines:

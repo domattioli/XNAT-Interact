@@ -28,13 +28,17 @@ __all__ = ['SourceRFSession', 'SourceESVSession']
 #--------------------------------------------------------------------------------------------------------------------------
 ## Base class for all xnat experiment sessions.
 class ExperimentData():
-    def __init__( self, intake_form: ORDataIntakeForm ):    
+    def __init__( self, intake_form: ORDataIntakeForm, invoking_class: str ) -> None:    
         assert os.path.isdir( intake_form.relevant_folder ), f"Inputted path must be a valid directory; inputted path: {intake_form.relevant_folder}"
-        assert os.path.exists( intake_form.saved_ffn ), f"Inputted IntakeForm must be valid; no file found at: {intake_form.saved_ffn}"
+        assert os.path.exists( intake_form.saved_ffn_str ), f"Inputted IntakeForm must be valid; no file found at: {intake_form.saved_ffn_str}"
 
         self._intake_form, self._tmp_source_data_dir = intake_form, intake_form.saved_ffn.parent / Path( 'SOURCE_DATA' ) # type: ignore
         if not os.path.exists( self.tmp_source_data_dir ):  os.makedirs( self.tmp_source_data_dir )
         self._df, self._is_valid = pd.DataFrame(), False    # Derived in derived classes' init method
+
+        assert invoking_class in __all__, f"Invoking class must be one of the following strings: {__all__}; you entered: {invoking_class}"
+        if invoking_class == 'SourceRFSession':    self._schema_prefix_str, self._scan_type_label = 'rf', 'DICOM'
+        elif invoking_class == 'SourceESVSession': self._schema_prefix_str, self._scan_type_label = 'esv', 'DICOM_MP4'
 
     @property
     def intake_form( self )             -> ORDataIntakeForm:        return self._intake_form
@@ -44,6 +48,11 @@ class ExperimentData():
     def df( self )                      -> pd.DataFrame:            return self._df
     @property
     def is_valid( self )                -> bool:                    return self._is_valid
+    @property
+    def schema_prefix_str( self )       -> str:                     return self._schema_prefix_str
+    @property
+    def scan_type_label( self )         -> str:                     return self._scan_type_label
+
     
     def _populate_df( self ):                                       raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
     def _check_session_validity( self, metatables: MetaTables ):    raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
@@ -80,24 +89,22 @@ class ExperimentData():
     def write( self, metatables: MetaTables, zip_dest: Opt[Path] = None, verbose: Opt[bool] = False )   -> Tuple[dict, MetaTables]: raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
     
 
-    def publish_to_xnat( self, xnat_connection: XNATConnection, validated_login: XNATLogin, zipped_data: dict, schema_prefix_str: str, scan_type_label: str, delete_zip: Opt[bool] = True, verbose: Opt[bool] = False ) -> None:
-        assert scan_type_label in ['DICOM_MP4', 'DICOM'], f'Your inputted scan type label is not in the list of acceptable strings: ["DICOM_MP4", "DICOM"]'
-        assert schema_prefix_str in ['rf', 'esv', 'otherDicom'], f'Your inputted schema prefix string is not in the list of acceptable strings:\n["rf", "esv", "otherDicom"]'
-        if verbose:     print( f'\t...Pushing {schema_prefix_str} Session Data to XNAT...' )
+    def publish_to_xnat( self, xnat_connection: XNATConnection, validated_login: XNATLogin, zipped_data: dict, delete_zip: Opt[bool] = True, verbose: Opt[bool] = False ) -> None:
+        if verbose:     print( f'\t...Pushing {self.schema_prefix_str} Session Data to XNAT...' )
         subj_qs, exp_qs, scan_qs, files_qs, resource_label = self._generate_queries( xnat_connection=xnat_connection )
         subj_inst, exp_inst, scan_inst = self._select_objects( xnat_connection=xnat_connection, subj_qs=subj_qs, exp_qs=exp_qs, scan_qs=scan_qs, files_qs=files_qs )
 
         # Create the items in stepwise fashion -- to-do: can't figure out how to create all in one go instead of attrs.mset(), it wouldn't work properly
         subj_inst.create()                                                                                  # type: ignore -- doesnt recognize .create() attribute of subj_inst
         subj_inst.attrs.mset( { f'xnat:subjectData/GROUP': self.intake_form.group } )                       # type: ignore -- doesnt recognize .attrs attribute of subj_inst
-        exp_inst.create( **{    f'experiments': f'xnat:{schema_prefix_str}SessionData' })                   # type: ignore -- doesnt recognize .create() attribute of exp_inst
+        exp_inst.create( **{    f'experiments': f'xnat:{self.schema_prefix_str}SessionData' })               # type: ignore -- doesnt recognize .create() attribute of exp_inst
         exp_inst.attrs.mset( {  f'xnat:experimentData/ACQUISITION_SITE': self.intake_form.acquisition_site, # type: ignore -- doesnt recognize .attrs attribute of exp_inst
                                 f'xnat:experimentData/DATE': self.intake_form.datetime.date                 
                             } )
-        scan_inst.create( **{   f'scans': f'xnat:{schema_prefix_str}ScanData' } )                           # type: ignore -- doesnt recognize .create() attribute of scan_inst
-        scan_inst.attrs.mset( { f'xnat:{schema_prefix_str}ScanData/TYPE': scan_type_label,                  # type: ignore -- doesnt recognize .attrs attribute of scan_inst
-                                f'xnat:{schema_prefix_str}ScanData/SERIES_DESCRIPTION': self.intake_form.ortho_procedure_type,
-                                f'xnat:{schema_prefix_str}ScanData/QUALITY': self.intake_form.scan_quality,
+        scan_inst.create( **{   f'scans': f'xnat:{self.schema_prefix_str}ScanData' } )                      # type: ignore -- doesnt recognize .create() attribute of scan_inst
+        scan_inst.attrs.mset( { f'xnat:{self.schema_prefix_str}ScanData/TYPE': self.scan_type_label,        # type: ignore -- doesnt recognize .attrs attribute of scan_inst
+                                f'xnat:{self.schema_prefix_str}ScanData/SERIES_DESCRIPTION': self.intake_form.ortho_procedure_type,
+                                f'xnat:{self.schema_prefix_str}ScanData/QUALITY': self.intake_form.scan_quality,
                                 f'xnat:imageScanData/NOTE': f'BY: {validated_login.validated_username}; AT: {USCentralDateTime(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))}'
                             } )
 
@@ -115,18 +122,18 @@ class ExperimentData():
 
         if delete_zip:  [os.remove(key) for key in zipped_data.keys()] # to-do: not sure that this actually work as intended ie deletes the files corresponding to the key names
         if verbose:
-            print( f'\t...{schema_prefix_str}Session succesfully pushed to XNAT!' )
+            print( f'\t...{self.schema_prefix_str}Session succesfully pushed to XNAT!' )
             print( f'\t...Successfully deleted zip file:\n' + '\n'.join(f'\t\t{key}' for key in zipped_data.keys()) + '\n')
 
 
-    def write_publish_catalog_subroutine( self, metatables: MetaTables, xnat_connection: XNATConnection, validated_login: XNATLogin, schema_prefix_str: str, scan_type_label: str, verbose: Opt[bool] = False, delete_zip: Opt[bool] = True ) -> MetaTables:
+    def write_publish_catalog_subroutine( self, metatables: MetaTables, xnat_connection: XNATConnection, validated_login: XNATLogin, verbose: Opt[bool] = False, delete_zip: Opt[bool] = True ) -> MetaTables:
         try:
             zipped_data, metatables = self.write( metatables=metatables, verbose=verbose )
         except Exception as e:
             if verbose: print( f'\t!!! Failed to write zipped file; exiting without publishing to XNAT.\n\tError given:\n\t{e}' )
             raise
         try:
-            self.publish_to_xnat( xnat_connection=xnat_connection, validated_login=validated_login, zipped_data=zipped_data, schema_prefix_str=schema_prefix_str, scan_type_label=scan_type_label, verbose=verbose, delete_zip=delete_zip )
+            self.publish_to_xnat( xnat_connection=xnat_connection, validated_login=validated_login, zipped_data=zipped_data, verbose=verbose, delete_zip=delete_zip )
 
         except Exception as e:
             print( f'\tError: failed to publish to xnat.\n\t{e}' )
@@ -293,12 +300,11 @@ class SourceRFSession( ExperimentData ): # to-do: Need to detail past and presen
 ## Class for arthroscopy post-op diagnostic images.
 class SourceESVSession( ExperimentData ):
     '''Class representing the XNAT Experiment for Endoscopy Videos. Inherits from ExperimentData.'''
-    def __init__( self, intake_form: ORDataIntakeForm, login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables ):        
-        super().__init__( intake_form=intake_form ) # Call the __init__ method of the base class
+    def __init__( self, intake_form: ORDataIntakeForm, metatables: MetaTables ) -> None:        
+        super().__init__( intake_form=intake_form, invoking_class='SourceESVSession' ) # Call the __init__ method of the base class
         self._populate_df( metatables=metatables )
         self._check_session_validity( metatables=metatables )
-        if self.is_valid:
-            self._mine_session_metadata() # necessary for publishing to xnat.
+        if self.is_valid:   self._mine_session_metadata() # necessary for publishing to xnat.
 
 
     @property

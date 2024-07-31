@@ -91,7 +91,7 @@ class ORDataIntakeForm( ResourceFile ):
 
         # Minimally Required information (if paper form was available when processed)
         self._uid = self.running_text_file['SUBJECT_UID'] # Overwrites generated uid in base class
-        self._filer_name = self.running_text_file['FILER_NAME']
+        self._filer_name = self.running_text_file['FILER_HAWKID']
         self._form_available = self.running_text_file['FORM_AVAILABLE_FOR_PERFORMANCE']
         self._operation_date = self.running_text_file['OPERATION_DATE']
         self._scan_quality = self.running_text_file['SCAN_QUALITY']

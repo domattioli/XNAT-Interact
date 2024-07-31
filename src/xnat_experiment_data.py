@@ -339,8 +339,14 @@ class SourceESVSession( ExperimentData ):
 
         # Read all jpg images;  sort images by their creationg date-time, append mp4 ffn to the list before we build the dataframe
         all_ffns = list( self.intake_form.relevant_folder.rglob("*.[jJ][pP][gG]") ) + list( self.intake_form.relevant_folder.rglob("*.[jJ][pP][eE][gG]") )
-        assert len( all_ffns ) > 0, f"No image files found in the inputted folder; make sure that all image files in folder have the correct ('.jpg' or '.jpeg') extension.\n\tDirectory given:  {self.intake_form.relevant_folder}."
-        all_ffns = sorted( all_ffns, key=lambda x: os.path.getctime( x ) ) + [mp4_ffn[0]]
+        if len( all_ffns ) == 0: # prompt the user to confirm that they do indeed want to proceed without any images.
+            print( f'No image files were found in the inputted folder; if this is correct, input "1" to proceed, otherwise input "0" to exit.' )
+            proceed = input( f'Proceed without images ("1" for yes, "0" for no):\t')
+            if proceed == '0': raise 
+        # assert len( all_ffns ) > 0, f"No image files found in the inputted folder; make sure that all image files in folder have the correct ('.jpg' or '.jpeg') extension.\n\tDirectory given:  {self.intake_form.relevant_folder}."
+            all_ffns = [mp4_ffn[0]]
+        else:
+            all_ffns = sorted( all_ffns, key=lambda x: os.path.getctime( x ) ) + [mp4_ffn[0]]
         
         # Assemble into a dataframe
         self._init_esv_session_dataframe()

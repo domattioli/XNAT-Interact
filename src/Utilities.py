@@ -19,7 +19,7 @@ from pyxnat.core.resources import Project as pyxnatProject
 
 from typing import Optional as Opt, Union, Tuple, List as typehintList, Dict as typehintDict, AnyStr as typehintAnyStr
 
-from pydicom.uid import generate_uid as generate_pydicomUID
+from pydicom.uid import UID as pydicom_UID, generate_uid as generate_pydicomUID
 from pathlib import Path
 
 
@@ -148,7 +148,8 @@ class UIDandMetaInfo:
         return {k: v.upper() if isinstance(v, str) else v for k, v in kwargs.items()}
 
 
-    def generate_uid( self ) -> str:                                    return str( generate_pydicomUID( prefix=None, entropy_srcs=[self.now_datetime] ) ).replace( '.', '_' )
+    def generate_uid( self )                    -> str:                 return str( generate_pydicomUID( prefix=None, entropy_srcs=[self.now_datetime] ) ).replace( '.', '_' )
+    def is_valid_pydcom_uid( self, uid_str: str )   -> bool:            return pydicom_UID( uid_str.replace( '.', '_' ) ).is_valid
                                                 
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -557,7 +558,7 @@ class MetaTables( UIDandMetaInfo ):
         if verbose:                     print( f'SUCCESS! --- Added new "{table_name}" table' )
 
 
-    def add_new_item( self, table_name: str, item_name: str, extra_columns_values: Opt[typehintDict[str, str]] = None, verbose: Opt[bool] = False ) -> None:
+    def add_new_item( self, table_name: str, item_name: str, item_uid: Opt[str] = None, extra_columns_values: Opt[typehintDict[str, str]] = None, verbose: Opt[bool] = False ) -> None:
         assert self.is_user_registered(), f"User '{self.accessor_username}' must first be registed before adding new items."
         table_name, item_name = table_name.upper(), item_name.upper(),
         assert self.table_exists( table_name ), f"Cannot add item '{item_name}' to table '{table_name}' because that table does not yet exist.\n\tTry creating the new table before adding '{item_name}' as a new item."
@@ -568,7 +569,11 @@ class MetaTables( UIDandMetaInfo ):
         table_columns_upper = [col.upper() for col in self.tables[table_name].columns]
         assert extra_columns_values is None or all( k in table_columns_upper for k in extra_columns_values.keys()), f"Provided extra column names '{extra_columns_values.keys()}' must exist in table '{table_name}'"
 
-        new_item_uid = self.generate_uid()
+        if item_uid is None:
+            new_item_uid = self.generate_uid()
+        else:
+            assert self.is_valid_pydcom_uid( item_uid ), f"Provided uid '{item_uid}' is not a valid dicom UID."
+            new_item_uid = item_uid
         if extra_columns_values: # convert keys to uppercase, make sure all inputted keys were defined when the table was added as new.
             # Add the new row to the table, using the default columns and the extra columns
             new_data = pd.DataFrame( [ [item_name, new_item_uid, self.now_datetime, self.accessor_uid] + list( extra_columns_values.values() ) ], columns=self.tables[table_name].columns)

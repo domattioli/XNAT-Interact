@@ -73,17 +73,18 @@ class ORDataIntakeForm( ResourceFile ):
             self._read_from_file( ffn, verbose=verbose )
             return
         else:
-            if not os.path.exists( self.saved_ffn.parent ): os.makedirs( self.saved_ffn.parent )
             self._prompt_user_for_filer_name_and_operation_date( metatables=metatables )
-            self._prompt_user_for_scan_quality(  )
+            self._prompt_user_for_scan_quality()
             self._prompt_user_for_surgical_procedure_info( metatables=metatables )
             self._prompt_user_for_skills_assessment_info( metatables=metatables )
-            self._prompt_user_for_storage_device_info(  )
+            self._prompt_user_for_storage_device_info()
+
+            # Need to identify the save-to location for the json file; if successfully read from file, use that, else, use the generated uid.
+            self._saved_ffn = metatables.tmp_data_dir / Path( self.uid ) / self.filename
+            if not os.path.exists( self.saved_ffn.parent ): os.makedirs( self.saved_ffn.parent )
             if write_to_file: self.construct_digital_file( verbose=verbose )
             # self._create_text_file_reconstruction( verbose=verbose ) # commenting out bc we want it saved to a temp folder corresponding to this subject
         
-            # Need to identify the save-to location for the json file; if successfully read from file, use that, else, use the generated uid.
-            self._saved_ffn = metatables.tmp_data_dir / Path( self.uid ) / self.filename
 
 
     def _read_from_file( self, ffn: str, verbose: Opt[bool]=False ) -> None:
@@ -163,11 +164,8 @@ class ORDataIntakeForm( ResourceFile ):
         form_available = self.prompt_until_valid_answer_given( 'Form Availability', acceptable_options=['1', '2'] ) # to-do: Automate acceptable_options based on the type of input expected bc we may change the metatables values for this and then these prompts wont reflect those changes.
 
         self._operation_date = parser.parse( input( '\n\t(3/35)\tPlease enter the Operation Date (YYYY-MM-DD):\t' ) ).date().strftime( '%Y-%m-%d' )
-        if form_available == '1':
-            self._form_available = True
-        elif form_available == '2':
-            self._form_available = False
-            self._epic_start_time = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%S') # Assign midnight as the default start time
+        if form_available == '1':       self._form_available = True
+        elif form_available == '2':     self._form_available = False
         
         self._running_text_file['FILER_HAWKID'] = str( self.filer_name )
         self._running_text_file['FORM_AVAILABLE_FOR_PERFORMANCE'] = str( self.form_is_available )
@@ -236,8 +234,13 @@ class ORDataIntakeForm( ResourceFile ):
             else:   self._epic_start_time, self._epic_end_time = epic_start_time, epic_end_time
             local_dict['EPIC_START_TIME'], local_dict['EPIC_END_TIME'] = self.epic_start_time, self.epic_end_time
         else:
-            epic_start_time = self.get_time_input( '\t(10/35)\tEpic Start Time (HH:MM):\t' )
+            print( f'\n\t(10/35)\tDo you know the Operation or EPIC Start Time\t--\tPlease enter "1" for Yes or "2" for No' )
+            known_start_time = self.prompt_until_valid_answer_given( 'Known Start Time', acceptable_options = list( ['1', '2'] ) )
+            if known_start_time == '1':
+                epic_start_time = self.get_time_input( '\t(10/35)\tEpic Start Time (HH:MM):\t' )
+            else: epic_start_time = datetime.now().replace( hour=0, minute=0, second=0, microsecond=0 ).strftime( '%H:%M:%S')  # Assign midnight-today as the default start time
             local_dict['EPIC_START_TIME'] = epic_start_time
+            self._epic_start_time = epic_start_time
 
 
         print( f'\n\t(11/35)\tSide of Patient\'s Body\t--\tEnter "1" for Right, "2" for Left, "3" for Unknown, or "4" for N/A or not relevant.' )
@@ -399,10 +402,8 @@ class ORDataIntakeForm( ResourceFile ):
     def push_to_xnat( self, subj_inst, verbose: Opt[bool] = False ):
         if verbose:     print( f'\t\t...Uploading resource files...' )
         with open( self.saved_ffn, 'r' ) as f:
-            subj_inst.resource( 'INTAKE_FORM' ).file( self.filename.str ).insert( f.read(), content='TEXT', format='JSON', tags='DOC' ) # type: ignore
+            subj_inst.resource( 'INTAKE_FORM' ).file( self.filename_str ).insert( f.read(), content='TEXT', format='JSON', tags='DOC' ) # type: ignore
 
-
-    
 
     @staticmethod
     def _custom_serializer( obj ) -> str:

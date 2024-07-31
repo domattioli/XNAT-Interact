@@ -33,6 +33,8 @@ class ScanFile( UIDandMetaInfo ):
         assert os.path.isfile( ffn ), f'Inputted file not found: {ffn}'
         self._intake_form, self._ffn = intake_form, ffn
         self._new_ffn, self._metadata, self._image, self._derived_metadata, self._datetime, self._is_valid = '', None, None, {}, None, False
+        assert self.is_valid_pydcom_uid( intake_form.uid ), f'Inputted uid must be a valid dicom uid: {intake_form.uid}'
+        self._uid = self.generate_uid()
 
 
     @property
@@ -105,21 +107,19 @@ class ArthroDiagnosticImage( ScanFile ):
     def __init__( self, img_ffn: Path, still_num: str, parent_uid: str, metatables: MetaTables, intake_form: ORDataIntakeForm ):
         super().__init__( intake_form=intake_form, ffn=img_ffn )  # Call the __init__ method of the base class
         self._datetime, self._still_num = datetime, still_num
-        self._validate_input( parent_uid=parent_uid )
+        self._validate_input()
         self._read_image( metatables=metatables )
         self._validate_image() 
         self._create_dicom_representation( parent_uid=parent_uid )
 
 
-    def _validate_input( self, parent_uid: str ):
+    def _validate_input( self ):
         assert self.is_jpg( self.ffn ), f'Inputted file must be a jpg file: {self.ffn}'
         assert self.still_num.isdigit(), f'Inputted still number must be a string of digits: {self.still_num}'
-        # assert dcm_is_valid_uid( parent_uid ), f'Inputted parent uid must be a valid dicom uid: {parent_uid}' #to-do: need a method for validating a uid
 
 
     def _read_image( self, metatables: MetaTables ):
         self._image = ImageHash( reference_table=metatables, img=cv2.imread( self.ffn_str ) )
-        self._derived_metadata = {'ARTHRO_STILL_IMAGE_UID': self.generate_uid()} 
 
 
     def _validate_image( self ): # valid if the image has not yet been seen and if it does not match the template image.
@@ -130,7 +130,7 @@ class ArthroDiagnosticImage( ScanFile ):
     def _create_dicom_representation( self, parent_uid: str ):
         file_meta = pydicomFileMetaDataset()
         file_meta.MediaStorageSOPClassUID = dcmUID( '1.2.840.10008.5.1.4.1.1.77.1.1.1' ) # Video Endoscopic Image IOD
-        file_meta.MediaStorageSOPInstanceUID = dcmUID( self._derived_metadata['ARTHRO_STILL_IMAGE_UID'].replace( '_', '.' ) )
+        # file_meta.MediaStorageSOPInstanceUID = dcmUID( self.derived_metadata['ARTHRO_STILL_IMAGE_UID'].replace( '_', '.' ) ) #to-do: need to create a uid in metatables for this media storage data type
         file_meta.ImplementationClassUID = dcmUID( parent_uid.replace( '_', '.' ) )
         file_meta.TransferSyntaxUID = ImplicitVRLittleEndian # Implicit VR Little Endian
         
@@ -143,7 +143,7 @@ class ArthroDiagnosticImage( ScanFile ):
         ds.StudyInstanceUID = dcmUID( parent_uid.replace( '_', '.' ) )
         ds.InstanceNumber = self.still_num
         ds.InstanceCreationDate, ds.InstanceCreationTime = date_img_str, '' #to-do: instance creation time is potentially gleanable from the original file info?
-        ds.SeriesInstanceUID = dcmUID( self._derived_metadata['ARTHRO_STILL_IMAGE_UID'].replace( '_', '.' ) )
+        ds.SeriesInstanceUID = dcmUID( self.uid )
         ds.SeriesDescription = f'Arthro. Diagn. Img. #{self.still_num}'
 
         ds.InstitutionName = self.intake_form.acquisition_site
@@ -169,7 +169,6 @@ class ArthroVideo( ScanFile ):
         super().__init__( intake_form=intake_form, ffn=vid_ffn )  # Call the __init__ method of the base class
         self._validate_input()
         self._read_video()
-        # self._uid_info = {'Video_UID': self.generate_uid()} # shouldnt need this if inheriting from ScanFile which inherits from Librarian Utilities
         self._validate_image()
         
 

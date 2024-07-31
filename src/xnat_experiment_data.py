@@ -100,7 +100,7 @@ class ExperimentData():
         scan_inst.attrs.mset( { f'xnat:{schema_prefix_str}ScanData/TYPE': scan_type_label,                  # type: ignore -- doesnt recognize .attrs attribute of scan_inst
                                 f'xnat:{schema_prefix_str}ScanData/SERIES_DESCRIPTION': self.series_description,
                                 f'xnat:{schema_prefix_str}ScanData/QUALITY': self.intake_form.scan_quality,
-                                f'xnat:imageScanData/NOTE': f'BY: {login.validated_username}; AT: {USCentralDateTime(datetime.now().strftime("%Y-%m-%d %H:%M:%S")).verbose}'
+                                f'xnat:imageScanData/NOTE': f'BY: {login.validated_username}; AT: {USCentralDateTime(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))}'
                             } )
 
         # Assuming that zipped_data is a dict w keys corresponding to the unique types of data to be pushed and the corresponding values being the file paths to the zipped data, iterate through the dict
@@ -318,10 +318,12 @@ class SourceESVSession( ExperimentData ):
             if self.df.loc[idx, 'IS_VALID']:
                 file_obj_rep = self.df.loc[idx, 'OBJECT']
                 if isinstance( file_obj_rep, ArthroVideo ): # video is assigned instance number 000. Our convention is to begin at 001 for image files.
-                    self._df.loc[idx, 'NEW_FN'] = file_obj_rep.generate_source_image_file_name( '000', file_obj_rep.uid_info['Video_UID'] ) 
+                    self._df.loc[idx, 'NEW_FN'] = file_obj_rep.generate_source_image_file_name( '000', self.intake_form.uid )
+                    # self._df.loc[idx, 'NEW_FN'] = file_obj_rep.generate_source_image_file_name( '000', file_obj_rep.uid_info['Video_UID'] ) 
                     # self._df.loc[idx, 'NEW_FN'] = self.df.loc[idx, 'OBJECT'].uid_info['Video_UID']
                 elif isinstance( self.df.loc[idx, 'OBJECT'], ArthroDiagnosticImage ):
-                    self._df.loc[idx, 'NEW_FN'] = file_obj_rep.generate_source_image_file_name( file_obj_rep.still_num, file_obj_rep.uid_info['Still_UID'] ) # type: ignore
+                    self._df.loc[idx, 'NEW_FN'] = file_obj_rep.generate_source_image_file_name( file_obj_rep.still_num, self.intake_form.uid ) # type: ignore
+                    # self._df.loc[idx, 'NEW_FN'] = file_obj_rep.generate_source_image_file_name( file_obj_rep.still_num, file_obj_rep.uid_info['Still_UID'] ) # type: ignore
                 else:
                     raise ValueError( f"Unrecognized object type: {type( self.df.loc[idx, 'OBJECT'] )}." )
 
@@ -352,7 +354,7 @@ class SourceESVSession( ExperimentData ):
                 self._df.loc[idx, ['FN', 'OBJECT', 'IS_VALID', 'TYPE']] = [fn, self.mp4, self.mp4.is_valid, 'MP4']
             elif ext.lower() in ['.jpg', '.jpeg']:
                 instance_num = str( idx+1 )
-                diag_img_obj = ArthroDiagnosticImage( img_ffn=ffn, still_num=instance_num, parent_uid=self.mp4.uid_info['Video_UID'], metatables=metatables, intake_form=self.intake_form ) 
+                diag_img_obj = ArthroDiagnosticImage( img_ffn=ffn, metatables=metatables, intake_form=self.intake_form, still_num=instance_num, parent_uid=self.intake_form.uid ) 
                 self._df.loc[idx, ['FN', 'OBJECT', 'IS_VALID', 'TYPE']] = [fn, diag_img_obj, diag_img_obj.is_valid, 'JPG']
             else:
                 raise ValueError( f"Unrecognized file extension: {ext}.\n\tFile: {ffn}" )
@@ -391,8 +393,8 @@ class SourceESVSession( ExperimentData ):
                     if isinstance( file_obj_rep, ArthroDiagnosticImage ):
                         dcmwrite( os.path.join( dcm_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) ), file_obj_rep.metadata )          # type: ignore
                         tmp = { 'SUBJECT': metatables.get_uid( table_name='SUBJECTS', item_name=self.intake_form.uid ), 'INSTANCE_NUM': self.df.loc[idx, 'NEW_FN'] }
-                        metatables.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, verbose=verbose, # type: ignore
-                                                extra_columns_values = tmp
+                        metatables.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, item_uid=file_obj_rep.uid, # type: ignore
+                                                extra_columns_values = tmp, verbose=verbose
                                                 )
                 
                     elif isinstance( file_obj_rep, ArthroVideo ): # Don't need to add this to metatables because the diagnostic images (frames from the video) should suffice.

@@ -252,70 +252,83 @@ class ORDataIntakeForm( ResourceFile ):
         else: raise ValueError( 'You indicated N/A for the side of the patient body; please contact the data librarian to clarify this before proceding!' )
         local_dict['PATIENT_SIDE'] = self.side_of_patient_body
 
-        if self.form_is_available:
-            self._OR_location = input( '\n\t(12/35)\tOperating Room Name/Location:\t' ).upper()
-            local_dict['OR_LOCATION'] = self.OR_location
+        OR_location = input( '\n\t(12/35)\tOperating Room Name/Location (press Enter if Unknown):\t' ).upper()
+        if len( OR_location ) == 0: self._OR_location = 'Unknown'.upper()
+        else:                       self._OR_location = OR_location
+        local_dict['OR_LOCATION'] = self.OR_location
 
+        print( f'\n\t(13/35)\t Do you know the Supervising Surgeon\'s HawkID\t--\tPlease enter "1" for Yes or "2" for no:' )
+        known_supervising_hawkid = self.prompt_until_valid_answer_given( 'Known Supervising Surgeon HawkID', acceptable_options=['1', '2'] )
+        if known_supervising_hawkid == '1':
             print( f'\n\t(13/35)\tSupervising Surgeon HawkID\t--\tPlease select from the following list:\t{metatables.list_of_all_items_in_table( "Surgeons" )}' )
             supervising_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'Supervising Surgeon\'s HAWKID', acceptable_options=metatables.list_of_all_items_in_table( 'Surgeons' ) )
+        else:   supervising_surgeon_hawk_id = 'Unknown'.upper()
 
-            print( f"\n\t(14/35)\tSupervising Surgeon Presence\t--\tEnter '1' for Present, '2' for Retrospective Review, or '3' for Other:" )
-            supervising_surgeon_presence = self.prompt_until_valid_answer_given( 'Supervising Surgeon Presence', acceptable_options=['1', '2', '3'] )
-            if supervising_surgeon_presence == '1':     self._supervising_surgeon_presence = 'Present'.upper()
-            elif supervising_surgeon_presence == '2':   self._supervising_surgeon_presence = 'Retrospective Review'.upper()
-            else: raise ValueError( 'You indicated other for the supervision surgeon presence; please contact the data librarian to clarify this before proceding!' )
-            self._supervising_surgeon_hawk_id, self._supervising_surgeon_presence = metatables.get_uid( 'Surgeons', supervising_surgeon_hawk_id ), supervising_surgeon_presence
-            local_dict['SUPERVISING_SURGEON_UID'], local_dict['SUPERVISING_SURGEON_PRESENCE'] = self.supervising_surgeon_hawk_id, self.supervising_surgeon_presence
+        print( f"\n\t(14/35)\tSupervising Surgeon Presence\t--\tEnter '1' for Present, '2' for Retrospective Review, or '3' for Unknown:" )
+        supervising_surgeon_presence = self.prompt_until_valid_answer_given( 'Supervising Surgeon Presence', acceptable_options=['1', '2', '3'] )
+        if supervising_surgeon_presence == '1':     self._supervising_surgeon_presence = 'Present'.upper()
+        elif supervising_surgeon_presence == '2':   self._supervising_surgeon_presence = 'Retrospective Review'.upper()
+        elif supervising_surgeon_presence == '3':   self._supervising_surgeon_presence = 'Unknown'.upper()
+        else: raise ValueError( 'You indicated other for the supervision surgeon presence; please contact the data librarian to clarify this before proceding!' )
+        self._supervising_surgeon_hawk_id, self._supervising_surgeon_presence = metatables.get_uid( 'Surgeons', supervising_surgeon_hawk_id ), supervising_surgeon_presence
+        local_dict['SUPERVISING_SURGEON_UID'], local_dict['SUPERVISING_SURGEON_PRESENCE'] = self.supervising_surgeon_hawk_id, self.supervising_surgeon_presence
 
+        print( f'\n\t(15/35)\t Do you know the Performing Surgeon\'s HawkID\t--\tPlease enter "1" for Yes or "2" for no:' )
+        known_performer_hawk_id = self.prompt_until_valid_answer_given( 'Known Performing Surgeon HawkID', acceptable_options=['1', '2'] )
+        if known_performer_hawk_id == '1':
             print( f'\n\t(15/35)\tPerforming Surgeon HawkID\t--\tPlease select from the following list:\t{metatables.list_of_all_items_in_table( "Surgeons" )}' )
-            performing_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'tPerforming Surgeon\'s HAWKID', acceptable_options=metatables.list_of_all_items_in_table( 'Surgeons' ) )
+            performing_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'Performing Surgeon\'s HAWKID', acceptable_options=metatables.list_of_all_items_in_table( 'Surgeons' ) )
+        else:   performing_surgeon_hawk_id = 'Unknown'.upper()
 
-            performer_year_in_residency = input( f'\n\t(16/35)\tPerforming Surgeon\'s Years in Residency: ' )
-            assert performer_year_in_residency.isdigit(), 'Invalid entry for Performing Surgeon\'s Years in Residency! Must be an integer.'
-            
-            print( f'\n\t(17/35)\tDo you know how many similar prior cases have been logged by the performing surgeon?\n\tEnter "1" for Yes or "2" for No \t--\tNOTE: 0 prior cases ***is NOT the same thing*** as unknown!! Please Enter "1" for Yes and then declare 0 known cases in the following prompt.')
-            known_number_of_similar_logged_cases = self.prompt_until_valid_answer_given( '# of Similar Cases Logged', acceptable_options=['1', '2'] )
-            if known_number_of_similar_logged_cases == '1':
+        print( f"\n\t(16/35)\tDo you know the Performing Surgeon\'s # of Years in Residency?\t--\tEnter '1' for Yes or '2' for No:" )
+        known_years = self.prompt_until_valid_answer_given( 'tPerforming Surgeon\'s Years in Residency', acceptable_options=['1','2'] )
+        if known_years == '1':
+            performer_year_in_residency = input( f'\n\t(16/35)\tPerforming Surgeon\'s Years in Residency:\t')
+        else: performer_year_in_residency = 'Unknown'.upper()
+        
+        print( f'\n\t(17/35)\tDo you know how many similar prior cases have been logged by the performing surgeon?\n\tEnter "1" for Yes or "2" for No \t--\tNOTE: 0 prior cases ***is NOT the same thing*** as unknown!! Please Enter "1" for Yes and then declare 0 known cases in the following prompt.')
+        known_number_of_similar_logged_cases = self.prompt_until_valid_answer_given( '# of Similar Cases Logged', acceptable_options=['1', '2'] )
+        if known_number_of_similar_logged_cases == '1':
 
-                performer_num_of_similar_logged_cases = input( f'\n\t(18/35)\tPerforming Surgeon\'s # of Similar Cases Logged (if none, enter "0"):\t' )
-                self._performer_num_of_similar_logged_cases     = int( performer_num_of_similar_logged_cases )
-            else: self._performer_num_of_similar_logged_cases   = None
-            self._performing_surgeon_hawk_id, self._performer_year_in_residency = metatables.get_uid( 'Surgeons', performing_surgeon_hawk_id ), int( performer_year_in_residency )
-            local_dict['PERFORMING_SURGEON_UID'], local_dict['PERFORMER_YEAR_IN_RESIDENCY'], local_dict['PERFORMER_NUM_OF_SIMILAR_LOGGED_CASES'] = self.performing_surgeon_hawk_id, self.performer_year_in_residency, self.performer_num_of_similar_logged_cases
+            performer_num_of_similar_logged_cases = input( f'\n\t(18/35)\tPerforming Surgeon\'s # of Similar Cases Logged (if none, enter "0"):\t' )
+            self._performer_num_of_similar_logged_cases     = int( performer_num_of_similar_logged_cases )
+        else: self._performer_num_of_similar_logged_cases   = None
+        self._performing_surgeon_hawk_id, self._performer_year_in_residency = metatables.get_uid( 'Surgeons', performing_surgeon_hawk_id ), performer_year_in_residency
+        local_dict['PERFORMING_SURGEON_UID'], local_dict['PERFORMER_YEAR_IN_RESIDENCY'], local_dict['PERFORMER_NUM_OF_SIMILAR_LOGGED_CASES'] = self.performing_surgeon_hawk_id, self.performer_year_in_residency, self.performer_num_of_similar_logged_cases
 
-            print( f'\n\t(19/35)\tWas the Performing Surgeon Assisted?\tEnter "1" for Yes or "2" for No.' )
-            performer_was_assisted = self.prompt_until_valid_answer_given( 'Performing Surgeon Assistance', acceptable_options=['1', '2'] )
-            if performer_was_assisted == '1':
-                self._performer_was_assisted = True
-                dict_performance_enumerated_tasks = self._prompt_user_for_n_surgical_tasks_and_hawkids( metatables=metatables )
+        print( f'\n\t(19/35)\tWas the Performing Surgeon Assisted?\tEnter "1" for Yes, "2" for No, or "3" for Unknown.' )
+        performer_was_assisted = self.prompt_until_valid_answer_given( 'Performing Surgeon Assistance', acceptable_options=['1', '2', '3'] )
+        if performer_was_assisted == '1':
+            self._performer_was_assisted = True
+            dict_performance_enumerated_tasks = self._prompt_user_for_n_surgical_tasks_and_hawkids( metatables=metatables )
 
-                # If any of the values in the dict are empty, replace them with None
-                for key, value in dict_performance_enumerated_tasks.items():
-                    if len( value ) == 0: dict_performance_enumerated_tasks[key] = None
-                self._performance_enumerated_task_performer = dict_performance_enumerated_tasks
-            local_dict['PERFORMER_WAS_ASSISTED'], local_dict['PERFORMANCE_ENUMERATED_TASK_PERFORMER'] = self.performer_was_assisted, self.performance_enumerated_task_performer
+            # If any of the values in the dict are empty, replace them with None
+            for key, value in dict_performance_enumerated_tasks.items():
+                if len( value ) == 0: dict_performance_enumerated_tasks[key] = None
+            self._performance_enumerated_task_performer = dict_performance_enumerated_tasks
+        local_dict['PERFORMER_WAS_ASSISTED'], local_dict['PERFORMANCE_ENUMERATED_TASK_PERFORMER'] = self.performer_was_assisted, self.performance_enumerated_task_performer
 
-            print( f'\n\t(21/35)\tWere there any unusual features of the performance?\n\tEnter "1" for Yes or "2" for No.')
-            any_unusual_features_of_performance = self.prompt_until_valid_answer_given( 'Unusual Features of Performance', acceptable_options=['1', '2'] )
-            if any_unusual_features_of_performance == '1':
-                list_of_performance_features = input( f'\t(22/35)\tPlease detail any/all unusual features of the performance:\n\tAnswer: ' )
-                if len( list_of_performance_features ) > 0:     self._list_unusual_features_of_performance = list_of_performance_features
-            local_dict['LIST_UNUSUAL_FEATURES'] = self.list_unusual_features_of_performance
+        print( f'\n\t(21/35)\tWere there any unusual features of the performance?\n\tEnter "1" for Yes or "2" for No.')
+        any_unusual_features_of_performance = self.prompt_until_valid_answer_given( 'Unusual Features of Performance', acceptable_options=['1', '2'] )
+        if any_unusual_features_of_performance == '1':
+            list_of_performance_features = input( f'\t(22/35)\tPlease detail any/all unusual features of the performance:\n\tAnswer: ' )
+            if len( list_of_performance_features ) > 0:     self._list_unusual_features_of_performance = list_of_performance_features
+        local_dict['LIST_UNUSUAL_FEATURES'] = self.list_unusual_features_of_performance
 
-            print( f'\n\t(23/35)\tWere there any diagnostic notes about the surgical procedure?\n\tEnter "1" for Yes or "2" for No.')
-            any_diagnostic_notes = self.prompt_until_valid_answer_given( 'Performing Surgeon Assistance', acceptable_options=['1', '2'] )
-            # if self.ortho_procedure_type == 'Arthroscopy' or ortho_procedure_type == '2':
-            if any_diagnostic_notes == '1':
-                diagnostic_notes = input( f'\t(24/35)\tPlease enter any diagnostic notes about the surgical procedure:\n\tAnswer: ' )
-                if len( diagnostic_notes ) > 0:                 self._diagnostic_notes = diagnostic_notes
-            local_dict['DIAGNOSTIC_NOTES'] = self.diagnostic_notes
+        print( f'\n\t(23/35)\tWere there any diagnostic notes about the surgical procedure?\n\tEnter "1" for Yes or "2" for No.')
+        any_diagnostic_notes = self.prompt_until_valid_answer_given( 'Performing Surgeon Assistance', acceptable_options=['1', '2'] )
+        # if self.ortho_procedure_type == 'Arthroscopy' or ortho_procedure_type == '2':
+        if any_diagnostic_notes == '1':
+            diagnostic_notes = input( f'\t(24/35)\tPlease enter any diagnostic notes about the surgical procedure:\n\tAnswer: ' )
+            if len( diagnostic_notes ) > 0:                 self._diagnostic_notes = diagnostic_notes
+        local_dict['DIAGNOSTIC_NOTES'] = self.diagnostic_notes
 
-            print( f'\n\t(24/35)\tDo you have any additional comments or notes regarding BMI, pre-existing conditions, etc.?\n\tEnter "1" for Yes or "2" for No.' )
-            any_misc_comments = self.prompt_until_valid_answer_given( ' Miscellaneous Procedure Comments', acceptable_options=['1', '2'])
-            if any_misc_comments == '1':
-                misc_comments = input( f'\t(25/35)\tPlease enter any additional comments or notes:\n\t\t' )
-                if len( misc_comments ) > 0:     self._misc_surgical_performance_comments = misc_comments
-            local_dict['MISC_PROCEDURE_COMMENTS'] = self.misc_surgical_performance_comments
+        print( f'\n\t(24/35)\tDo you have any additional comments or notes regarding BMI, pre-existing conditions, etc.?\n\tEnter "1" for Yes or "2" for No.' )
+        any_misc_comments = self.prompt_until_valid_answer_given( ' Miscellaneous Procedure Comments', acceptable_options=['1', '2'])
+        if any_misc_comments == '1':
+            misc_comments = input( f'\t(25/35)\tPlease enter any additional comments or notes:\n\t\t' )
+            if len( misc_comments ) > 0:     self._misc_surgical_performance_comments = misc_comments
+        local_dict['MISC_PROCEDURE_COMMENTS'] = self.misc_surgical_performance_comments
         
         # Need to save info to the running text file regardless of if the form is available
         self._running_text_file['SURGICAL_PROCEDURE_INFO'] = local_dict # type: ignore
@@ -337,33 +350,31 @@ class ORDataIntakeForm( ResourceFile ):
 
 
     def _prompt_user_for_skills_assessment_info( self, metatables: MetaTables ):
-        if self.form_is_available:
-            print( f'\n\n--- Skills Assessment Information ---' )
-        
-            print( f'\t(26/35)\tWas a Skills Assessment requested for this procedure?\n\tEnter "1" for Yes or "2" for No.')
-            assessment_requested = self.prompt_until_valid_answer_given( 'Skills Assessment Request', acceptable_options=['1', '2'] )
-            if assessment_requested == '1':
+        print( f'\n\n--- Skills Assessment Information ---' )
+    
+        print( f'\t(26/35)\tWas a Skills Assessment requested for this procedure?\n\tEnter "1" for Yes, "2" for No, or "3" for unknown.')
+        assessment_requested = self.prompt_until_valid_answer_given( 'Skills Assessment Request', acceptable_options=['1', '2', '3'] )
+        if assessment_requested == '1':
 
-                assessment_requested, assessment_title = True, input( '\n\t(25/32)\tPlease enter the full name of the requested assessment:\t' ).upper()
+            assessment_requested, assessment_title = True, input( '\n\t(25/32)\tPlease enter the full name of the requested assessment:\t' ).upper()
 
+            print( f'\n\t(27/35)\tAssessing Surgeon\'s HawkID --\tPlease select from the following list:\n\t\t{metatables.list_of_all_items_in_table( "Surgeons" )}' )
+            assessor_hawkid = self.prompt_until_valid_answer_given( 'Assessing Surgeon\'s HAWKID', acceptable_options=metatables.list_of_all_items_in_table( 'Surgeons' ) )
+            assessor_hawkid = metatables.get_uid( table_name='SURGEONS', item_name=assessor_hawkid )
 
-                print( f'\n\t(27/35)\tAssessing Surgeon\'s HawkID --\tPlease select from the following list:\n\t\t{metatables.list_of_all_items_in_table( "Surgeons" )}' )
-                assessor_hawkid = self.prompt_until_valid_answer_given( 'Assessing Surgeon\'s HAWKID', acceptable_options=metatables.list_of_all_items_in_table( 'Surgeons' ) )
-                assessor_hawkid = metatables.get_uid( table_name='SURGEONS', item_name=assessor_hawkid )
+            print( f'\n\t(28/35)\tDo you have any additional details about the assessment (e.g., date of assessment, score, etc.)?\n\tEnter "1" for Yes or "2" for No.')
+            known_details = self.prompt_until_valid_answer_given( 'Additional Assessment Details', acceptable_options=['1', '2'])
 
-                print( f'\n\t(28/35)\tDo you have any additional details about the assessment (e.g., date of assessment, score, etc.)?\n\tEnter "1" for Yes or "2" for No.')
-                known_details = self.prompt_until_valid_answer_given( 'Additional Assessment Details', acceptable_options=['1', '2'])
-
-                if known_details == '1':    self._assessment_details = input( '\n\t(29/35)\tPlease enter any additional details about the assessment:\n\t\t' )
-                else:                       self._assessment_details = None
-                self._assessment_title, self._assessor_hawk_id = assessment_title, assessor_hawkid
-            elif assessment_requested == '2':
-                assessment_requested, self._assessment_title, self._assessor_hawk_id, self._assessment_details = False, None, None, None
-            else:   raise ValueError( f'Invalid entry for Skills Assessment! Please only enter "1" for Yes or "2" for No. You entered {assessment_requested}' )
-            self._running_text_file['SKILLS_ASSESSMENT_INFO'] = {   'ASSESSMENT_REQUESTED': assessment_requested, # type: ignore
-                                                                    'ASSESSMENT_TITLE': self.assessment_title,
-                                                                    'ASSESSOR_UID': self.assessor_hawk_id,
-                                                                    'ASSESSMENT_DETAILS': self.assessment_details}
+            if known_details == '1':    self._assessment_details = input( '\n\t(29/35)\tPlease enter any additional details about the assessment:\n\t\t' )
+            else:                       self._assessment_details = None
+            self._assessment_title, self._assessor_hawk_id = assessment_title, assessor_hawkid
+        elif assessment_requested == '2':
+            assessment_requested, self._assessment_title, self._assessor_hawk_id, self._assessment_details = False, None, None, None
+        else:   assessment_requested = None,
+        self._running_text_file['SKILLS_ASSESSMENT_INFO'] = {   'ASSESSMENT_REQUESTED': assessment_requested, # type: ignore
+                                                                'ASSESSMENT_TITLE': self.assessment_title,
+                                                                'ASSESSOR_UID': self.assessor_hawk_id,
+                                                                'ASSESSMENT_DETAILS': self.assessment_details}
 
 
     def _prompt_user_for_storage_device_info( self ):
@@ -461,7 +472,7 @@ class ORDataIntakeForm( ResourceFile ):
     @property
     def performing_surgeon_hawk_id( self )              -> Opt[str]:                return self._performing_surgeon_hawk_id
     @property
-    def performer_year_in_residency( self )             -> Opt[int]:                return self._performer_year_in_residency
+    def performer_year_in_residency( self )             -> Opt[Union[int, str]]:    return self._performer_year_in_residency
     @property
     def performer_was_assisted( self )                  -> Opt[bool]:               return self._performer_was_assisted
     @property

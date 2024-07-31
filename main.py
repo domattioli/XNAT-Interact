@@ -67,32 +67,32 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
     if verbose: print( f"\nUploading new source data to XNAT...")
 
     # Digitize/load an intake form (if it exists already).
-    print( f'\tDoes an *DIGITAL* intake form already exist? \t--\tPlease select a task from the following list:\tEnter "1" for Yes or "2" for No.' )
+    print( f'\tHave you already created a *DIGITAL* intake form with this software for this procedure? \t--\tPlease select a task from the following list:\tEnter "1" for Yes or "2" for No.' )
     form_exists = ORDataIntakeForm.prompt_until_valid_answer_given( 'Intake Form Declaration', acceptable_options=['1', '2'] )
     
     if form_exists == '1':
         form_ffn = input( f"Please enter the full file path to the intake form: " )
         try:
-            intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, ffn=form_ffn, verbose=False, write_to_file=False )
+            intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, ffn=form_ffn, verbose=verbose, write_to_file=True )
         except:
             raise ValueError( f"\tThe provided file path did not lead to a successful intake form. Please try again, or contact the Data Librarian for help." )
     else:
-        intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=False, write_to_file=False )
+        intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose, write_to_file=True )
     
     # Depending on the procedure type, create the appropriate source data object.
-    # try:
-    #     if intake_form.ortho_procedure_type.upper() == 'ARTHROSCOPY':
-    #         source_data = SourceESVSession( intake_form=intake_form, metatables=metatables )
-    #     elif intake_form.ortho_procedure_type.upper() == 'TRAUMA':
-    #         raise ValueError( f"\tThe provided procedure type is not yet supported. Please contact the Data Librarian for help." )
-    #         source_data = SourceRFSession( metatables=metatables, login=validated_login, verbose=verbose )
-    #     else:
-    #         raise ValueError( f"\tThe provided procedure type is not yet supported. This is a bug that should be reported to Data Librarian." )
-    # except:
-    #     raise ValueError( f"\tFailed to load in the data pointed-to by the intake form process. Please contact the Data Librarian for help." )
+    try:
+        if intake_form.ortho_procedure_type.upper() == 'ARTHROSCOPY':
+            source_data = SourceESVSession( intake_form=intake_form, metatables=metatables )
+        elif intake_form.ortho_procedure_type.upper() == 'TRAUMA':
+            raise ValueError( f"\tThe provided procedure type is not yet supported. Please contact the Data Librarian for help." )
+            source_data = SourceRFSession( metatables=metatables, login=validated_login, verbose=verbose )
+        else:
+            raise ValueError( f"\tThe provided procedure type is not yet supported. This is a bug that should be reported to Data Librarian." )
+    except:
+        raise ValueError( f"\tFailed to load in the data pointed-to by the intake form process. Please contact the Data Librarian for help." )
     
     # Publish data to xnat
-    # metatables = source_data.write_publish_catalog_subroutine( metatables=metatables, xnat_connection=xnat_connection, validated_login=validated_login, verbose=verbose, delete_zip=False )
+    metatables = source_data.write_publish_catalog_subroutine( metatables=metatables, xnat_connection=xnat_connection, validated_login=validated_login, verbose=verbose, delete_zip=False )
     if verbose: print( f'\n-----Exiting Upload Process-----\n' )
     return metatables
 
@@ -114,11 +114,8 @@ def main():
     
     while True:
         choice = prompt_function( verbose=verbose )
-        print( choice )
         if choice == '1':
             metatables = upload_new_case( validated_login=validated_login, xnat_connection=xnat_connection, metatables=metatables, verbose=verbose )
-        else:
-            print( f'choice: {choice}\ttype: {type(choice)}' )
         # # elif choice == 2:
         #     # function2()
         # # elif choice == 3:

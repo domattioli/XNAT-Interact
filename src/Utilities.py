@@ -523,7 +523,7 @@ class MetaTables( UIDandMetaInfo ):
     def push_to_xnat( self, verbose: Opt[bool] = False ) -> None:
         self.ensure_primary_keys_validity()
         self.save( verbose )
-        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'MetaTables' ).file( self.meta_tables_fn ).put( self.meta_tables_ffn, content='METADATA', format='JSON', tags='DOC', overwrite=True )
+        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'config' ).file( self.meta_tables_fn ).put( self.meta_tables_ffn, content='META DATA', format='JSON', tags='DOC', overwrite=True )
         if verbose is True:             print( f'\t...Metatables successfully updated on XNAT!' )
 
 

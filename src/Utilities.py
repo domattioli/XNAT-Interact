@@ -498,11 +498,11 @@ class MetaTables( UIDandMetaInfo ):
     #==========================================================PUBLIC METHODS==========================================================
     def pull_from_xnat( self, write_ffn: Opt[Path]=None, verbose: Opt[bool] = False ) -> Opt[Path]:
         if write_ffn is None:
-            write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'MetaTables' ).file( self.meta_tables_fn ).get_copy( str( self.meta_tables_ffn ) )
+            write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'config' ).file( self.meta_tables_fn ).get_copy( str( self.meta_tables_ffn ) )
         else:
             assert isinstance( write_ffn, Path ), f"Provided write file path must be a valid Path object: {write_ffn}"
             assert write_ffn.suffix == '.json', f"Provided write file path must have a '.json' extension: {write_ffn}"
-            write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'MetaTables' ).file( self.meta_tables_fn ).get_copy( str( write_ffn ) )
+            write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'config' ).file( self.meta_tables_fn ).get_copy( str( write_ffn ) )
         self._load( write_ffn, verbose )
         if verbose:                     print( f'\t...Metatables successfully populated from XNAT data.' )
         

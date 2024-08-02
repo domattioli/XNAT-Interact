@@ -132,21 +132,32 @@ class ExperimentData():
         except Exception as e:
             if verbose: print( f'\t!!! Failed to write zipped file; exiting without publishing to XNAT.\n\tError given:\n\t{e}' )
             raise
+
+        # Get subject instance so we can delete it if necessary during the ensuing try-except block(s)
+        subj_qs, exp_qs, scan_qs, files_qs, _ = self._generate_queries( xnat_connection=xnat_connection )
+        subj_inst, _, _ = self._select_objects( xnat_connection=xnat_connection, subj_qs=subj_qs, exp_qs=exp_qs, scan_qs=scan_qs, files_qs=files_qs )
+
+        # Try to publish the data to xnat; if it fails, delete the subject instance
         try:
             self.publish_to_xnat( xnat_connection=xnat_connection, validated_login=validated_login, zipped_data=zipped_data, verbose=verbose, delete_zip=delete_zip )
         except Exception as e:
-            print( f'\tError: failed to publish to xnat!\n\t...Deleting subject...' )
-            subj_qs, exp_qs, scan_qs, files_qs, _ = self._generate_queries( xnat_connection=xnat_connection )
-            subj_inst, _, _ = self._select_objects( xnat_connection=xnat_connection, subj_qs=subj_qs, exp_qs=exp_qs, scan_qs=scan_qs, files_qs=files_qs )
-            subj_inst.delete() # type: ignore
-            print( f'\t...Subject deleted.' )
-            print( f'\tDo not try to upload this case again without contacting the data librarian!')
-            print( f'\tError given bu "publish_to_xnat":\n{e}' )
+            print( f'\tError: failed to publish data to xnat!\n\t...Attempting to delete subject...' )
+            if subj_inst.exists(): # type: ignore
+                print( f'\t...Subject exists; deleting subject...' )
+                subj_inst.delete() # type: ignore
+                print( f'\t...Subject deleted.' )
+                print( f'\tDo not try to upload this case again without contacting the data librarian!')
+                print( f'\tError given bu "publish_to_xnat":\n{e}' )
             return metatables
+
+        # If successful, try to push the intake form to xnat
         try: 
             metatables.push_to_xnat( verbose=verbose )
         except Exception as e:
-            raise ValueError( f'Failed to push metatables to xnat within "write_publish_catalog_subroutine"; error given:\n{e}' )
+            if subj_inst.exists(): # type: ignore
+                print( f'\t...Subject exists; deleting subject...' )
+                subj_inst.delete() # type: ignore
+                print( f'\t...Subject deleted.' )
         return metatables
     
 

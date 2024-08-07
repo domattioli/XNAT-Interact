@@ -22,12 +22,11 @@ def update_repo():
     if not is_repo_up_to_date():
         try:
             # Pull all changes from the remote repository, including deletions
+            print('\nt\t...updating repository...\n')
             subprocess.run(['git', 'pull', '--prune'], check=True)
             return f'\tSUCCESS\t--\tRepository updated successfully!'
         except subprocess.CalledProcessError as e:
             return f'\tFAILURE\t--\tFailed to update the repository.'
-            print(e)
-            sys.exit(1)
     else:
         return f'\tINFO\t--\tRepository is already up to date.'
 

@@ -14,8 +14,9 @@ git --version
   
 2. Ensure that python 3.8 (64-bit) is installed on your machine.
 ```bash
-python3 --version
+python --version
 ```
+  - Note: "python" may not work correctly if you have python 2 and python 3 both installed on your machine. If that is the case, use "python3".
 - If you get an error, install [python3.8](https://www.python.org/downloads/release/python-380/).
     - Don't forget to add the python38.exe file to your environment PATH variable.
       
@@ -36,7 +37,6 @@ cd XNAT-Interact
 ```bash
 python -m venv .my_venv_for_xnat_interact
 ```
-  - Note: "python" may not work correctly if you have python 2 and python 3 both installed on your machine. If that is the case, use "python3".
 >Activate virtual environment using _Windows_:
 >```bash
 >.my_venv_for_xnat_interact\Scripts\activate 

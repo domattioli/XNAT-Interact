@@ -37,7 +37,7 @@ def prompt_login() -> Tuple[str, str]:
     return xnat_user, xnat_pass
 
 
-def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, verbose: Opt[bool]=False ) -> Tuple[XNATLogin, XNATConnection, MetaTables]:
+def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, verbose: Opt[bool]=True ) -> Tuple[XNATLogin, XNATConnection, MetaTables]:
     if username is not None and password is not None:
         input_username, input_password = username, password
         if verbose: print( f'\n...logging in and trying to connect to the server...\n' )
@@ -105,6 +105,8 @@ def header_footer_print( header_or_footer: str ):
     elif header_or_footer == 'footer': # Print footer
         print( f'\n...Exiting application...' )
         print( f'===' *50 )
+
+
 
 
 def main():

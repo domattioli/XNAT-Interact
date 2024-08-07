@@ -39,15 +39,14 @@ def prompt_login() -> Tuple[str, str]:
 
 def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, verbose: Opt[bool]=True ) -> Tuple[XNATLogin, XNATConnection, MetaTables]:
     if username is not None and password is not None:
-        input_username, input_password = username, password
-        if verbose: print( f'\n...logging in and trying to connect to the server...\n' )
-        validated_login = XNATLogin( { 'Username': input_username, 'Password': input_password, 'Url': 'https://rpacs.iibi.uiowa.edu/xnat/' }, verbose=verbose )
+        if verbose: print( f"\n...logging in and trying to connect to the server as '{username}' with password {'*' * len( password )}...\n" )
+        validated_login = XNATLogin( { 'Username': username, 'Password': password, 'Url': 'https://rpacs.iibi.uiowa.edu/xnat/' }, verbose=verbose )
         xnat_connection = XNATConnection( login_info=validated_login, stay_connected=True, verbose=verbose )
     else:
         if verbose: print( f'Please enter your XNAT login credentials to connect to the server:' )
-        input_username, input_password = prompt_login()
+        username, password = prompt_login()
         if verbose: print( f'\n...logging in and trying to connect to the server...\n' )
-        validated_login = XNATLogin( { 'Username': input_username, 'Password': input_password, 'Url': 'https://rpacs.iibi.uiowa.edu/xnat/' }, verbose=verbose )
+        validated_login = XNATLogin( { 'Username': username, 'Password': password, 'Url': 'https://rpacs.iibi.uiowa.edu/xnat/' }, verbose=verbose )
         xnat_connection = XNATConnection( login_info=validated_login, stay_connected=True, verbose=verbose )
 
     if xnat_connection.is_verified and xnat_connection.is_open:
@@ -71,11 +70,11 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
     form_exists = ORDataIntakeForm.prompt_until_valid_answer_given( 'Intake Form Declaration', acceptable_options=['1', '2'] )
     
     if form_exists == '1':
-        form_ffn = input( f"Please enter the full file path to the intake form: " )
+        form_ffn = input( f"\t\tPlease enter the full file path to the intake form:\t" )
         try:
             intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, ffn=form_ffn, verbose=verbose, write_to_file=True )
         except:
-            raise ValueError( f"\tThe provided file path did not lead to a successful intake form. Please try again, or contact the Data Librarian for help." )
+            raise ValueError( f"\t\tThe provided file path did not lead to a successful intake form. Please try again, or contact the Data Librarian for help." )
     else:
         intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose, write_to_file=True )
     
@@ -104,7 +103,7 @@ def header_footer_print( header_or_footer: str ):
         print( f'\tPress Ctrl+C to cancel at any time.\n')
     elif header_or_footer == 'footer': # Print footer
         print( f'\n...Exiting application...' )
-        print( f'===' *50 )
+        print( f'===' *50 + f'\n' )
 
 
 
@@ -114,23 +113,25 @@ def main():
     username, password, verbose = parse_args()
     validated_login, xnat_connection, metatables = try_login_and_connection( username=username, password=password, verbose=verbose )
     
-    while True:
-        choice = prompt_function( verbose=verbose )
-        if choice == '1':
-            metatables = upload_new_case( validated_login=validated_login, xnat_connection=xnat_connection, metatables=metatables, verbose=verbose )
-        # # elif choice == 2:
-        #     # function2()
-        # # elif choice == 3:
-        # #     function3()
-        # else:
-        #     print( "Invalid choice" )
+    try:
+        while True:
+            choice = prompt_function( verbose=verbose )
+            if choice == '1':
+                metatables = upload_new_case( validated_login=validated_login, xnat_connection=xnat_connection, metatables=metatables, verbose=verbose )
+            # # elif choice == 2:
+            #     # function2()
+            # # elif choice == 3:
+            # #     function3()
+            # else:
+            #     print( "Invalid choice" )
 
-        # prompt user to continue
-        print( f'\n\tPerform another task?:\tEnter "1" for Yes or "2" for No.' )
-        another_task = ORDataIntakeForm.prompt_until_valid_answer_given( 'Intake Form Declaration', acceptable_options=['1', '2'] )
-        if another_task == '2':
-            break
-
+            # prompt user to continue
+            print( f'\n\tPerform another task?:\tEnter "1" for Yes or "2" for No.' )
+            another_task = ORDataIntakeForm.prompt_until_valid_answer_given( 'Intake Form Declaration', acceptable_options=['1', '2'] )
+            if another_task == '2':
+                break
+    except:
+        print( f'\n...Task failed, closing connection and exiting application...' )
     xnat_connection.close()
     header_footer_print( header_or_footer='footer' )
 

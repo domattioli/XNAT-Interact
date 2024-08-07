@@ -86,7 +86,7 @@ pip install XNAT-Interact
 #### Best Practice: run the following script each time you begin a new session:
 ```bash
 python update_and_test.py
-'''
+```
 
 #### All functionality requires running the following command in the terminal:
 ```bash

@@ -27,7 +27,7 @@ def parse_args() -> Tuple[str, str, bool]:
 
 def prompt_function( verbose: bool ) -> str:
     if verbose: print( f'\n...selecting task to perform...' )
-    print( f'\tSelect a task\t--\tPlease select a task from the following list:\tEnter "1" for Uploading Source Data, "2" for Uploading Derived Data, or "3" for Downloading Data' )
+    print( f'\tSelect a task\t--\tPlease enter "1" for Uploading Source Data, "2" for Uploading Derived Data, or "3" for Downloading Data.' )
     return ORDataIntakeForm.prompt_until_valid_answer_given( 'Select a task', acceptable_options=['1', '2', '3'] )
 
 
@@ -66,15 +66,15 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
     if verbose: print( f"\nUploading new source data to XNAT...")
 
     # Digitize/load an intake form (if it exists already).
-    print( f'\tHave you already created a *DIGITAL* intake form with this software for this procedure? \t--\tPlease select a task from the following list:\tEnter "1" for Yes or "2" for No.' )
+    print( f'\tHave you already created a *DIGITAL* intake form with this software for this procedure? \t--\tPlease enter "1" for Yes or "2" for No.' )
     form_exists = ORDataIntakeForm.prompt_until_valid_answer_given( 'Intake Form Declaration', acceptable_options=['1', '2'] )
     
     if form_exists == '1':
-        form_ffn = input( f"\t\tPlease enter the full file path to the intake form:\t" )
+        form_pn = input( f"\t\tPlease enter the full file path to the *parent folder* of the intake form:\t" )
         try:
-            intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, ffn=form_ffn, verbose=verbose, write_to_file=True )
+            intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, parent_folder=form_pn, verbose=verbose, write_to_file=True )
         except:
-            raise ValueError( f"\t\tThe provided file path did not lead to a successful intake form. Please try again, or contact the Data Librarian for help." )
+            raise ValueError( f"\t\tThe provided path did not lead to a successful intake form. Please try again, or contact the Data Librarian for help." )
     else:
         intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose, write_to_file=True )
     
@@ -125,8 +125,7 @@ def main():
             # prompt user to continue
             print( f'\n\tPerform another task?:\tEnter "1" for Yes or "2" for No.' )
             another_task = ORDataIntakeForm.prompt_until_valid_answer_given( 'Intake Form Declaration', acceptable_options=['1', '2'] )
-            if another_task == '2':
-                break
+            if another_task == '2':     break
     except Exception as e:
         print( f'\n...Task failed due to the following error:\n{e}' )
         print( f'\n...Closing connection and exiting application...' )

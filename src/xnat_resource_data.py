@@ -147,12 +147,14 @@ class ORDataIntakeForm( ResourceFile ):
 
 
     @staticmethod
-    def prompt_until_valid_answer_given( selection_name: str, acceptable_options: list ) -> str:
-        while True:
-            user_input = input( f'\tAnswer:\t' )
+    def prompt_until_valid_answer_given( selection_name: str, acceptable_options: list, max_num_attempts: int=2 ) -> str:
+        num_attempts = 0
+        while True and num_attempts < max_num_attempts:
+            user_input, num_attempts = input( f'\tAnswer:\t' ), num_attempts + 1
             if user_input.upper() in acceptable_options: return user_input.upper()
             else:
                 print( f'\t--- Invalid entry for {selection_name}! Please enter one of the options listed above.' )
+        raise InvalidInputError( f'Failed to provide a valid entry for {selection_name} after {max_num_attempts} attempts.' )
     
 
     def _prompt_user_for_filer_name_and_operation_date( self, metatables: MetaTables ) -> None: 

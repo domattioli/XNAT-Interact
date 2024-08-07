@@ -71,7 +71,6 @@ class ORDataIntakeForm( ResourceFile ):
         # Either read in the inputted text file and distribute that data, or prompt the user for the data.
         if ffn:
             self._read_from_file( ffn, verbose=verbose )
-            return
         else:
             self._prompt_user_for_filer_name_and_operation_date( metatables=metatables )
             self._prompt_user_for_scan_quality()
@@ -79,11 +78,11 @@ class ORDataIntakeForm( ResourceFile ):
             self._prompt_user_for_skills_assessment_info( metatables=metatables )
             self._prompt_user_for_storage_device_info()
 
-            # Need to identify the save-to location for the json file; if successfully read from file, use that, else, use the generated uid.
-            self._saved_ffn = metatables.tmp_data_dir / Path( self.uid ) / self.filename
-            if not os.path.exists( self.saved_ffn.parent ): os.makedirs( self.saved_ffn.parent )
-            if write_to_file: self.construct_digital_file( verbose=verbose )
-            # self._create_text_file_reconstruction( verbose=verbose ) # commenting out bc we want it saved to a temp folder corresponding to this subject
+        # Need to identify the save-to location for the json file; if successfully read from file, use that, else, use the generated uid.
+        self._saved_ffn = metatables.tmp_data_dir / Path( self.uid ) / self.filename
+        if not os.path.exists( self.saved_ffn.parent ): os.makedirs( self.saved_ffn.parent )
+        if write_to_file and ffn is not None: self.construct_digital_file( verbose=verbose )
+        # self._create_text_file_reconstruction( verbose=verbose ) # commenting out bc we want it saved to a temp folder corresponding to this subject
         
 
 

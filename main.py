@@ -79,16 +79,13 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
         intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose, write_to_file=True )
     
     # Depending on the procedure type, create the appropriate source data object.
-    try:
-        if intake_form.ortho_procedure_type.upper() == 'ARTHROSCOPY':
-            source_data = SourceESVSession( intake_form=intake_form, metatables=metatables )
-        elif intake_form.ortho_procedure_type.upper() == 'TRAUMA':
-            raise ValueError( f"\tThe provided procedure type is not yet supported. Please contact the Data Librarian for help." )
-            source_data = SourceRFSession( metatables=metatables, login=validated_login, verbose=verbose )
-        else:
-            raise ValueError( f"\tThe provided procedure type is not yet supported. This is a bug that should be reported to Data Librarian." )
-    except:
-        raise ValueError( f"\tFailed to load in the data pointed-to by the intake form process. Please contact the Data Librarian for help." )
+    if intake_form.ortho_procedure_type.upper() == 'ARTHROSCOPY':
+        source_data = SourceESVSession( intake_form=intake_form, metatables=metatables )
+    elif intake_form.ortho_procedure_type.upper() == 'TRAUMA':
+        raise ValueError( f"\tThe provided procedure type is not yet supported. Please contact the Data Librarian for help." )
+        source_data = SourceRFSession( metatables=metatables, login=validated_login, verbose=verbose )
+    else:
+        raise ValueError( f"\tThe provided procedure type is not yet supported. This is a bug that should be reported to Data Librarian." )
     
     # Publish data to xnat
     metatables = source_data.write_publish_catalog_subroutine( metatables=metatables, xnat_connection=xnat_connection, validated_login=validated_login, verbose=verbose, delete_zip=False )
@@ -130,8 +127,9 @@ def main():
             another_task = ORDataIntakeForm.prompt_until_valid_answer_given( 'Intake Form Declaration', acceptable_options=['1', '2'] )
             if another_task == '2':
                 break
-    except:
-        print( f'\n...Task failed, closing connection and exiting application...' )
+    except Exception as e:
+        print( f'\n...Task failed due to the following error:\n{e}' )
+        print( f'\n...Closing connection and exiting application...' )
     xnat_connection.close()
     header_footer_print( header_or_footer='footer' )
 

@@ -62,15 +62,15 @@ class ORDataIntakeForm( ResourceFile ):
     The form is then used to create a text file that is used to populate the XNAT database with the relevant information.
     The UID generated represents the subject and the source data experiment.
     """
-    def __init__( self, metatables: MetaTables, login: XNATLogin, ffn: Opt[str]=None, verbose: Opt[bool]=False, write_to_file: Opt[bool]=False ):
+    def __init__( self, metatables: MetaTables, login: XNATLogin, parent_folder: Opt[str]=None, verbose: Opt[bool]=False, write_to_file: Opt[bool]=False ):
         super().__init__( metatables=metatables, login=login ) # Call the __init__ method of the base class -- bug:? goes all the way to our utility class and generates a uid.
 
         # Init dict (and future json-formatted text file) with required keys.
         self._init_all_fields()
         
         # Either read in the inputted text file and distribute that data, or prompt the user for the data.
-        if ffn:
-            self._read_from_file( ffn, verbose=verbose )
+        if parent_folder:
+            self._read_from_file( parent_folder, verbose=verbose )
         else:
             self._prompt_user_for_filer_name_and_operation_date( metatables=metatables )
             self._prompt_user_for_scan_quality()
@@ -81,12 +81,13 @@ class ORDataIntakeForm( ResourceFile ):
         # Need to identify the save-to location for the json file; if successfully read from file, use that, else, use the generated uid.
         self._saved_ffn = metatables.tmp_data_dir / Path( self.uid ) / self.filename
         if not os.path.exists( self.saved_ffn.parent ): os.makedirs( self.saved_ffn.parent )
-        if write_to_file and ffn is not None: self.construct_digital_file( verbose=verbose )
+        if write_to_file and parent_folder is not None: self.construct_digital_file( verbose=verbose )
         # self._create_text_file_reconstruction( verbose=verbose ) # commenting out bc we want it saved to a temp folder corresponding to this subject
         
 
 
-    def _read_from_file( self, ffn: str, verbose: Opt[bool]=False ) -> None:
+    def _read_from_file( self, parent_folder: str, verbose: Opt[bool]=False ) -> None:
+        ffn = os.path.join( parent_folder, self.filename_str )
         if verbose: print( f'\n\t--- Initializing IntakeFrom from {ffn} ---' )
         with open( ffn, 'r', encoding='cp1252' ) as jf:
             self._running_text_file = json.loads( jf.read() )
@@ -424,7 +425,7 @@ class ORDataIntakeForm( ResourceFile ):
         json_str = json.dumps( self.running_text_file, indent=4, default=ORDataIntakeForm._custom_serializer )
         with open( self.saved_ffn, 'w' ) as f:
             f.write( json_str )
-            if verbose:     print( f' -- SUCCESS -- OR Data Intake Form saved to:\t{self.saved_ffn}\n' )
+            if verbose:     print( f'\t-- SUCCESS -- OR Data Intake Form saved to:\t{self.saved_ffn}\n' )
 
 
     def push_to_xnat( self, subj_inst, verbose: Opt[bool] = False ):

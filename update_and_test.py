@@ -5,34 +5,32 @@ import typing
 
 
 def is_repo_up_to_date():
-    # Fetch the latest changes from the remote repository
-    subprocess.run(['git', 'fetch'], check=True)
-
-    # Check the status of the local repository
-    status_output = subprocess.run(['git', 'status', '-uno'], capture_output=True, text=True, check=True)
-    
-    # Check if the local branch is behind the remote branch
-    if 'Your branch is behind' in status_output.stdout:
-        return False
-    return True
-
-
-def update_repo() -> str:
     try:
-        # Fetch the latest changes from the remote repository
-        subprocess.run( ['git', 'fetch', 'origin'], check=True )
-        
-        # Check if the local branch is behind the remote branch
-        status_output = subprocess.run( ['git', 'status', '-uno'], capture_output=True, text=True, check=True )
-        
-        if 'Your branch is behind' in status_output.stdout:
-            # Merge the main branch into the current branch
-            subprocess.run(['git', 'merge', 'origin/master'], check=True)
-            return f"\tSUCCESS\t-- Repo successfully updated."
+        # Check if the local repository is up to date with the remote
+        result = subprocess.run(['git', 'fetch'], check=True, capture_output=True, text=True)
+        status = subprocess.run(['git', 'status'], capture_output=True, text=True)
+        if 'Your branch is up to date' in status.stdout:
+            return True
         else:
-            return f"\tSUCCESS\t-- Repo is already up to date."
+            return False
     except subprocess.CalledProcessError as e:
-        return f"\tFAILURE\t-- Repo could not be updated!\n\t\t{e}"
+        print(f'\tFAILURE\t--\tFailed to check repository status.')
+        print(e)
+        return False
+
+def update_repo():
+    if not is_repo_up_to_date():
+        try:
+            # Pull all changes from the remote repository, including deletions
+            subprocess.run(['git', 'pull', '--prune'], check=True)
+            print(f'\tSUCCESS\t--\tRepository updated successfully!')
+        except subprocess.CalledProcessError as e:
+            print(f'\tFAILURE\t--\tFailed to update the repository.')
+            print(e)
+            sys.exit(1)
+    else:
+        print(f'\tINFO\t--\tRepository is already up to date.')
+
 
 
 def check_that_virtualenv_activated():

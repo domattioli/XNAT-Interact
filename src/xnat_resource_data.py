@@ -220,12 +220,12 @@ class ORDataIntakeForm( ResourceFile ):
         local_dict['PROCEDURE_TYPE'] = self.ortho_procedure_type
 
         # Given the ortho procedure type, select the keys from the acceptable_ortho_procedure_names dictionary that begin with the ortho_procedure_type
-        acceptable_ortho_procedure_name_options = {key: value for key, value in acceptable_ortho_procedure_names.items() if key.startswith( ortho_procedure_type )}
-        options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_ortho_procedure_name_options.items()] )
+        acceptable_ortho_procedure_name_options_encoded = {key: value for key, value in acceptable_ortho_procedure_names.items() if key.startswith( ortho_procedure_type )}
+        options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_ortho_procedure_name_options_encoded.items()] )
 
         print( f'\n\t(7/35)\tOrtho Procedure Name\t--\tPlease select from the following options:\n{options_str}')
-        procedure_name_key = self.prompt_until_valid_answer_given( 'Ortho Procedure Name', acceptable_options = list( acceptable_ortho_procedure_name_options ) )
-        self._ortho_procedure_name = acceptable_ortho_procedure_name_options[procedure_name_key]
+        procedure_name_key = self.prompt_until_valid_answer_given( 'Ortho Procedure Name', acceptable_options = list( acceptable_ortho_procedure_name_options_encoded ) )
+        self._ortho_procedure_name = acceptable_ortho_procedure_name_options_encoded[procedure_name_key]
         local_dict['PROCEDURE_NAME'] = str( self.ortho_procedure_name ) # type: ignore
 
         if self.form_is_available:
@@ -267,7 +267,7 @@ class ORDataIntakeForm( ResourceFile ):
         patient_side = self.prompt_until_valid_answer_given( 'Side of Patient\'s Body', acceptable_options=['1', '2', '3'] )
         if patient_side == '1':     self._side_of_patient_body = 'Right'.upper()
         elif patient_side == '2':   self._side_of_patient_body = 'Left'.upper()
-        elif patient_side == '3':  self._side_of_patient_body = 'Unknown'.upper()
+        elif patient_side == '3':   self._side_of_patient_body = 'Unknown'.upper()
         else: raise ValueError( 'You indicated N/A for the side of the patient body; please contact the data librarian to clarify this before proceding!' )
         local_dict['PATIENT_SIDE'] = self.side_of_patient_body
 
@@ -279,8 +279,12 @@ class ORDataIntakeForm( ResourceFile ):
         print( f'\n\t(13/35)\t Do you know the Supervising Surgeon\'s HawkID\t--\tPlease enter "1" for Yes or "2" for no:' )
         known_supervising_hawkid = self.prompt_until_valid_answer_given( 'Known Supervising Surgeon HawkID', acceptable_options=['1', '2'] )
         if known_supervising_hawkid == '1':
-            print( f'\n\t(13/35)\tSupervising Surgeon HawkID\t--\tPlease select from the following list:\t{metatables.list_of_all_items_in_table( "Surgeons" )}' )
-            supervising_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'Supervising Surgeon\'s HAWKID', acceptable_options=metatables.list_of_all_items_in_table( 'Surgeons' ) )
+            # create an encoding of the acceptable options for the supervising surgeon
+            acceptable_supervising_surgeon_options_encoded = {str(i+1): surgeon for i, surgeon in enumerate( metatables.list_of_all_items_in_table( table_name='Surgeons' ) )}
+            options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_supervising_surgeon_options_encoded.items()] )
+
+            print( f'\n\t(13/35)\tSupervising Surgeon HawkID\t--\tPlease select from the following list:\n{options_str}')
+            supervising_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'Supervising Surgeon\'s HAWKID', acceptable_options = list( acceptable_supervising_surgeon_options_encoded ) )
         else:   supervising_surgeon_hawk_id = 'Unknown'.upper()
 
         print( f"\n\t(14/35)\tSupervising Surgeon Presence\t--\tEnter '1' for Present, '2' for Retrospective Review, or '3' for Unknown:" )
@@ -295,8 +299,12 @@ class ORDataIntakeForm( ResourceFile ):
         print( f'\n\t(15/35)\t Do you know the Performing Surgeon\'s HawkID\t--\tPlease enter "1" for Yes or "2" for no:' )
         known_performer_hawk_id = self.prompt_until_valid_answer_given( 'Known Performing Surgeon HawkID', acceptable_options=['1', '2'] )
         if known_performer_hawk_id == '1':
-            print( f'\n\t(15/35)\tPerforming Surgeon HawkID\t--\tPlease select from the following list:\t{metatables.list_of_all_items_in_table( "Surgeons" )}' )
-            performing_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'Performing Surgeon\'s HAWKID', acceptable_options=metatables.list_of_all_items_in_table( 'Surgeons' ) )
+            # create an encoding of the acceptable options for the performing surgeon
+            acceptable_performing_surgeon_options_encoded = {str(i+1): surgeon for i, surgeon in enumerate( metatables.list_of_all_items_in_table( table_name='Surgeons' ) )}
+            options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_performing_surgeon_options_encoded.items()] )
+            
+            print( f'\n\t(15/35)\tPerforming Surgeon HawkID\t--\tPlease select from the following list:\n{options_str}' )
+            performing_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'Performing Surgeon\'s HAWKID', acceptable_options=list( acceptable_performing_surgeon_options_encoded ) )
         else:   performing_surgeon_hawk_id = 'Unknown'.upper()
 
         print( f"\n\t(16/35)\tDo you know the Performing Surgeon\'s # of Years in Residency?\t--\tEnter '1' for Yes or '2' for No:" )
@@ -325,28 +333,36 @@ class ORDataIntakeForm( ResourceFile ):
             for key, value in dict_performance_enumerated_tasks.items():
                 if len( value ) == 0: dict_performance_enumerated_tasks[key] = None
             self._performance_enumerated_task_performer = dict_performance_enumerated_tasks
+        elif performer_was_assisted == '2':     self._performer_was_assisted = False
+        # else:                                   self._performance_enumerated_task_performer = {'Unknown'.upper()}
         local_dict['PERFORMER_WAS_ASSISTED'], local_dict['PERFORMANCE_ENUMERATED_TASK_PERFORMER'] = self.performer_was_assisted, self.performance_enumerated_task_performer
 
-        print( f'\n\t(21/35)\tWere there any unusual features of the performance?\n\tEnter "1" for Yes or "2" for No.')
-        any_unusual_features_of_performance = self.prompt_until_valid_answer_given( 'Unusual Features of Performance', acceptable_options=['1', '2'] )
+        print( f'\n\t(21/35)\tWere there any unusual features of the performance?\n\tEnter "1" for Yes, "2" for No, or "3" for Unknown.')
+        any_unusual_features_of_performance = self.prompt_until_valid_answer_given( 'Unusual Features of Performance', acceptable_options=['1', '2', '3'] )
         if any_unusual_features_of_performance == '1':
             list_of_performance_features = input( f'\t(22/35)\tPlease detail any/all unusual features of the performance:\n\tAnswer: ' )
             if len( list_of_performance_features ) > 0:     self._list_unusual_features_of_performance = list_of_performance_features
+        elif any_unusual_features_of_performance == '2':    self._list_unusual_features_of_performance = None
+        else:                                               self._list_unusual_features_of_performance = 'Unknown'.upper()
         local_dict['LIST_UNUSUAL_FEATURES'] = self.list_unusual_features_of_performance
 
-        print( f'\n\t(23/35)\tWere there any diagnostic notes about the surgical procedure?\n\tEnter "1" for Yes or "2" for No.')
-        any_diagnostic_notes = self.prompt_until_valid_answer_given( 'Performing Surgeon Assistance', acceptable_options=['1', '2'] )
+        print( f'\n\t(23/35)\tWere there any diagnostic notes about the surgical procedure?\n\tEnter "1" for Yes, "2" for No, or "3" for Unknown.')
+        any_diagnostic_notes = self.prompt_until_valid_answer_given( 'Performing Surgeon Assistance', acceptable_options=['1', '2', '3'] )
         # if self.ortho_procedure_type == 'Arthroscopy' or ortho_procedure_type == '2':
         if any_diagnostic_notes == '1':
             diagnostic_notes = input( f'\t(24/35)\tPlease enter any diagnostic notes about the surgical procedure:\n\tAnswer: ' )
             if len( diagnostic_notes ) > 0:                 self._diagnostic_notes = diagnostic_notes
+        elif any_diagnostic_notes == '2':                   self._diagnostic_notes = None
+        else:                                               self._diagnostic_notes = 'Unknown'.upper()
         local_dict['DIAGNOSTIC_NOTES'] = self.diagnostic_notes
 
-        print( f'\n\t(24/35)\tDo you have any additional comments or notes regarding BMI, pre-existing conditions, etc.?\n\tEnter "1" for Yes or "2" for No.' )
-        any_misc_comments = self.prompt_until_valid_answer_given( ' Miscellaneous Procedure Comments', acceptable_options=['1', '2'])
+        print( f'\n\t(24/35)\tDo you have any additional comments or notes regarding BMI, pre-existing conditions, etc.?\n\tEnter "1" for Yes, "2" for No, or "3" for Unknown' )
+        any_misc_comments = self.prompt_until_valid_answer_given( ' Miscellaneous Procedure Comments', acceptable_options=['1', '2', '3'])
         if any_misc_comments == '1':
             misc_comments = input( f'\t(25/35)\tPlease enter any additional comments or notes:\n\t\t' )
-            if len( misc_comments ) > 0:     self._misc_surgical_performance_comments = misc_comments
+            if len( misc_comments ) > 0:                    self._misc_surgical_performance_comments = misc_comments
+        elif any_diagnostic_notes == '2':                   self._misc_surgical_performance_comments = None
+        else:                                               self._misc_surgical_performance_comments = 'Unknown'.upper()
         local_dict['MISC_PROCEDURE_COMMENTS'] = self.misc_surgical_performance_comments
         
         # Need to save info to the running text file regardless of if the form is available

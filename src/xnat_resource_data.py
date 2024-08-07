@@ -199,10 +199,9 @@ class ORDataIntakeForm( ResourceFile ):
 
         #Encode the options for acceptable institions as a list of integer strings
         acceptable_institution_options_encoded = {str(i): institution for i, institution in enumerate( metatables.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ) )}
-
-        acceptable_institutions = metatables.list_of_all_items_in_table( table_name='ACQUISITION_SITES' )
-        print( f'\t(5/35)\tInstitution Name\t--\tPlease Copy-and-Paste from the following list:\t{acceptable_institutions}' )
-        self._institution_name = self.prompt_until_valid_answer_given( 'Institution Name', acceptable_options=acceptable_institutions )
+        options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_institution_options_encoded.items()] )
+        print( f'\t(5/35)\tInstitution Name\t--\tPlease select from the following options:\n{options_str}' )
+        self._institution_name = self.prompt_until_valid_answer_given( 'Institution Name', acceptable_options=list( acceptable_institution_options_encoded ) )
         local_dict['INSTITUTION_NAME'] = self.institution_name
 
         print( f'\n\t(6/35)\tType of Orthro Procedure\t--\tPlease enter "1" for Trauma or "2" for Arthro' )

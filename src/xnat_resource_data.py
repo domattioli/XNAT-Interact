@@ -205,7 +205,7 @@ class ORDataIntakeForm( ResourceFile ):
         local_dict = {}
 
         #Encode the options for acceptable institions as a list of integer strings
-        acceptable_institution_options_encoded = {str(i): institution for i, institution in enumerate( metatables.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ) )}
+        acceptable_institution_options_encoded = {str(i+1): institution for i, institution in enumerate( metatables.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ) )}
         options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_institution_options_encoded.items()] )
         print( f'\t(5/35)\tInstitution Name\t--\tPlease select from the following options:\n{options_str}' )
         self._institution_name = self.prompt_until_valid_answer_given( 'Institution Name', acceptable_options=list( acceptable_institution_options_encoded ) )

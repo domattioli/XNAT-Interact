@@ -107,7 +107,7 @@ class ORDataIntakeForm( ResourceFile ):
         self._radiology_contact_date = self.running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_DATE']
         self._radiology_contact_time = self.running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_TIME']
         self._relevant_folder = Path( self.running_text_file['STORAGE_DEVICE_INFO']['RELEVANT_FOLDER'] )
-        self._saved_ffn = Path( ffn )
+        # self._saved_ffn = Path( ffn )
 
         try: # Optional fields that may not be present in the inputted form (if the filer did not have this info when originally creating the digitized version)
             self._epic_end_time = self.running_text_file['SURGICAL_PROCEDURE_INFO']['EPIC_END_TIME']

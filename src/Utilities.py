@@ -60,7 +60,7 @@ class _local_variables:
         # xnat_project_name = 'domSandBox' # original
         # xnat_project_name = 'GROK_AHRQ_real' # another corrupted project.
         xnat_project_name = 'GROK_AHRQ_main'
-        config_fn = 'config.json'
+        xnat_config_folder_name, config_fn = 'config', 'database_config.json'
         # doc_dir = os.path.join( repo_dir, 'doc' )
         # data_dir = doc_dir.replace( 'doc', 'data' )
         template_img_dir = os.path.join( repo_dir, 'data', 'image_templates', 'unwanted_dcm_image_template.png' )
@@ -78,7 +78,7 @@ class _local_variables:
                         'required_login_keys': ['USERNAME', 'PASSWORD', 'URL'],
                         'xnat_project_name': xnat_project_name,
                         'xnat_project_url': 'https://rpacs.iibi.uiowa.edu/xnat/',
-                        'xnat_config_folder_name': 'database_config',
+                        'xnat_config_folder_name': xnat_config_folder_name,
                         'default_meta_table_columns' : ['NAME', 'UID', 'CREATED_DATE_TIME', 'CREATED_BY'],
                         'template_img_dir' : template_img_dir,
                         # 'template_img_hash' : ImageHash( self._read_template_image( template_img_dir ) ).hashed_img
@@ -462,7 +462,7 @@ class MetaTables( UIDandMetaInfo ):
         self._tables = { name: pd.DataFrame.from_records( table ) for name, table in data['tables'].items()}
         self._metadata = data['metadata']
         if verbose:
-            print( f'SUCCESS! -- Loaded metatables from: {load_ffn}' )
+            print( f'\tSUCCESS! -- Loaded metatables from: {load_ffn}\n' )
     
 
     def _update_metadata( self, new_table_extra_columns: Opt[dict] = None ) -> None:
@@ -507,7 +507,7 @@ class MetaTables( UIDandMetaInfo ):
             assert write_ffn.suffix == '.json', f"Provided write file path must have a '.json' extension: {write_ffn}"
             write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( write_ffn )
         self._load( write_ffn, verbose )
-        if verbose:                     print( f'\t...Metatables successfully populated from XNAT data.' )
+        if verbose:                     print( f'\t...Metatables successfully populated from XNAT data.\n' )
         
         self._reinitialize_metatables_with_extra_columns()
         return write_ffn
@@ -526,8 +526,8 @@ class MetaTables( UIDandMetaInfo ):
     def push_to_xnat( self, verbose: Opt[bool] = False ) -> None:
         self.ensure_primary_keys_validity()
         self.save( verbose )
-        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'config' ).file( self.config_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
-        if verbose is True:             print( f'\t...Metatables successfully updated on XNAT!' )
+        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
+        if verbose is True:             print( f'\t...Metatables (config.json) successfully updated on XNAT!\n' )
 
 
     def save( self, verbose: Opt[bool] = False ) -> None: # Convert all tables to JSON; Write the data to the file
@@ -539,7 +539,7 @@ class MetaTables( UIDandMetaInfo ):
         json_str = self._custom_json_serializer( data )
         with open( self.config_ffn, 'w' ) as f:
             f.write( json_str )
-        if verbose:                     print( f'SUCCESS! --- saved metatables to: {self.config_ffn}' )
+        if verbose:                     print( f'\tSUCCESS! --- saved metatables to: {self.config_ffn}\n' )
 
 
     def is_user_registered( self, user_name: Opt[str] = None ) -> bool:
@@ -552,7 +552,7 @@ class MetaTables( UIDandMetaInfo ):
         self._validate_login_for_important_functions()
         if not self.is_user_registered( user_name ):
             self.add_new_item( 'REGISTERED_USERS', user_name )
-        if verbose:                     print( f'SUCCESS! --- Registered new user: {user_name}' )
+        if verbose:                     print( f'\tSUCCESS! --- Registered new user: {user_name}\n' )
 
 
     def list_of_all_tables( self ) -> list:
@@ -584,7 +584,7 @@ class MetaTables( UIDandMetaInfo ):
             self._update_metadata( new_table_extra_columns={table_name: extra_column_names} )
         else:
             self._update_metadata()
-        if verbose:                     print( f'SUCCESS! --- Added new "{table_name}" table' )
+        if verbose:                     print( f'\tSUCCESS! --- Added new "{table_name}" table.\n' )
 
 
     def add_new_item( self, table_name: str, item_name: str, item_uid: Opt[str] = None, extra_columns_values: Opt[typehintDict[str, str]] = None, verbose: Opt[bool] = False ) -> None:
@@ -611,7 +611,7 @@ class MetaTables( UIDandMetaInfo ):
 
         self._tables[table_name] = pd.concat( [self.tables[table_name], new_data], ignore_index=True )
         self._update_metadata()
-        if verbose:                     print( f'\tSUCCESS! --- Added "{item_name}" to table "{table_name}"' )
+        if verbose:                     print( f'\tSUCCESS! --- Added "{item_name}" to table "{table_name}".\n' )
 
 
     def get_uid( self, table_name: str, item_name: str ) -> str:

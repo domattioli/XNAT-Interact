@@ -74,6 +74,7 @@ def test_virtual_env():
     return True
 
 def main():
+    print(f'\n\t...ensuring that XNAT-INTERACT installation is correct and up-to-date...\n')
     try:
         check_that_virtualenv_activated()
     except Exception as e:

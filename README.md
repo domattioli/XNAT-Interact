@@ -83,7 +83,12 @@ pip install XNAT-Interact
 ## Example Usage
 ***If you are not running the following code from a university machine, you must make sure you are logged into the [UIowa Cisco VPN](https://its.uiowa.edu/support/article/1876) before trying to run these commands.
 
-#### All functionality requires running the following command in the terminal
+#### Best Practice: run the following script each time you begin a new session:
+```bash
+python update_and_test.py
+'''
+
+#### All functionality requires running the following command in the terminal:
 ```bash
 python main.py --username my_hawkid --password my_password
 ```

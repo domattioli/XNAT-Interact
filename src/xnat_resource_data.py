@@ -88,7 +88,7 @@ class ORDataIntakeForm( ResourceFile ):
 
     def _read_from_file( self, parent_folder: str, verbose: Opt[bool]=False ) -> None:
         ffn = os.path.join( parent_folder, self.filename_str )
-        if verbose: print( f'\n\t--- Initializing IntakeFrom from {ffn} ---' )
+        if verbose: print( f'\n\t...Initializing OR Intake From from "{ffn}"...' )
         with open( ffn, 'r', encoding='cp1252' ) as jf:
             self._running_text_file = json.loads( jf.read() )
 

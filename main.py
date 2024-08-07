@@ -11,8 +11,6 @@ from src.xnat_experiment_data import *
 from src.xnat_scan_data import *
 from src.xnat_resource_data import ORDataIntakeForm
 
-from src.tests import *
-
 
 def parse_args() -> Tuple[str, str, bool]:
     parser = argparse.ArgumentParser(description='XNAT Login and Connection')

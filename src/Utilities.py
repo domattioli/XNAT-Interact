@@ -60,7 +60,7 @@ class _local_variables:
         # xnat_project_name = 'domSandBox' # original
         # xnat_project_name = 'GROK_AHRQ_real' # another corrupted project.
         xnat_project_name = 'GROK_AHRQ_main'
-        meta_tables_fn = 'MetaTables.json'
+        config_fn = 'config.json'
         # doc_dir = os.path.join( repo_dir, 'doc' )
         # data_dir = doc_dir.replace( 'doc', 'data' )
         template_img_dir = os.path.join( repo_dir, 'data', 'image_templates', 'unwanted_dcm_image_template.png' )
@@ -73,11 +73,12 @@ class _local_variables:
                         # 'doc_dir': doc_dir,
                         # 'data_dir': data_dir,
                         'tmp_data_dir': tmp_data_dir,
-                        'meta_tables_fn': meta_tables_fn,
-                        'meta_tables_ffn': os.path.join( tmp_data_dir, meta_tables_fn ), # local file for storing all meta information
+                        'config_fn': config_fn,
+                        'config_ffn': os.path.join( tmp_data_dir, config_fn ), # local file for storing all meta information
                         'required_login_keys': ['USERNAME', 'PASSWORD', 'URL'],
                         'xnat_project_name': xnat_project_name,
                         'xnat_project_url': 'https://rpacs.iibi.uiowa.edu/xnat/',
+                        'xnat_config_folder_name': 'database_config',
                         'default_meta_table_columns' : ['NAME', 'UID', 'CREATED_DATE_TIME', 'CREATED_BY'],
                         'template_img_dir' : template_img_dir,
                         # 'template_img_hash' : ImageHash( self._read_template_image( template_img_dir ) ).hashed_img
@@ -115,9 +116,11 @@ class UIDandMetaInfo:
     @property
     def cataloged_resources_ffn( self )         -> str:                 return self.local_variables.cataloged_resources_ffn
     @property
-    def meta_tables_fn( self )                  -> str:                 return self.local_variables.meta_tables_fn
+    def config_fn( self )                       -> str:                 return self.local_variables.config_fn
     @property
-    def meta_tables_ffn( self )                 -> str:                 return self.local_variables.meta_tables_ffn
+    def config_ffn( self )                      -> str:                 return self.local_variables.config_ffn
+    @property
+    def xnat_config_folder_name ( self )        -> str:                 return self.local_variables.xnat_config_folder_name
     @property
     def required_login_keys( self )             -> list:                return self.local_variables.required_login_keys
     @property
@@ -279,7 +282,7 @@ class XNATConnection( UIDandMetaInfo ):
 
     def __del__( self ):
         self.close() # Close the server connection ***AND*** delete the metatables local data to enforce user to always pull it from the server first.
-        if os.path.exists( self.meta_tables_ffn ):      os.remove( self.meta_tables_ffn )
+        if os.path.exists( self.config_ffn ):      os.remove( self.config_ffn )
         XNATConnection._instance = None
 
     def __enter__( self ):                              return self
@@ -450,7 +453,7 @@ class MetaTables( UIDandMetaInfo ):
     def _load( self, local_meta_tables_ffn: Opt[Path], verbose: Opt[bool] = False ) -> None:
         assert self.login_info.is_valid, f"Provided login info must be validated before loading metatables: {self.login_info}"
         if local_meta_tables_ffn is None:
-            load_ffn = self.meta_tables_ffn
+            load_ffn = self.config_ffn
         else:
             assert os.path.isfile( local_meta_tables_ffn ), f"Provided file path must be a valid file: {local_meta_tables_ffn}"
             load_ffn = local_meta_tables_ffn
@@ -498,11 +501,11 @@ class MetaTables( UIDandMetaInfo ):
     #==========================================================PUBLIC METHODS==========================================================
     def pull_from_xnat( self, write_ffn: Opt[Path]=None, verbose: Opt[bool] = False ) -> Opt[Path]:
         if write_ffn is None:
-            write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'config' ).file( self.meta_tables_fn ).get_copy( str( self.meta_tables_ffn ) )
+            write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( self.config_ffn )
         else:
             assert isinstance( write_ffn, Path ), f"Provided write file path must be a valid Path object: {write_ffn}"
             assert write_ffn.suffix == '.json', f"Provided write file path must have a '.json' extension: {write_ffn}"
-            write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'config' ).file( self.meta_tables_fn ).get_copy( str( write_ffn ) )
+            write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( write_ffn )
         self._load( write_ffn, verbose )
         if verbose:                     print( f'\t...Metatables successfully populated from XNAT data.' )
         
@@ -523,7 +526,7 @@ class MetaTables( UIDandMetaInfo ):
     def push_to_xnat( self, verbose: Opt[bool] = False ) -> None:
         self.ensure_primary_keys_validity()
         self.save( verbose )
-        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'config' ).file( self.meta_tables_fn ).put( self.meta_tables_ffn, content='META DATA', format='JSON', tags='DOC', overwrite=True )
+        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( 'config' ).file( self.config_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
         if verbose is True:             print( f'\t...Metatables successfully updated on XNAT!' )
 
 
@@ -534,9 +537,9 @@ class MetaTables( UIDandMetaInfo ):
         data = {'metadata': self.metadata, 'tables': tables_json }
         # json_str = json.dumps( data, indent=2, separators=( ',', ':' ) )
         json_str = self._custom_json_serializer( data )
-        with open( self.meta_tables_ffn, 'w' ) as f:
+        with open( self.config_ffn, 'w' ) as f:
             f.write( json_str )
-        if verbose:                     print( f'SUCCESS! --- saved metatables to: {self.meta_tables_ffn}' )
+        if verbose:                     print( f'SUCCESS! --- saved metatables to: {self.config_ffn}' )
 
 
     def is_user_registered( self, user_name: Opt[str] = None ) -> bool:

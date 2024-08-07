@@ -34,8 +34,9 @@ cd XNAT-Interact
 ```
 4. Create and then activate a virtual environment:
 ```bash
-python3 -m venv .my_venv_for_xnat_interact
+python -m venv .my_venv_for_xnat_interact
 ```
+  - Note: "python" may not work correctly if you have python 2 and python 3 both installed on your machine. If that is the case, use "python3".
 >Activate virtual environment using _Windows_:
 >```bash
 >.my_venv_for_xnat_interact\Scripts\activate 
@@ -50,7 +51,7 @@ You'll need to install [pip](https://pypi.org/project/pip/), too, by first downl
 >Intall pip using _Windows_:
 >```bash
 >curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
->python3 get-pip.py
+>python get-pip.py
 >pip --version
 >```
 >
@@ -66,7 +67,7 @@ pip install -r requirements.txt
 
 6. Run a test to verify correct installation:
 ```bash
-python3 src/tests/test_install.py
+python src/tests/test_install.py
 ```
 
 ===

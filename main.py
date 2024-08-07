@@ -68,16 +68,16 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
     form_exists = ORDataIntakeForm.prompt_until_valid_answer_given( 'Intake Form Declaration', acceptable_options=['1', '2'] )
     
     if form_exists == '1':
-        form_pn = input( f"\n\tPlease enter the full file path to the *parent folder* of the intake form:\t\t" )
+        form_pn = input( f"\n\tPlease enter the full path to the *parent folder* of the intake form:\t\t" )
         while not os.path.exists( form_pn ):
             print( f"\t\tThe provided path either (1) does not exist or (2) does not contain a 'RECONSTRUCTED_OR_DATA_INTAKE_FORM' in it. Please try again." )
-            form_pn = input( f"\n\tPlease enter the full file path to the *parent folder* of the intake form:\t\t" )
+            form_pn = input( f"\n\tPlease enter the full path to the *parent folder* of the intake form:\t\t" )
         try:
-            intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, parent_folder=form_pn, verbose=verbose, write_to_file=True )
+            intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, parent_folder=form_pn, verbose=verbose )
         except:
             raise ValueError( f"\t\tThe provided path did not lead to a successful intake form. Please try again, or contact the Data Librarian for help." )
     else:
-        intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose, write_to_file=True )
+        intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose )
     
     # Depending on the procedure type, create the appropriate source data object.
     if intake_form.ortho_procedure_type.upper() == 'ARTHROSCOPY':

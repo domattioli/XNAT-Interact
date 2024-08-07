@@ -1,17 +1,13 @@
 import json
 import os
-
+from pathlib import Path
 import cv2
 import numpy as np
-
 import pandas as pd
-
 from datetime import datetime
 from dateutil import parser
 import pytz
-
 import hashlib
-
 import tempfile
 
 from pyxnat import Interface
@@ -20,8 +16,6 @@ from pyxnat.core.resources import Project as pyxnatProject
 from typing import Optional as Opt, Union, Tuple, List as typehintList, Dict as typehintDict, AnyStr as typehintAnyStr
 
 from pydicom.uid import UID as pydicom_UID, generate_uid as generate_pydicomUID
-from pathlib import Path
-
 
 import matplotlib.pyplot as plt
 
@@ -37,6 +31,9 @@ class _local_variables:
     def __init__( self ):
         self._img_sizes = ( 256, 256 )
         self.__dict__.update( self._set_local_variables() )
+
+        # ensure that the temp folder exists on the local machine. Note sure that this will work for macs/unix
+        if not os.path.exists( self.tmp_data_dir ):     os.makedirs( self.tmp_data_dir )
 
 
     def _read_template_image( self, template_ffn: str ) -> np.ndarray:
@@ -54,11 +51,9 @@ class _local_variables:
         return '\n'.join([f'{k}:\t{v}' for k, v in self.__dict__.items()])
 
 
-    def _set_local_variables( self ) -> dict:
-        # DO NOT DELETE! This is the only place where these local variables/paths are defined.
+    def _set_local_variables( self ) -> dict: # !!DO NOT DELETE!! This is the only place where these local variables/paths are defined.
         repo_dir = os.getcwd()
-        # xnat_project_name = 'domSandBox' # original
-        # xnat_project_name = 'GROK_AHRQ_real' # another corrupted project.
+        # xnat_project_name = 'GROK_AHRQ_real' # original corrupted project.
         xnat_project_name = 'GROK_AHRQ_main'
         xnat_config_folder_name, config_fn = 'config', 'database_config.json'
         # doc_dir = os.path.join( repo_dir, 'doc' )

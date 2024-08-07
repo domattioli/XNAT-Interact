@@ -423,6 +423,7 @@ class SourceESVSession( ExperimentData ):
 
         # Zip the mp4 and dicom data to separate folders
         zipped_data, home_dir = {}, self.tmp_source_data_dir
+        num_dicom, num_mp4 = 0, 0
         with tempfile.TemporaryDirectory( dir=home_dir ) as mp4_temp_dir, \
             tempfile.TemporaryDirectory( dir=home_dir ) as dcm_temp_dir:
             for idx in range( len( self.df ) ): # Iterate through each row in the DataFrame, writing each to a temp directory before we zip it up and delete the unzipped folder.
@@ -434,10 +435,12 @@ class SourceESVSession( ExperimentData ):
                         metatables.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, item_uid=file_obj_rep.uid, # type: ignore
                                                 extra_columns_values = tmp, verbose=verbose
                                                 )
+                        num_dicom += 1
                 
                     elif isinstance( file_obj_rep, ArthroVideo ): # Don't need to add this to metatables because the diagnostic images (frames from the video) should suffice.
                         vid_ffn = os.path.join( self.intake_form.relevant_folder, str( self.df.loc[idx,'FN'] ) + '.mp4' )
                         shutil.copy( vid_ffn, os.path.join( mp4_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) + '.mp4' ) )
+                        num_mp4 += 1
 
                     else:
                         raise ValueError( f"Object representation of file at index {idx} is {type( file_obj_rep )}, which is neither an ArthroDiagnosticImage nor an ArthroVideo object." )
@@ -451,8 +454,8 @@ class SourceESVSession( ExperimentData ):
             zipped_data[dcm_zip_full_path] = { 'CONTENT': 'IMAGE', 'FORMAT': 'DICOM', 'TAG': 'POST_OP' }
 
         if verbose is True:
-            num_valid = self.df['IS_VALID'].sum() 
-            print( f'\t...Zipped folder of ({num_valid}/{len( self.df )}) dicom and mp4 files successfully written to:\n\t\t{dcm_zip_full_path}\n\t\t{mp4_zip_full_path}' )
+            num_valid = int( self.df['IS_VALID'].sum() )
+            print( f'\t...Zipped folder(s) of {num_dicom} dicom and {num_mp4} mp4 files successfully written to:\n\t\t{dcm_zip_full_path}\n\t\t{mp4_zip_full_path}' )
         return zipped_data, metatables
     
 

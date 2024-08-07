@@ -197,6 +197,9 @@ class ORDataIntakeForm( ResourceFile ):
         print( f'\n--- Surgical Procedure Information ---' )
         local_dict = {}
 
+        #Encode the options for acceptable institions as a list of integer strings
+        acceptable_institution_options_encoded = {str(i): institution for i, institution in enumerate( metatables.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ) )}
+
         acceptable_institutions = metatables.list_of_all_items_in_table( table_name='ACQUISITION_SITES' )
         print( f'\t(5/35)\tInstitution Name\t--\tPlease Copy-and-Paste from the following list:\t{acceptable_institutions}' )
         self._institution_name = self.prompt_until_valid_answer_given( 'Institution Name', acceptable_options=acceptable_institutions )
@@ -218,27 +221,35 @@ class ORDataIntakeForm( ResourceFile ):
         local_dict['PROCEDURE_NAME'] = str( self.ortho_procedure_name ) # type: ignore
 
         if self.form_is_available:
+            print( f'\n\t(8/35)\tDo You know the Epic End Time?\t--\tPlease enter "1" for Yes of "2" for No.' )# (HH:MM) ' )
+            known_end_time = self.prompt_until_valid_answer_given( 'Known EPIC End Time', acceptable_options=['1', '2'] )
+
             valid_times, num_attempts, max_attempts = False, 0, 2
             while not valid_times and num_attempts < max_attempts:
-                epic_start_time = self.get_time_input( '\n\t(8/35)\tEpic Start Time (HH:MM): ' )
+                epic_start_time = self.get_time_input( '\n\t(9/35)\tEpic Start Time (HH:MM): ' )
 
-                epic_end_time = self.get_time_input( '\t(9/35)\tEpic End Time (HH:MM): ' )
-                if epic_start_time and epic_end_time:  # If both are not None
-                    if epic_start_time < epic_end_time: valid_times = True
+                if known_end_time == '1':
+                    epic_end_time = self.get_time_input( '\t(9/35)\tEpic End Time (HH:MM): ' )
+                    if epic_start_time and epic_end_time:  # If both are not None
+                        if epic_start_time < epic_end_time: valid_times = True
+                        else:
+                            print( f'\tAttempt {num_attempts + 1} failed:\n\t\tStart Time must be before End Time. You entered {epic_start_time} and {epic_end_time}.' )
+                            num_attempts += 1
                     else:
-                        print( f'\tAttempt {num_attempts + 1} failed:\n\t\tStart Time must be before End Time. You entered {epic_start_time} and {epic_end_time}.' )
+                        print( f'\tAttempt {num_attempts + 1} failed:\n\t\tInvalid times provided. Please use the HH:MM format.' )
                         num_attempts += 1
                 else:
-                    print( f'\tAttempt {num_attempts + 1} failed:\n\t\tInvalid times provided. Please use the HH:MM format.' )
-                    num_attempts += 1
-            if      not valid_times:    raise InvalidInputError( 'Failed to provide valid start and end times after multiple attempts.' )
+                    valid_times, num_attempts = True, max_attempts # Exit the while loop
+            if      not valid_times:
+                print( '\n\t--- Failed to provide valid times after 2 attempts. Keeping last-entered start time and ignoring end-time (if this is unacceptable, press Ctrl-C to restart)!' )
+                self._epic_start_time, self._epic_end_time = epic_start_time, None
             else:   self._epic_start_time, self._epic_end_time = epic_start_time, epic_end_time
             local_dict['EPIC_START_TIME'], local_dict['EPIC_END_TIME'] = self.epic_start_time, self.epic_end_time
         else:
-            print( f'\n\t(10/35)\tDo you know the Operation or EPIC Start Time\t--\tPlease enter "1" for Yes or "2" for No' )
-            known_start_time = self.prompt_until_valid_answer_given( 'Known Start Time', acceptable_options = list( ['1', '2'] ) )
+            print( f'\n\t(10/35)\tDo you know the Operation or EPIC Start Time\t--\tPlease enter "1" for Yes or "2" for No.' )
+            known_start_time = self.prompt_until_valid_answer_given( 'Known EPIC Start Time', acceptable_options = list( ['1', '2'] ) )
             if known_start_time == '1':
-                epic_start_time = self.get_time_input( '\t(10/35)\tEpic Start Time (HH:MM):\t' )
+                epic_start_time = self.get_time_input( '\t(10/35)\tKnown Epic Start Time (HH:MM):\t' )
             else: epic_start_time = datetime.now().replace( hour=0, minute=0, second=0, microsecond=0 ).strftime( '%H:%M:%S')  # Assign midnight-today as the default start time
             local_dict['EPIC_START_TIME'] = epic_start_time
             self._epic_start_time = epic_start_time

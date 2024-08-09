@@ -2,6 +2,7 @@
 First things First:
 - You will need to be added as a member to the RPACS XNAT server by the Data Librarian.
     - You must be using your VPN when you access the link included on the invitation email!
+    - Make sure that you register a new account with your HawkID.
 
 Some scripts for getting your source and derived fluoroscopic image data to and from your team's XNAT RPACS server.
 

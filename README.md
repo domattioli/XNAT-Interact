@@ -1,4 +1,7 @@
 # XNAT-Interact
+First things First:
+- You will need to be added as a member to the RPACS XNAT server by the Data Librarian.
+
 Some scripts for getting your source and derived fluoroscopic image data to and from your team's XNAT RPACS server.
 
 
@@ -67,7 +70,7 @@ pip install -r requirements.txt
 
 6. Run a test to verify correct installation:
 ```bash
-python src/tests/test_install.py
+python update_and_test.py
 ```
 
 ===

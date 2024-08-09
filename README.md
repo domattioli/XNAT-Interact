@@ -84,7 +84,8 @@ pip install XNAT-Interact
 
 ---
 ## Example Usage
-***If you are not running the following code from a university machine, you must make sure you are logged into the [UIowa Cisco VPN](https://its.uiowa.edu/support/article/1876) before trying to run these commands.
+#### UIowa VPN -- Required
+- If you are not running the following code from a university machine, you must make sure you are logged into the [UIowa Cisco VPN](https://its.uiowa.edu/support/article/1876) before trying to run these commands.
 
 #### Best Practice: run the following script each time you begin a new session:
 ```bash

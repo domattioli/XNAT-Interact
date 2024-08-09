@@ -208,7 +208,8 @@ class ORDataIntakeForm( ResourceFile ):
         acceptable_institution_options_encoded = {str(i+1): institution for i, institution in enumerate( metatables.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ) )}
         options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_institution_options_encoded.items()] )
         print( f'\t(5/35)\tInstitution Name\t--\tPlease select from the following options:\n{options_str}' )
-        self._institution_name = self.prompt_until_valid_answer_given( 'Institution Name', acceptable_options=list( acceptable_institution_options_encoded ) )
+        institution_name_key = self.prompt_until_valid_answer_given( 'Institution Name', acceptable_options=list( acceptable_institution_options_encoded ) )
+        self._institution_name = acceptable_institution_options_encoded[institution_name_key]
         local_dict['INSTITUTION_NAME'] = self.institution_name
 
         print( f'\n\t(6/35)\tType of Orthro Procedure\t--\tPlease enter "1" for Trauma or "2" for Arthro' )
@@ -274,7 +275,7 @@ class ORDataIntakeForm( ResourceFile ):
         else:                       self._OR_location = OR_location
         local_dict['OR_LOCATION'] = self.OR_location
 
-        print( f'\n\t(13/35)\t Do you know the Supervising Surgeon\'s HawkID\t--\tPlease enter "1" for Yes or "2" for no:' )
+        print( f'\n\t(13/35)\tDo you know the Supervising Surgeon\'s HawkID\t--\tPlease enter "1" for Yes or "2" for no:' )
         known_supervising_hawkid = self.prompt_until_valid_answer_given( 'Known Supervising Surgeon HawkID', acceptable_options=['1', '2'] )
         if known_supervising_hawkid == '1':
             # create an encoding of the acceptable options for the supervising surgeon
@@ -283,6 +284,7 @@ class ORDataIntakeForm( ResourceFile ):
 
             print( f'\n\t(13/35)\tSupervising Surgeon HawkID\t--\tPlease select from the following list:\n{options_str}')
             supervising_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'Supervising Surgeon\'s HAWKID', acceptable_options = list( acceptable_supervising_surgeon_options_encoded ) )
+            supervising_surgeon_hawk_id = acceptable_supervising_surgeon_options_encoded[supervising_surgeon_hawk_id]
         else:   supervising_surgeon_hawk_id = 'Unknown'.upper()
 
         print( f"\n\t(14/35)\tSupervising Surgeon Presence\t--\tEnter '1' for Present, '2' for Retrospective Review, or '3' for Unknown:" )
@@ -294,7 +296,7 @@ class ORDataIntakeForm( ResourceFile ):
         self._supervising_surgeon_hawk_id, self._supervising_surgeon_presence = metatables.get_uid( 'Surgeons', supervising_surgeon_hawk_id ), supervising_surgeon_presence
         local_dict['SUPERVISING_SURGEON_UID'], local_dict['SUPERVISING_SURGEON_PRESENCE'] = self.supervising_surgeon_hawk_id, self.supervising_surgeon_presence
 
-        print( f'\n\t(15/35)\t Do you know the Performing Surgeon\'s HawkID\t--\tPlease enter "1" for Yes or "2" for no:' )
+        print( f'\n\t(15/35)\tDo you know the Performing Surgeon\'s HawkID\t--\tPlease enter "1" for Yes or "2" for no:' )
         known_performer_hawk_id = self.prompt_until_valid_answer_given( 'Known Performing Surgeon HawkID', acceptable_options=['1', '2'] )
         if known_performer_hawk_id == '1':
             # create an encoding of the acceptable options for the performing surgeon
@@ -303,6 +305,7 @@ class ORDataIntakeForm( ResourceFile ):
             
             print( f'\n\t(15/35)\tPerforming Surgeon HawkID\t--\tPlease select from the following list:\n{options_str}' )
             performing_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'Performing Surgeon\'s HAWKID', acceptable_options=list( acceptable_performing_surgeon_options_encoded ) )
+            performing_surgeon_hawk_id = acceptable_performing_surgeon_options_encoded[performing_surgeon_hawk_id]
         else:   performing_surgeon_hawk_id = 'Unknown'.upper()
 
         print( f"\n\t(16/35)\tDo you know the Performing Surgeon\'s # of Years in Residency?\t--\tEnter '1' for Yes or '2' for No:" )
@@ -311,7 +314,7 @@ class ORDataIntakeForm( ResourceFile ):
             performer_year_in_residency = input( f'\n\t(16/35)\tPerforming Surgeon\'s Years in Residency:\t')
         else: performer_year_in_residency = 'Unknown'.upper()
         
-        print( f'\n\t(17/35)\tDo you know how many similar prior cases have been logged by the performing surgeon?\n\tEnter "1" for Yes or "2" for No \t--\tNOTE: 0 prior cases ***is NOT the same thing*** as unknown!! Please Enter "1" for Yes and then declare 0 known cases in the following prompt.')
+        print( f'\n\t(17/35)\tDo you know how many similar prior cases have been logged by the performing surgeon?\tEnter "1" for Yes or "2" for No\n\t--\tNOTE: 0 prior cases ***is NOT the same thing*** as unknown!! Please Enter "1" for Yes and then declare 0 known cases in the following prompt.')
         known_number_of_similar_logged_cases = self.prompt_until_valid_answer_given( '# of Similar Cases Logged', acceptable_options=['1', '2'] )
         if known_number_of_similar_logged_cases == '1':
 
@@ -385,7 +388,7 @@ class ORDataIntakeForm( ResourceFile ):
     def _prompt_user_for_skills_assessment_info( self, metatables: MetaTables ):
         print( f'\n\n--- Skills Assessment Information ---' )
     
-        print( f'\t(26/35)\tWas a Skills Assessment requested for this procedure?\n\tEnter "1" for Yes, "2" for No, or "3" for unknown.')
+        print( f'\t(26/35)\tWas a Skills Assessment requested for this procedure?\n\tEnter "1" for Yes, "2" for No, or "3" for Unknown.')
         assessment_requested = self.prompt_until_valid_answer_given( 'Skills Assessment Request', acceptable_options=['1', '2', '3'] )
         if assessment_requested == '1':
 

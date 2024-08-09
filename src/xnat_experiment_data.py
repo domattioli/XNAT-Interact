@@ -139,9 +139,11 @@ class ExperimentData():
 
         # Try to publish the data to xnat; if it fails, delete the subject instance
         try:
+            print( '\t...Attempting publish_to_xnat subroutine...' )
             self.publish_to_xnat( xnat_connection=xnat_connection, validated_login=validated_login, zipped_data=zipped_data, verbose=verbose, delete_zip=delete_zip )
+            print( f'\t...Successfully completed publish_to_xnat subroutine!' )
         except Exception as e:
-            print( f'\tError: failed to publish data to xnat!\n\t...Attempting to delete subject...' )
+            print( f'\tError: failure in publish_to_xnat subroutine!' )
             if subj_inst.exists(): # type: ignore
                 print( f'\t...Subject exists; deleting subject...' )
                 subj_inst.delete() # type: ignore
@@ -152,11 +154,11 @@ class ExperimentData():
 
         # If successful, try to push the intake form to xnat
         try: 
-            print( f'\n\tfinished publishing data to xnat\nnow pushing the config file to xnat' )
+            print( f'\tAttemting configuration push_to_xnat subroutine...' )
             metatables.push_to_xnat( verbose=verbose )
-            print( f'---'*50 + f'\thello marcus\t' + '---'*50 )
+            print( f'\t...Successfully completed push_to_xnat subroutine!' )
         except Exception as e:
-            print( f'\tError: failed to push intake form to xnat!\n\t...Attempting to delete subject...' )
+            print( f'\tError: failure in push_to_xnat subroutine' )
             if subj_inst.exists(): # type: ignore
                 print( f'\t...Subject exists; deleting subject...' )
                 subj_inst.delete() # type: ignore

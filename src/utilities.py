@@ -474,10 +474,10 @@ class MetaTables( UIDandMetaInfo ):
     def _init_table_w_default_cols( self ) -> pd.DataFrame: return pd.DataFrame( columns=self.default_meta_table_columns ).assign( CREATED_DATE_TIME=self.now_datetime, CREATED_BY=self.accessor_uid )
     
 
-    def _validate_login_for_important_functions( self ) ->  None:
+    def _validate_login_for_important_functions( self, assert_librarian: Opt[bool]=False ) ->  None:
         assert self.login_info.is_valid, f"Provided login info must be validated before accessing metatables: {self.login_info}"
         assert self.is_user_registered(), f'User {self.accessor_uid} must first be registed before saving metatables.'
-        assert self.get_name( table_name='REGISTERED_USERS', item_uid=self.accessor_uid ) == 'DMATTIOLI', f'Invalid credentials for saving metatables data.'
+        if assert_librarian:    assert self.accessor_username.upper() == 'DMATTIOLI', f'Only user DMATTIOLI can push metatables to the xnat server.'
     
     
     def _custom_json_serializer( self, data, indent=4 ):
@@ -519,10 +519,7 @@ class MetaTables( UIDandMetaInfo ):
 
 
     def push_to_xnat( self, verbose: Opt[bool] = False ) -> None:
-        print( f'\tstarting push to xnat')
-        print( f'\tensuring primary keys validity')
         self.ensure_primary_keys_validity()
-        print( f'\tprimary key validity ensured')
         print( f'\tsaving')
         self.save( verbose )
         print( f'\tsaved')
@@ -534,11 +531,20 @@ class MetaTables( UIDandMetaInfo ):
 
     def save( self, verbose: Opt[bool] = False ) -> None: # Convert all tables to JSON; Write the data to the file
         '''Only saves locally. To save to the server, all the 'catalog_new_data' method(s) in the experiment class(es) must be called.'''
-        self._validate_login_for_important_functions()
+        print( f'\tvalidating login info')
+        self._validate_login_for_important_functions( assert_librarian=False ) # To-do: is this necessary if the user musts create a valid xnat connection first (which should check the same thing)?
+        print( f'\tvalidating login info done')
+        print( f'\tcreating a table')
         tables_json = {name: df.to_dict( 'records' ) for name, df in self.tables.items()}
+        print( f'\tcreated a table')
+        print( f'\tcreating data')
         data = {'metadata': self.metadata, 'tables': tables_json }
+        print( f'\tcreated data')
+        print( f'\tserializing data')
         # json_str = json.dumps( data, indent=2, separators=( ',', ':' ) )
         json_str = self._custom_json_serializer( data )
+        print( f'\tserialized data')
+        print( f'\twriting to file')
         with open( self.config_ffn, 'w' ) as f:         f.write( json_str )
         if verbose:                     print( f'\tSUCCESS! --- saved metatables to: {self.config_ffn}\n' )
 
@@ -550,7 +556,7 @@ class MetaTables( UIDandMetaInfo ):
 
 
     def register_new_user( self, user_name: str, verbose: Opt[bool] = False ):
-        self._validate_login_for_important_functions()
+        self._validate_login_for_important_functions( assert_librarian=True )   
         if not self.is_user_registered( user_name ):
             self.add_new_item( 'REGISTERED_USERS', user_name )
         if verbose:                     print( f'\tSUCCESS! --- Registered new user: {user_name}\n' )

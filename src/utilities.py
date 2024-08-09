@@ -385,8 +385,8 @@ class MetaTables( UIDandMetaInfo ):
         # assert self.login_info.validated_username.upper() == 'DMATTIOLI', f'Only user DMATTIOLI can instantiate the metatables.json file.'
         self._validate_login_for_important_functions( assert_librarian=True )
         now_datetime = self.now_datetime
-        dmattioli_uid_init = self.generate_uid()
-        default_users = { self.data_librarian: [dmattioli_uid_init, now_datetime, dmattioli_uid_init] }
+        librarian_uid_init = self.generate_uid()
+        default_users = { self.data_librarian: [librarian_uid_init, now_datetime, librarian_uid_init] }
         # if self.accessor_username not in ( k.upper() for k in default_users.keys() ):
         #     default_users[self.accessor_username] = [self.generate_uid(), now_datetime, 'INIT']
         data = [[name] + info for name, info in default_users.items()]

@@ -154,7 +154,7 @@ class ExperimentData():
 
         # If successful, try to push the intake form to xnat
         try: 
-            print( f'\tAttemting configuration push_to_xnat subroutine...' )
+            print( f'\tAttempting push_to_xnat subroutine...' )
             metatables.push_to_xnat( verbose=verbose )
             print( f'\t...Successfully completed push_to_xnat subroutine!' )
         except Exception as e:

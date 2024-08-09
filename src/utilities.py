@@ -519,9 +519,16 @@ class MetaTables( UIDandMetaInfo ):
 
 
     def push_to_xnat( self, verbose: Opt[bool] = False ) -> None:
+        print( f'\tstarting push to xnat')
+        print( f'\tensuring primary keys validity')
         self.ensure_primary_keys_validity()
+        print( f'\tprimary key validity ensured')
+        print( f'\tsaving')
         self.save( verbose )
+        print( f'\tsaved')
+        print( f'\tpushing file to xnat')
         self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
+        print( f'\tfile pushed')
         if verbose is True:             print( f'\t...Metatables (config.json) successfully updated on XNAT!\n' )
 
 

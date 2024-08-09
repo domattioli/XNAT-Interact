@@ -233,10 +233,10 @@ class ORDataIntakeForm( ResourceFile ):
 
             valid_times, num_attempts, max_attempts = False, 0, 2
             while not valid_times and num_attempts < max_attempts:
-                epic_start_time = self.get_time_input( '\n\t(9/35)\tEpic Start Time (HH:MM): ' )
+                epic_start_time = self.get_time_input( '\n\t(9.1/35)\tEpic Start Time (HH:MM): ' )
 
                 if known_end_time == '1':
-                    epic_end_time = self.get_time_input( '\t(9/35)\tEpic End Time (HH:MM): ' )
+                    epic_end_time = self.get_time_input( '\n\t(9.2/35)\tEpic End Time (HH:MM): ' )
                     if epic_start_time and epic_end_time:  # If both are not None
                         if epic_start_time < epic_end_time: valid_times = True
                         else:
@@ -247,7 +247,8 @@ class ORDataIntakeForm( ResourceFile ):
                         num_attempts += 1
                 else:
                     valid_times, num_attempts = True, max_attempts # Exit the while loop
-            if      not valid_times:
+                    epic_end_time = None
+            if not valid_times:
                 print( '\n\t--- Failed to provide valid times after 2 attempts. Keeping last-entered start time and ignoring end-time (if this is unacceptable, press Ctrl-C to restart)!' )
                 self._epic_start_time, self._epic_end_time = epic_start_time, None
             else:   self._epic_start_time, self._epic_end_time = epic_start_time, epic_end_time

@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 # Define list for allowable imports from this module -- do not want to import _local_variables.
 __all__ = ['UIDandMetaInfo', 'XNATLogin', 'MetaTables', 'XNATConnection', 'USCentralDateTime', 'ImageHash']
 
-
+data_librarian_hawk_id = 'dmattioli' # Update as needed.
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Helper class for inserting all information that should only be used locally within the _local_variables class def below:
@@ -76,6 +76,7 @@ class _local_variables:
                         'xnat_config_folder_name': xnat_config_folder_name,
                         'default_meta_table_columns' : ['NAME', 'UID', 'CREATED_DATE_TIME', 'CREATED_BY'],
                         'template_img_dir' : template_img_dir,
+                        'data_librarian': data_librarian_hawk_id.upper(),
                         # 'template_img_hash' : ImageHash( self._read_template_image( template_img_dir ) ).hashed_img
                         'template_img' : self._read_template_image( template_img_dir ),
                         'acceptable_img_dtypes' : [np.uint8, np.int8, np.uint16, np.int16, np.uint32, np.int32, np.uint64, np.int64],
@@ -136,6 +137,8 @@ class UIDandMetaInfo:
     def mturk_batch_col_names( self )           -> list:                return self.local_variables.mturk_batch_col_names
     @property
     def redacted_string( self )                 -> str:                 return self.local_variables.redacted_string
+    @property
+    def data_librarian( self )                  -> str:                 return self.local_variables.data_librarian
 
 
     @property
@@ -377,12 +380,13 @@ class MetaTables( UIDandMetaInfo ):
 
     def _instantiate_json_file( self ):
         '''#Instantiate with a registered users table.'''
-        assert self.login_info.is_valid, f"Provided login info must be validated before loading metatables: {self.login_info}"
-        # assert self.accessor_uid is not None, f'BUG: shouldnt arrive to this point in the code without having an established username; receive: {self.accessor_uid}.' # commenting out on 6/19/2024 bc this function should only be called once, when I (dom) need to create the metatables.json file in the first place.
-        assert self.login_info.validated_username.upper() == 'DMATTIOLI', f'Only user DMATTIOLI can instantiate the metatables.json file.'
+        # assert self.login_info.is_valid, f"Provided login info must be validated before loading metatables: {self.login_info}"
+        # # assert self.accessor_uid is not None, f'BUG: shouldnt arrive to this point in the code without having an established username; receive: {self.accessor_uid}.' # commenting out on 6/19/2024 bc this function should only be called once, when I (dom) need to create the metatables.json file in the first place.
+        # assert self.login_info.validated_username.upper() == 'DMATTIOLI', f'Only user DMATTIOLI can instantiate the metatables.json file.'
+        self._validate_login_for_important_functions( assert_librarian=True )
         now_datetime = self.now_datetime
         dmattioli_uid_init = self.generate_uid()
-        default_users = { 'DMATTIOLI'.upper(): [dmattioli_uid_init, now_datetime, dmattioli_uid_init] }
+        default_users = { self.data_librarian: [dmattioli_uid_init, now_datetime, dmattioli_uid_init] }
         # if self.accessor_username not in ( k.upper() for k in default_users.keys() ):
         #     default_users[self.accessor_username] = [self.generate_uid(), now_datetime, 'INIT']
         data = [[name] + info for name, info in default_users.items()]
@@ -477,7 +481,7 @@ class MetaTables( UIDandMetaInfo ):
     def _validate_login_for_important_functions( self, assert_librarian: Opt[bool]=False ) ->  None:
         assert self.login_info.is_valid, f"Provided login info must be validated before accessing metatables: {self.login_info}"
         assert self.is_user_registered(), f'User {self.accessor_uid} must first be registed before saving metatables.'
-        if assert_librarian:    assert self.accessor_username.upper() == 'DMATTIOLI', f'Only user DMATTIOLI can push metatables to the xnat server.'
+        if assert_librarian:    assert self.accessor_username.upper() == self.data_librarian, f'Only user {self.data_librarian} can push metatables to the xnat server.'
     
     
     def _custom_json_serializer( self, data, indent=4 ):

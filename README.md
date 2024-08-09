@@ -70,7 +70,7 @@ pip install -r requirements.txt
 
 6. Run a test to verify correct installation:
 ```bash
-python src/tests/test_install.py
+python update_and_test.py
 ```
 
 ===

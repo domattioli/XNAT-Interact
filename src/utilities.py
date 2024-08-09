@@ -53,8 +53,8 @@ class _local_variables:
 
     def _set_local_variables( self ) -> dict: # !!DO NOT DELETE!! This is the only place where these local variables/paths are defined.
         repo_dir = os.getcwd()
-        # xnat_project_name = 'GROK_AHRQ_real' # original corrupted project.
-        xnat_project_name = 'GROK_AHRQ_main'
+        xnat_project_name = 'domSandBox' # original corrupted project.
+        # xnat_project_name = 'GROK_AHRQ_main'
         xnat_config_folder_name, config_fn = 'config', 'database_config.json'
         # doc_dir = os.path.join( repo_dir, 'doc' )
         # data_dir = doc_dir.replace( 'doc', 'data' )
@@ -532,8 +532,7 @@ class MetaTables( UIDandMetaInfo ):
         data = {'metadata': self.metadata, 'tables': tables_json }
         # json_str = json.dumps( data, indent=2, separators=( ',', ':' ) )
         json_str = self._custom_json_serializer( data )
-        with open( self.config_ffn, 'w' ) as f:
-            f.write( json_str )
+        with open( self.config_ffn, 'w' ) as f:         f.write( json_str )
         if verbose:                     print( f'\tSUCCESS! --- saved metatables to: {self.config_ffn}\n' )
 
 

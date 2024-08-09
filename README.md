@@ -88,7 +88,8 @@ pip install XNAT-Interact
 ## Example Usage
 #### UIowa VPN -- Required
 - If you are not running the following code from a university machine, you must make sure you are logged into the [UIowa Cisco VPN](https://its.uiowa.edu/support/article/1876) before trying to run these commands.
-
+- Note: You cannot go back once you begin one of the tasks (e.g., uploading a case). If you make a mistake then I suggect you click Ctrl-C to exit and then restart your task.
+  
 #### Best Practice: run the following script each time you begin a new session:
 ```bash
 python update_and_test.py

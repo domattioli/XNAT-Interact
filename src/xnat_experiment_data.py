@@ -152,8 +152,11 @@ class ExperimentData():
 
         # If successful, try to push the intake form to xnat
         try: 
+            print( f'\n\tfinished publishing data to xnat\nnow pushing the config file to xnat' )
             metatables.push_to_xnat( verbose=verbose )
+            print( f'---'*50 + f'\thello marcus\t' + '---'*50 )
         except Exception as e:
+            print( f'\tError: failed to push intake form to xnat!\n\t...Attempting to delete subject...' )
             if subj_inst.exists(): # type: ignore
                 print( f'\t...Subject exists; deleting subject...' )
                 subj_inst.delete() # type: ignore

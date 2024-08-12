@@ -74,7 +74,6 @@ class _local_variables:
                         'default_meta_table_columns' : ['NAME', 'UID', 'CREATED_DATE_TIME', 'CREATED_BY'],
                         'template_img_dir' : template_img_dir,
                         'data_librarian': data_librarian_hawk_id.upper(),
-                        # 'template_img_hash' : ImageHash( self._read_template_image( template_img_dir ) ).hashed_img
                         'template_img' : self._read_template_image( template_img_dir ),
                         'acceptable_img_dtypes' : [np.uint8, np.int8, np.uint16, np.int16, np.uint32, np.int32, np.uint64, np.int64],
                         'required_img_size_for_hashing' : self._img_sizes,

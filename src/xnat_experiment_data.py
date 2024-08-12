@@ -138,32 +138,51 @@ class ExperimentData():
         subj_inst, _, _ = self._select_objects( xnat_connection=xnat_connection, subj_qs=subj_qs, exp_qs=exp_qs, scan_qs=scan_qs, files_qs=files_qs )
 
         # Try to publish the data to xnat; if it fails, delete the subject instance
+        status_text = f'\t...Attempting to publish {self.schema_prefix_str} session to XNAT...'
         try:
-            print( '\t...Attempting publish_to_xnat subroutine...' )
-            self.publish_to_xnat( xnat_connection=xnat_connection, validated_login=validated_login, zipped_data=zipped_data, verbose=verbose, delete_zip=delete_zip )
-            print( f'\t...Successfully completed publish_to_xnat subroutine!' )
-        except Exception as e:
-            print( f'\tError: failure in publish_to_xnat subroutine!' )
-            if subj_inst.exists(): # type: ignore
-                print( f'\t...Subject exists; deleting subject...' )
-                subj_inst.delete() # type: ignore
-                print( f'\t...Subject deleted.' )
-                print( f'\tDo not try to upload this case again without contacting the data librarian!')
-                print( f'\tError given bu "publish_to_xnat":\n{e}' )
-            return metatables
+            try:
+                self.publish_to_xnat( xnat_connection=xnat_connection, validated_login=validated_login, zipped_data=zipped_data, verbose=verbose, delete_zip=delete_zip )
+                status_text = f'\t...Successfully published {self.schema_prefix_str} session to XNAT!\nAttempting to push metatables to XNAT...'
+            except Exception as e:
+                status_text = f'\t!!! Failed to publish {self.schema_prefix_str} session to XNAT!\nChecking if subject was successfully pushed to xnat...'
+                if subj_inst.exists(): # type: ignore
+                    status_text += f'\n\t...Subject exists; attempting to delete subject...'
+                    subj_inst.delete() # type: ignore
+                    status_text += f'\n\t...Subject deleted.'
+                    print( f'\n\t!!!Do not try to upload this case again without contacting the data librarian!!!')
+                return metatables
 
-        # If successful, try to push the intake form to xnat
-        try: 
-            print( f'\tAttempting push_to_xnat subroutine...' )
-            metatables.push_to_xnat( verbose=verbose )
-            print( f'\t...Successfully completed push_to_xnat subroutine!' )
-        except Exception as e:
-            print( f'\tError: failure in push_to_xnat subroutine' )
-            if subj_inst.exists(): # type: ignore
-                print( f'\t...Subject exists; deleting subject...' )
-                subj_inst.delete() # type: ignore
-                print( f'\t...Subject deleted.' )
+            # If successful, try to push the metatables config to xnat
+            try: 
+                metatables.push_to_xnat( verbose=verbose )
+                status_text = f'\t...Successfully pushed config file to XNAT!'
+            except Exception as e:
+                status_text = f'\t!!! Failed to push config file to XNAT!\nChecking if subject was successfully pushed to xnat...'
+                if subj_inst.exists(): # type: ignore
+                    status_text += f'\n\t...Subject exists; attempting to delete subject...'
+                    subj_inst.delete() # type: ignore
+                    status_text += f'\n\t...Subject deleted.'
+        except:
+            self._write_error_log_file( metatables=metatables, validated_login=validated_login, status_text=status_text, error_message=e )
+            raise
         return metatables
+    
+    def _write_error_log_file( self, metatables: MetaTables, validated_login: XNATLogin, status_text: str, error_message: Exception ) -> str:
+        # Initialize a text that will eventually be written to a file, beginning with the date, time, user's hawkid, , whether the subject exists on xnat, whether the metatables were updates, and the error message
+        text = f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n'
+        text += f'User: {validated_login.validated_username}\n'
+        text += f'Attempted Session Creation Type: {self.schema_prefix_str}\n'
+        text += f'Intake Form:\n{self.intake_form}\n'
+        text += status_text + f'\n'
+        text += f"\n{'---'*25}\n"
+        text += f'Error Message:\n{error_message}\n'
+
+        # Write the text to a file in the user's downloads folder
+        failed_ffn = Path.home() / Path( 'Downloads' ) / Path( f'FAILED_{self.schema_prefix_str}_SESSION_CREATION_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.txt' )
+        with open( failed_ffn, 'w' ) as f: f.write( text )
+        print( f'\t--- Log file detailing the failed {self.schema_prefix_str} session creation has been written to:\n\t{failed_ffn}\n\n\tPlease notify the Data Librarian ({metatables.data_librarian}).' )
+        return text
+
     
 
 

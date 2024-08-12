@@ -25,14 +25,6 @@ __all__ = ['UIDandMetaInfo', 'XNATLogin', 'MetaTables', 'XNATConnection', 'USCen
 
 
 data_librarian_hawk_id = 'dmattioli' # Update as needed.
-# xnat_project_name = 'domSandBox' # original corrupted project.
-# xnat_project_name = 'GROK_AHRQ_main' # another corrupted project -- added a user who wasnt registered, lost ability to do anything except add new data.
-xnat_project_name = 'GROK_AHRQ_Data'
-xnat_url = r'https://rpacs.iibi.uiowa.edu/xnat/'
-xnat_config_folder_name, config_fn = 'config', 'database_config.json'
-template_img_dir = os.path.join( os.getcwd(), 'data', 'image_templates', 'unwanted_dcm_image_template.png' )
-tmp_data_dir = os.path.join( tempfile.gettempdir(), 'XNAT_Interact' ) # create a directory with the software name in the user's Temp folder.
-redacted_string = "REDACTED PYTHON-TO-XNAT UPLOAD SCRIPT"
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Helper class for inserting all information that should only be used locally within the _local_variables class def below:
@@ -61,6 +53,14 @@ class _local_variables:
 
 
     def _set_local_variables( self ) -> dict: # !!DO NOT DELETE!! This is the only place where these local variables/paths are defined.
+        # xnat_project_name = 'domSandBox' # original corrupted project.
+        # xnat_project_name = 'GROK_AHRQ_main' # another corrupted project -- added a user who wasnt registered, lost ability to do anything except add new data.
+        xnat_project_name = 'GROK_AHRQ_Data'
+        xnat_url = r'https://rpacs.iibi.uiowa.edu/xnat/'
+        xnat_config_folder_name, config_fn = 'config', 'database_config.json'
+        template_img_dir = os.path.join( os.getcwd(), 'data', 'image_templates', 'unwanted_dcm_image_template.png' )
+        tmp_data_dir = os.path.join( tempfile.gettempdir(), 'XNAT_Interact' ) # create a directory with the software name in the user's Temp folder.
+        redacted_string = "REDACTED PYTHON-TO-XNAT UPLOAD SCRIPT"
         local_vars =  {
                         # 'doc_dir': doc_dir,
                         # 'data_dir': data_dir,
@@ -376,9 +376,6 @@ class MetaTables( UIDandMetaInfo ):
 
     def _instantiate_json_file( self ):
         '''#Instantiate with a registered users table.'''
-        # assert self.login_info.is_valid, f"Provided login info must be validated before loading metatables: {self.login_info}"
-        # # assert self.accessor_uid is not None, f'BUG: shouldnt arrive to this point in the code without having an established username; receive: {self.accessor_uid}.' # commenting out on 6/19/2024 bc this function should only be called once, when I (dom) need to create the metatables.json file in the first place.
-        # assert self.login_info.validated_username.upper() == 'DMATTIOLI', f'Only user DMATTIOLI can instantiate the metatables.json file.'
         self._validate_login_for_important_functions( assert_librarian=True )
         now_datetime = self.now_datetime
         librarian_uid_init = self.generate_uid()
@@ -447,8 +444,7 @@ class MetaTables( UIDandMetaInfo ):
 
     def _load( self, local_meta_tables_ffn: Opt[Path], verbose: Opt[bool] = False ) -> None:
         assert self.login_info.is_valid, f"Provided login info must be validated before loading metatables: {self.login_info}"
-        if local_meta_tables_ffn is None:
-            load_ffn = self.config_ffn
+        if local_meta_tables_ffn is None:   load_ffn = self.config_ffn
         else:
             assert os.path.isfile( local_meta_tables_ffn ), f"Provided file path must be a valid file: {local_meta_tables_ffn}"
             load_ffn = local_meta_tables_ffn
@@ -456,8 +452,7 @@ class MetaTables( UIDandMetaInfo ):
             data = json.load( f )
         self._tables = { name: pd.DataFrame.from_records( table ) for name, table in data['tables'].items()}
         self._metadata = data['metadata']
-        if verbose:
-            print( f'\tSUCCESS! -- Loaded metatables from: {load_ffn}\n' )
+        if verbose:         print( f'\tSUCCESS! -- Loaded config file from: {load_ffn}\n' )
     
 
     def _update_metadata( self, new_table_extra_columns: Opt[dict] = None ) -> None:
@@ -475,9 +470,9 @@ class MetaTables( UIDandMetaInfo ):
     
 
     def _validate_login_for_important_functions( self, assert_librarian: Opt[bool]=False ) ->  None:
-        assert self.login_info.is_valid, f"Provided login info must be validated before accessing metatables: {self.login_info}"
-        assert self.is_user_registered(), f'User {self.accessor_uid} must first be registed before saving metatables.'
-        if assert_librarian:    assert self.accessor_username.upper() == self.data_librarian, f'Only user {self.data_librarian} can push metatables to the xnat server.'
+        assert self.login_info.is_valid, f"Provided login info must be validated before accessing config file: {self.login_info}"
+        if hasattr( self, '_tables' ):      assert self.is_user_registered(), f'User {self.accessor_uid} must first be registed before saving config file.'
+        if assert_librarian:                assert self.accessor_username.upper() == self.data_librarian, f'Only user {self.data_librarian} can push config file to the xnat server.'
     
     
     def _custom_json_serializer( self, data, indent=4 ):
@@ -495,8 +490,7 @@ class MetaTables( UIDandMetaInfo ):
 
     #==========================================================PUBLIC METHODS==========================================================
     def pull_from_xnat( self, write_ffn: Opt[Path]=None, verbose: Opt[bool] = False ) -> Opt[Path]:
-        if write_ffn is None:
-            write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( self.config_ffn )
+        if write_ffn is None:   write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( self.config_ffn )
         else:
             assert isinstance( write_ffn, Path ), f"Provided write file path must be a valid Path object: {write_ffn}"
             assert write_ffn.suffix == '.json', f"Provided write file path must have a '.json' extension: {write_ffn}"
@@ -520,31 +514,18 @@ class MetaTables( UIDandMetaInfo ):
 
     def push_to_xnat( self, verbose: Opt[bool] = False ) -> None:
         self.ensure_primary_keys_validity()
-        print( f'\tsaving')
         self.save( verbose )
-        print( f'\tsaved')
-        print( f'\tpushing file to xnat')
         self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
-        print( f'\tfile pushed')
         if verbose is True:             print( f'\t...Metatables (config.json) successfully updated on XNAT!\n' )
 
 
     def save( self, verbose: Opt[bool] = False ) -> None: # Convert all tables to JSON; Write the data to the file
         '''Only saves locally. To save to the server, all the 'catalog_new_data' method(s) in the experiment class(es) must be called.'''
-        print( f'\tvalidating login info')
         self._validate_login_for_important_functions( assert_librarian=False ) # To-do: is this necessary if the user musts create a valid xnat connection first (which should check the same thing)?
-        print( f'\tvalidating login info done')
-        print( f'\tcreating a table')
         tables_json = {name: df.to_dict( 'records' ) for name, df in self.tables.items()}
-        print( f'\tcreated a table')
-        print( f'\tcreating data')
         data = {'metadata': self.metadata, 'tables': tables_json }
-        print( f'\tcreated data')
-        print( f'\tserializing data')
         # json_str = json.dumps( data, indent=2, separators=( ',', ':' ) )
         json_str = self._custom_json_serializer( data )
-        print( f'\tserialized data')
-        print( f'\twriting to file')
         with open( self.config_ffn, 'w' ) as f:         f.write( json_str )
         if verbose:                     print( f'\tSUCCESS! --- saved metatables to: {self.config_ffn}\n' )
 

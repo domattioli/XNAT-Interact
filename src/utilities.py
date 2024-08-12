@@ -23,7 +23,16 @@ import matplotlib.pyplot as plt
 # Define list for allowable imports from this module -- do not want to import _local_variables.
 __all__ = ['UIDandMetaInfo', 'XNATLogin', 'MetaTables', 'XNATConnection', 'USCentralDateTime', 'ImageHash']
 
+
 data_librarian_hawk_id = 'dmattioli' # Update as needed.
+# xnat_project_name = 'domSandBox' # original corrupted project.
+# xnat_project_name = 'GROK_AHRQ_main' # another corrupted project -- added a user who wasnt registered, lost ability to do anything except add new data.
+xnat_project_name = 'GROK_AHRQ_Data'
+xnat_url = r'https://rpacs.iibi.uiowa.edu/xnat/'
+xnat_config_folder_name, config_fn = 'config', 'database_config.json'
+template_img_dir = os.path.join( os.getcwd(), 'data', 'image_templates', 'unwanted_dcm_image_template.png' )
+tmp_data_dir = os.path.join( tempfile.gettempdir(), 'XNAT_Interact' ) # create a directory with the software name in the user's Temp folder.
+redacted_string = "REDACTED PYTHON-TO-XNAT UPLOAD SCRIPT"
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Helper class for inserting all information that should only be used locally within the _local_variables class def below:
@@ -52,18 +61,6 @@ class _local_variables:
 
 
     def _set_local_variables( self ) -> dict: # !!DO NOT DELETE!! This is the only place where these local variables/paths are defined.
-        repo_dir = os.getcwd()
-        xnat_project_name = 'domSandBox' # original corrupted project.
-        # xnat_project_name = 'GROK_AHRQ_main'
-        xnat_config_folder_name, config_fn = 'config', 'database_config.json'
-        # doc_dir = os.path.join( repo_dir, 'doc' )
-        # data_dir = doc_dir.replace( 'doc', 'data' )
-        template_img_dir = os.path.join( repo_dir, 'data', 'image_templates', 'unwanted_dcm_image_template.png' )
-        # tmp_data_dir = os.path.join( data_dir, 'tmp' )
-        # tmp_data_dir = tempfile.mkdtemp( prefix='XNAT_Interact')
-        tmp_data_dir = os.path.join( tempfile.gettempdir(), 'XNAT_Interact' ) # create a directory with the software name in the user's Temp folder.
-        redacted_string = "REDACTED PYTHON-TO-XNAT UPLOAD SCRIPT"
-
         local_vars =  {
                         # 'doc_dir': doc_dir,
                         # 'data_dir': data_dir,
@@ -72,7 +69,7 @@ class _local_variables:
                         'config_ffn': os.path.join( tmp_data_dir, config_fn ), # local file for storing all meta information
                         'required_login_keys': ['USERNAME', 'PASSWORD', 'URL'],
                         'xnat_project_name': xnat_project_name,
-                        'xnat_project_url': 'https://rpacs.iibi.uiowa.edu/xnat/',
+                        'xnat_project_url': xnat_url,
                         'xnat_config_folder_name': xnat_config_folder_name,
                         'default_meta_table_columns' : ['NAME', 'UID', 'CREATED_DATE_TIME', 'CREATED_BY'],
                         'template_img_dir' : template_img_dir,

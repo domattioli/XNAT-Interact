@@ -155,11 +155,12 @@ class ORDataIntakeForm( ResourceFile ):
         raise InvalidInputError( f'Failed to provide a valid entry for {selection_name} after {max_num_attempts} attempts.' )
     
 
-    def _prompt_user_for_filer_name_and_operation_date( self, metatables: MetaTables ) -> None: 
-        possible_user_hawkids = metatables.list_of_all_items_in_table( 'REGISTERED_USERS' )
-        print( f'\n\t(1/35)\tHAWKID of the Form Filer\t--\tPlease enter a HawkID from the following list:\t{possible_user_hawkids}' )
-        filer_hawkid = self.prompt_until_valid_answer_given( 'HawkID of the Form Filer', acceptable_options=possible_user_hawkids ) # to-do: allow user to just input an integer instead of type out hawkid?
-        self._filer_name = filer_hawkid.upper()
+    def _prompt_user_for_filer_name_and_operation_date( self, metatables: MetaTables ) -> None:
+        acceptable_registered_users_options_encoded = {str(i+1): reg_user for i, reg_user in enumerate( metatables.list_of_all_items_in_table( table_name='REGISTERED_USERS' ) )}
+        options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_registered_users_options_encoded.items()] )
+        print( f'\t(1/35)\tHAWKID of the Form Filer\t--\tPlease select from the following registered users:\n{options_str}' )
+        filer_hawkid_key = self.prompt_until_valid_answer_given( 'Institution Name', acceptable_options=list( acceptable_registered_users_options_encoded ) )
+        self._filer_name = acceptable_registered_users_options_encoded[filer_hawkid_key].upper()
 
         print( '\n\t(2/35)\tDo you have a *PAPER* Intake Form available filled-out for this procedure?\t--\tEnter "1" for Yes or "2" for No' )
         form_available = self.prompt_until_valid_answer_given( 'Form Availability', acceptable_options=['1', '2'] ) # to-do: Automate acceptable_options based on the type of input expected bc we may change the metatables values for this and then these prompts wont reflect those changes.

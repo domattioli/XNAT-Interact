@@ -29,10 +29,12 @@ def prompt_function( verbose: bool ) -> str:
     return ORDataIntakeForm.prompt_until_valid_answer_given( 'Select a task', acceptable_options=['1', '2', '3'] )
 
 
-def prompt_login() -> Tuple[str, str]:
-    xnat_user = input( "HawkID Username: " )
-    xnat_pass = pwinput.pwinput( prompt="HawkID Password: ", mask="*" )
-    return xnat_user, xnat_pass
+def prompt_login( username: Opt[str]=None, password: Opt[str]=None ) -> Tuple[str, str]:
+    if username is None:
+        username = input( f"\tHawkID Username:\t" )
+    if password is None:
+        password = pwinput.pwinput( prompt=f"\t{username.upper()} Password:\t", mask="*" )
+    return username, password
 
 
 def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, verbose: Opt[bool]=True ) -> Tuple[XNATLogin, XNATConnection, MetaTables]:
@@ -42,7 +44,7 @@ def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, 
         xnat_connection = XNATConnection( login_info=validated_login, stay_connected=True, verbose=verbose )
     else:
         if verbose: print( f'Please enter your XNAT login credentials to connect to the server:' )
-        username, password = prompt_login()
+        username, password = prompt_login( username=username, password=password )
         if verbose: print( f'\n...logging in and trying to connect to the server...\n' )
         validated_login = XNATLogin( { 'Username': username, 'Password': password, 'Url': 'https://rpacs.iibi.uiowa.edu/xnat/' }, verbose=verbose )
         xnat_connection = XNATConnection( login_info=validated_login, stay_connected=True, verbose=verbose )

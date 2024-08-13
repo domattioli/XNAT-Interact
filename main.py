@@ -28,7 +28,7 @@ def parse_args() -> Tuple[str, str, bool]:
 
 def prompt_function( verbose: bool ) -> str:
     if verbose: print( f'\n...selecting task to perform...' )
-    print( f'\tSelect a task\t--\tPlease enter "1" for Uploading Source Data, "2" for Uploading Derived Data, or "3" for Downloading Data.' )
+    print( f'\tTask selection:\n\t\t-- Please enter "1" for Uploading Source Data, "2" for Uploading Derived Data, or "3" for Downloading Data.' )
     return ORDataIntakeForm.prompt_until_valid_answer_given( 'Select a task', acceptable_options=['1', '2', '3'] )
 
 
@@ -42,7 +42,7 @@ def prompt_login( username: Opt[str]=None, password: Opt[str]=None ) -> Tuple[st
 
 def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, verbose: Opt[bool]=True ) -> Tuple[XNATLogin, XNATConnection, MetaTables]:
     if username is not None and password is not None:
-        if verbose: print( f"\n...logging in and trying to connect to the server as '{username}' with password {'*' * len( password )}...\n" )
+        if verbose: print( f"\n...logging in and trying to connect to the server as '{username}' with password {'*' * len( password )} ...\n" )
         validated_login = XNATLogin( { 'Username': username, 'Password': password, 'Url': 'https://rpacs.iibi.uiowa.edu/xnat/' }, verbose=verbose )
         xnat_connection = XNATConnection( login_info=validated_login, stay_connected=True, verbose=verbose )
     else:
@@ -66,23 +66,37 @@ def prompt_source_and_group() -> Tuple[str, str]:
 
 def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables, verbose: Opt[bool]=False ) -> MetaTables:
     print( f'\n-----Beginning data intake process-----\n' )
-    if verbose: print( f"\nUploading new source data to XNAT...")
+    if verbose: print( f"\n...Uploading new source data to XNAT...")
 
     # Digitize/load an intake form (if it exists already).
-    print( f'\tHave you already created a *DIGITAL* intake form with this software for this procedure? \t--\tPlease enter "1" for Yes or "2" for No.' )
+    print( f'\tHave you already created a *DIGITAL* intake form with this software for this procedure?\n\t\t-- Please enter "1" for Yes or "2" for No.' )
     form_exists = ORDataIntakeForm.prompt_until_valid_answer_given( 'Intake Form Declaration', acceptable_options=['1', '2'] )
     
     if form_exists == '1':
-        form_pn = input( f"\n\tPlease enter the full path to the *parent folder* of the intake form:\t\t" )
+        form_pn = input( f"\n\tPlease enter the full path to the *parent folder* of the intake form:\t" )
         while not os.path.exists( form_pn ):
             print( f"\t\tThe provided path either (1) does not exist or (2) does not contain a 'RECONSTRUCTED_OR_DATA_INTAKE_FORM' in it. Please try again." )
-            form_pn = input( f"\n\tPlease enter the full path to the *parent folder* of the intake form:\t\t" )
+            form_pn = input( f"\n\tPlease enter the full path to the *parent folder* of the intake form:\t" )
         try:
             intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, parent_folder=form_pn, verbose=verbose )
+            while True:
+                print( f'\n\tPlease review the created intake form:\n{intake_form}' )
+                print( f'\n\tIs anything incorrect and you would like to re-enter the intake form?\n\t\t-- Please enter "1" for Yes or "2" for No.' )
+                redo_form = ORDataIntakeForm.prompt_until_valid_answer_given( 'Re-do Intake Form', acceptable_options=['1', '2'] )
+                if redo_form == '1':    intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose ) #to-do: causes an error and the above try block fails.
+                else:                   break
         except:
             raise ValueError( f"\t\tThe provided path did not lead to a successful intake form. Please try again, or contact the Data Librarian for help." )
-    else:
-        intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose )
+    else: # Prompt user to create a new intake form; then print it to confirm
+        while True:
+            print('hello')
+            intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose )
+            print( 'goodbye')
+            print( f'\n\tPlease review the created intake form:\n{intake_form}' )
+            print( f'\n\tDo you want to proceed with this digital intake form? If anything then it is advised that you re-enter the information (Answer=No).\n\t\t-- Please enter "1" for Yes or "2" for No.' )
+            redo_form = ORDataIntakeForm.prompt_until_valid_answer_given( 'Re-do Intake Form', acceptable_options=['1', '2'] )
+            if redo_form == '1':    continue
+            else:                   break
     
     # Depending on the procedure type, create the appropriate source data object.
     if intake_form.ortho_procedure_type.upper() == 'ARTHROSCOPY':
@@ -175,7 +189,9 @@ def download_queried_data( validated_login: XNATLogin, xnat_connection: XNATConn
 
 def header_footer_print( header_or_footer: str ):
     if header_or_footer == 'header': # Print header
-        print( '\n'*15 + f'===' *50 )
+        command = 'cls' if os.name == 'nt' else 'clear'
+        os.system( command )
+        print( f'===' *50 )
         print( f'Welcome. Follow the prompts to upload new source data to XNAT; make sure you have your OR Intake Form ready and follow all prompts.')
         print( f'\tPress Ctrl+C to cancel at any time.\n')
     elif header_or_footer == 'footer': # Print footer
@@ -206,11 +222,14 @@ def main():
             print( f'\n\tPerform another task?:\tEnter "1" for Yes or "2" for No.' )
             another_task = ORDataIntakeForm.prompt_until_valid_answer_given( 'Intake Form Declaration', acceptable_options=['1', '2'] )
             if another_task == '2':     break
+    except KeyboardInterrupt:
+        print( f'\n\n...User cancelled task via Ctrl+C...' )
     except Exception as e:
         print( f'\n...Task failed due to the following error:\n{e}' )
         print( f'\n...Closing connection and exiting application...' )
-    xnat_connection.close()
-    header_footer_print( header_or_footer='footer' )
+    finally:
+        xnat_connection.close()
+        header_footer_print( header_or_footer='footer' )
 
 
 if __name__ == '__main__':

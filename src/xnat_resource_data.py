@@ -13,24 +13,7 @@ from src.utilities import UIDandMetaInfo, MetaTables, USCentralDateTime, XNATLog
 
 import pytz
 
-acceptable_ortho_procedure_names = {'1A': 'OPEN_REDUCTION_HIP_FRACTURE–DYNAMIC_HIP_SCREW',
-                                    '1B': 'OPEN_REDUCTION_HIP_FRACTURE–CANNULATED_HIP_SCREW',
-                                    '1C': 'CLOSED_REDUCTION_HIP_FRACTURE–CANNULATED_HIP_SCREW',
-                                    '1D': 'PERCUTANEOUS_SACROLIAC_FIXATION',
-                                    '1E': 'OPEN_AND_PERCUTANEOUS_PILON_FRACTURES',
-                                    '1F': 'INTRAMEDULLARY_NAIL-CMN',
-                                    '1G': 'INTRAMEDULLARY_NAIL-ANTEGRADE_FEMORAL',
-                                    '1H': 'INTRAMEDULLARY_NAIL-RETROGRADE_FEMORAL',
-                                    '1I': 'INTRAMEDULLARY_NAIL-TIBIA',
-                                    '1J': 'SCAPHOID_FRACTURE',
-                                    '1I': 'PEDIATRIC_SUPRACONDYLAR_HUMERUS_FRACTURE_REDUCTION_AND_PINNING',
-                                    '2A': 'SHOULDER_ARTHROSCOPY',
-                                    '2B': 'KNEE_ARTHROSCOPY',
-                                    '2C': 'HIP_ARTHROSCOPY', 
-                                    '2D': 'ANKLE_ARTHROSCOPY',
-                                    '3A': 'OTHER'
-}
-
+import string
 
 ordered_keys_of_intake_text_file = ['FORM_LAST_MODIFIED', 'OPERATION_DATE', 'SUBJECT_UID', 'FILER_HAWKID', 'FORM_AVAILABLE_FOR_PERFORMANCE', 'SCAN_QUALITY',
                                     'SURGICAL_PROCEDURE_INFO', 'SKILLS_ASSESSMENT_INFO', 'STORAGE_DEVICE_INFO', 'INFO_DERIVED_FROM_ORIGINAL_FILE_METADATA']
@@ -47,6 +30,20 @@ class ResourceFile( UIDandMetaInfo ):
         
     def __str__( self )             -> str:         return '-----'*5 + f'\nOR Data Intake Form\n' + '-----'*5 + '\n\n'
 
+    def _construct_dict_of_ortho_procedure_names( self, metatables: MetaTables ) -> Dict[str, str]:
+        """This method is intended to be used to create a dictionary of all ortho procedure names that are in the metatables."""
+        # Separate items into arthroscopy and trauma items
+        items = metatables.list_of_all_items_in_table(table_name='Groups')
+        arthroscopy_items = [item for item in items if 'arthroscopy' in item.lower()]
+        trauma_items = [item for item in items if 'arthroscopy' not in item.lower()]
+
+        # Create keys for arthroscopy items and for trauma items, combine them into a dictionary
+        arthroscopy_keys = [f"1{letter}" for letter in string.ascii_lowercase[:len(arthroscopy_items)]]
+        other_keys = [f"2{letter}" for letter in string.ascii_lowercase[:len(trauma_items)]]
+        arthroscopy_dict = {key: item for key, item in zip(arthroscopy_keys, arthroscopy_items)}
+        other_dict = {key: item for key, item in zip(other_keys, trauma_items)}
+        return {**arthroscopy_dict, **other_dict}
+        
 
 class InvalidInputError( Exception ):
     """Exception raised for errors in the input after multiple attempts."""
@@ -66,7 +63,7 @@ class ORDataIntakeForm( ResourceFile ):
         super().__init__( metatables=metatables, login=login ) # Call the __init__ method of the base class -- bug:? goes all the way to our utility class and generates a uid.
 
         # Init dict (and future json-formatted text file) with required keys.
-        self._init_all_fields()
+        self._init_all_fields( metatables=metatables )
         
         # Either read in the inputted text file and distribute that data, or prompt the user for the data.
         if parent_folder:
@@ -127,7 +124,7 @@ class ORDataIntakeForm( ResourceFile ):
             if verbose: print( f'\t--- Only minimally required fields were found in the inputted form.' )
 
 
-    def _init_all_fields( self ):
+    def _init_all_fields( self, metatables: MetaTables ) -> None:
         # Required inputs -- user must at the very least acknowledge that they do not have the information
         self._filer_name, self._operation_date, self._form_available = '', '', False
         self._institution_name, self._ortho_procedure_type, self._ortho_procedure_namem, self._epic_start_time = '', '', '', ''
@@ -140,6 +137,9 @@ class ORDataIntakeForm( ResourceFile ):
         self._performer_was_assisted, self._performer_num_of_similar_logged_cases, self._performance_enumerated_task_performer = None, None, None
         self._list_unusual_features_of_performance, self._diagnostic_notes, self._misc_surgical_performance_comments = None, None, None
         self._assessment_title, self._assessor_hawk_id, self._assessment_details = None, None, None
+
+        # Create a dict to represent all imported ortho procedure names
+        acceptable_ortho_procedure_names = self._construct_dict_of_ortho_procedure_names( metatables=metatables )
         self._running_text_file = OrderedDict( ( k, acceptable_ortho_procedure_names[k]) for k in ordered_keys_of_intake_text_file if k in acceptable_ortho_procedure_names )
         self._running_text_file['FORM_LAST_MODIFIED'] = datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
 
@@ -220,10 +220,10 @@ class ORDataIntakeForm( ResourceFile ):
         local_dict['PROCEDURE_TYPE'] = self.ortho_procedure_type
 
         # Given the ortho procedure type, select the keys from the acceptable_ortho_procedure_names dictionary that begin with the ortho_procedure_type
+        print( f'\n\t(7/35)\tOrtho Procedure Name\t--\tPlease select from the following options:\n{options_str}' )
+        acceptable_ortho_procedure_names = self._construct_dict_of_ortho_procedure_names( metatables=metatables )
         acceptable_ortho_procedure_name_options_encoded = {key: value for key, value in acceptable_ortho_procedure_names.items() if key.startswith( ortho_procedure_type )}
         options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_ortho_procedure_name_options_encoded.items()] )
-
-        print( f'\n\t(7/35)\tOrtho Procedure Name\t--\tPlease select from the following options:\n{options_str}')
         procedure_name_key = self.prompt_until_valid_answer_given( 'Ortho Procedure Name', acceptable_options = list( acceptable_ortho_procedure_name_options_encoded ) )
         self._ortho_procedure_name = acceptable_ortho_procedure_name_options_encoded[procedure_name_key]
         local_dict['PROCEDURE_NAME'] = str( self.ortho_procedure_name ) # type: ignore

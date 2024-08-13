@@ -414,9 +414,9 @@ class MetaTables( UIDandMetaInfo ):
         # arthro
         self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-Diagnostic' )
         self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-Rotator_Cuff_Repair' )
-        self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-SLAP' )
         self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-Distal_Clavical_Resect/Subacrom_Decomp' )
         self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-Labrum' )
+        self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-Superior_Labrum_Anterior_to_Posterior' )
         self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-Other' ) # to-do: eventually do an accounting of performances selected as other so we can provide more specific options
         self.add_new_item( 'groups', 'KNEE_ARTHROSCOPY-Diagnostic' )
         self.add_new_item( 'groups', 'KNEE_ARTHROSCOPY-Cartilage_Resurfacing' )

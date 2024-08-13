@@ -18,6 +18,7 @@ import string
 ordered_keys_of_intake_text_file = ['FORM_LAST_MODIFIED', 'OPERATION_DATE', 'SUBJECT_UID', 'FILER_HAWKID', 'FORM_AVAILABLE_FOR_PERFORMANCE', 'SCAN_QUALITY',
                                     'SURGICAL_PROCEDURE_INFO', 'SKILLS_ASSESSMENT_INFO', 'STORAGE_DEVICE_INFO', 'INFO_DERIVED_FROM_ORIGINAL_FILE_METADATA']
 
+indent_str = f'\n\t\t-- '
 
 class ResourceFile( UIDandMetaInfo ):
     """This can represent a resource at any level, e.g., project, subject, experiment, scan, etc."""
@@ -33,15 +34,15 @@ class ResourceFile( UIDandMetaInfo ):
     def _construct_dict_of_ortho_procedure_names( self, metatables: MetaTables ) -> Dict[str, str]:
         """This method is intended to be used to create a dictionary of all ortho procedure names that are in the metatables."""
         # Separate items into arthroscopy and trauma items
-        items = metatables.list_of_all_items_in_table(table_name='Groups')
+        items = metatables.list_of_all_items_in_table( table_name='Groups' )
         arthroscopy_items = [item for item in items if 'arthroscopy' in item.lower()]
         trauma_items = [item for item in items if 'arthroscopy' not in item.lower()]
 
         # Create keys for arthroscopy items and for trauma items, combine them into a dictionary
-        arthroscopy_keys = [f"1{letter}" for letter in string.ascii_lowercase[:len(arthroscopy_items)]]
-        other_keys = [f"2{letter}" for letter in string.ascii_lowercase[:len(trauma_items)]]
-        arthroscopy_dict = {key: item for key, item in zip(arthroscopy_keys, arthroscopy_items)}
-        other_dict = {key: item for key, item in zip(other_keys, trauma_items)}
+        arthroscopy_keys    = [f"1{letter.upper()}" for letter      in string.ascii_lowercase[:len( arthroscopy_items )]]
+        other_keys          = [f"2{letter.upper()}" for letter      in string.ascii_lowercase[:len( trauma_items )]]
+        arthroscopy_dict    = {key: item            for key, item   in zip( arthroscopy_keys, arthroscopy_items )}
+        other_dict          = {key: item            for key, item   in zip( other_keys, trauma_items )}
         return {**arthroscopy_dict, **other_dict}
         
 
@@ -69,6 +70,7 @@ class ORDataIntakeForm( ResourceFile ):
         if parent_folder:
             self._read_from_file( parent_folder, verbose=verbose )
         else:
+            if verbose:     print( f'\n...Processing OR Data Intake Form...' )
             self._prompt_user_for_filer_name_and_operation_date( metatables=metatables )
             self._prompt_user_for_scan_quality()
             self._prompt_user_for_surgical_procedure_info( metatables=metatables )
@@ -77,14 +79,14 @@ class ORDataIntakeForm( ResourceFile ):
 
         # Need to identify the save-to location for the json file; if successfully read from file, use that, else, use the generated uid.
         self._saved_ffn = metatables.tmp_data_dir / Path( self.uid ) / self.filename
-        if not os.path.exists( self.saved_ffn.parent ): os.makedirs( self.saved_ffn.parent )
-        if write_tmp_file:      self.construct_digital_file( verbose=verbose )
+        if not os.path.exists( self.saved_ffn.parent ):     os.makedirs( self.saved_ffn.parent )
+        if write_tmp_file:                                  self.construct_digital_file( verbose=verbose )
         # self._create_text_file_reconstruction( verbose=verbose ) # commenting out bc we want it saved to a temp folder corresponding to this subject
 
 
     def _read_from_file( self, parent_folder: str, verbose: Opt[bool]=False ) -> None:
         ffn = os.path.join( parent_folder, self.filename_str )
-        if verbose: print( f'\n\t...Initializing OR Intake From from "{ffn}"...' )
+        if verbose:     print( f'\n\t...Initializing OR Intake From from "{ffn}"...' )
         with open( ffn, 'r', encoding='cp1252' ) as jf:     self._running_text_file = json.loads( jf.read() )
 
         # Minimally Required information (if paper form was available when processed)
@@ -113,7 +115,7 @@ class ORDataIntakeForm( ResourceFile ):
             self._performer_year_in_residency = self.running_text_file['SURGICAL_PROCEDURE_INFO']['PERFORMER_YEAR_IN_RESIDENCY']
             self._performer_was_assisted = self.running_text_file['SURGICAL_PROCEDURE_INFO']['PERFORMER_WAS_ASSISTED']
             self._performer_num_of_similar_logged_cases = self.running_text_file['SURGICAL_PROCEDURE_INFO']['PERFORMER_NUM_OF_SIMILAR_LOGGED_CASES']
-            self._performance_enumerated_task_performer = self.running_text_file['SURGICAL_PROCEDURE_INFO']['PERFORMANCE_ENUMERATED_TASK_PERFORMER']
+            self._performance_enumerated_task_performer = self.running_text_file['SURGICAL_PROCEDURE_INFO']['PERFORMANCE_ENUMERATED_TASK_PER_PERFORMER']
             self._list_unusual_features_of_performance = self.running_text_file['SURGICAL_PROCEDURE_INFO']['LIST_UNUSUAL_FEATURES']
             self._diagnostic_notes = self.running_text_file['SURGICAL_PROCEDURE_INFO']['DIAGNOSTIC_NOTES']
             self._misc_surgical_performance_comments = self.running_text_file['SURGICAL_PROCEDURE_INFO']['MISC_PROCEDURE_COMMENTS']
@@ -121,7 +123,7 @@ class ORDataIntakeForm( ResourceFile ):
             self._assessor_hawk_id = self.running_text_file['SKILLS_ASSESSMENT_INFO']['ASSESSOR_UID']
             self._assessment_details = self.running_text_file['SKILLS_ASSESSMENT_INFO']['ASSESSMENT_DETAILS']
         except Exception as e:
-            if verbose: print( f'\t--- Only minimally required fields were found in the inputted form.' )
+            if verbose:     print( f'\t--- Only minimally required fields were found in the inputted form.' )
 
 
     def _init_all_fields( self, metatables: MetaTables ) -> None:
@@ -149,29 +151,28 @@ class ORDataIntakeForm( ResourceFile ):
         num_attempts = 0
         while True and num_attempts < max_num_attempts:
             user_input, num_attempts = input( f'\tAnswer:\t' ), num_attempts + 1
-            if user_input.upper() in acceptable_options: return user_input.upper()
-            else:
-                print( f'\t--- Invalid entry for {selection_name}! Please enter one of the options listed above.' )
+            if user_input.upper() in acceptable_options:    return user_input.upper()
+            else:                                           print( f'\t--- Invalid entry for {selection_name}! Please enter one of the options listed above.' )
         raise InvalidInputError( f'Failed to provide a valid entry for {selection_name} after {max_num_attempts} attempts.' )
     
 
     def _prompt_user_for_filer_name_and_operation_date( self, metatables: MetaTables ) -> None:
         acceptable_registered_users_options_encoded = {str(i+1): reg_user for i, reg_user in enumerate( metatables.list_of_all_items_in_table( table_name='REGISTERED_USERS' ) )}
         options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_registered_users_options_encoded.items()] )
-        print( f'\t(1/35)\tHAWKID of the Form Filer\t--\tPlease select from the following registered users:\n{options_str}' )
+        print( f'\t(1/34)\tWhat is your HAWKID (the Form Filer)?{indent_str}Please select from the following registered users:\n{options_str}' )
         filer_hawkid_key = self.prompt_until_valid_answer_given( 'Institution Name', acceptable_options=list( acceptable_registered_users_options_encoded ) )
         self._filer_name = acceptable_registered_users_options_encoded[filer_hawkid_key].upper()
 
-        print( '\n\t(2/35)\tDo you have a *PAPER* Intake Form available filled-out for this procedure?\t--\tEnter "1" for Yes or "2" for No' )
+        print( f'\n\t(2/34)\tDo you have a *PAPER* Intake Form available filled-out for this procedure?{indent_str}Please enter "1" for Yes or "2" for No' )
         form_available = self.prompt_until_valid_answer_given( 'Form Availability', acceptable_options=['1', '2'] ) # to-do: Automate acceptable_options based on the type of input expected bc we may change the metatables values for this and then these prompts wont reflect those changes.
 
         while True:
             try:
-                date_str = input('\n\t(3/35)\tPlease enter the Operation Date (YYYY-MM-DD):\t')
-                self._operation_date = parser.parse(date_str).date().strftime('%Y-%m-%d')
+                date_str = input( '\n\t(3/34)\tPlease enter the Operation Date (YYYY-MM-DD):\t' )
+                self._operation_date = parser.parse( date_str ).date().strftime('%Y-%m-%d')
                 break
             except:
-                print("Invalid date format. Please enter the date in YYYY-MM-DD format.")
+                print( "Invalid date format. Please enter the date in YYYY-MM-DD format." )
 
         if form_available == '1':       self._form_available = True
         elif form_available == '2':     self._form_available = False
@@ -186,18 +187,25 @@ class ORDataIntakeForm( ResourceFile ):
         for _ in range(2):  # Gives the user 1 opportunity to try again
             user_input = input( prompt )
             try: return parser.parse( user_input ).time().strftime( '%H:%M' )
-            except ValueError: print( f"\t---Invalid time provided; you entered: {user_input}.\n\t\tPlease use the HH:MM format." )
+            except ValueError: print( f"\t\t --- Invalid time provided; you entered: {user_input}{indent_str}Please use the HH:MM format.\n" )
         raise ValueError( "Failed to provide a valid time after 2 attempts." )
 
 
     def _prompt_user_for_scan_quality( self ):
         print( f'\n\n--- Quality/Usability of the OR Image Data ---' )
-        print( f'\t(4/35)\tWhat is the quality of the OR image data?\n\tEnter "1" for Usable, "2" for Un-usable, "3" for Questionable, or "4" for Unknown.' )
-        scan_quality = self.prompt_until_valid_answer_given( 'Quality of the Scan', acceptable_options=['1', '2', '3', '4'] )
-        if scan_quality == '1':     self._scan_quality = 'usable'
-        elif scan_quality == '2':   self._scan_quality = 'unusable'
-        elif scan_quality == '3':   self._scan_quality = 'questionable'
-        else:                       self._scan_quality = ''
+        print( f'\t(4a/34)\tDo you know the quality of the OR image data?{indent_str}-- Please enter "1" for Yes or "2" for No.' )
+        #"1" for Usable, "2" for Un-usable, "3" for Questionable, or "4" for Unknown.' )
+        known_scan_quality = self.prompt_until_valid_answer_given( 'Quality of the Scan', acceptable_options=['1', '2'] )
+        if known_scan_quality == '1':
+            print( f'\n\t(4b/34)\tPlease enter "1" for Usable, "2" for Un-usable, or "3" for Questionable.' )
+            print( f'\t\t--- Usable:\t\tThe image data is of sufficient quality to be used for research purposes.' )
+            print( f'\t\t--- Un-usable:\tThe image data is of insufficient quality to be used for research purposes.' )
+            print( f'\t\t--- Questionable:\tThe image data is of questionable quality and may or may not be usable for research purposes.' )
+            scan_quality = self.prompt_until_valid_answer_given( 'Quality of the Image/Video Data', acceptable_options=['1', '2', '3'] )
+            if scan_quality == '1':     self._scan_quality = 'usable'
+            elif scan_quality == '2':   self._scan_quality = 'unusable'
+            elif scan_quality == '3':   self._scan_quality = 'questionable'
+        else: scan_quality = '' # Unknown, but xnat doesnt except that as an input.
         self._running_text_file['SCAN_QUALITY'] = self.scan_quality # type: ignore -- not sure why this is giving a type error. runs fine in spite of it.
 
 
@@ -208,43 +216,43 @@ class ORDataIntakeForm( ResourceFile ):
         #Encode the options for acceptable institions as a list of integer strings
         acceptable_institution_options_encoded = {str(i+1): institution for i, institution in enumerate( metatables.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ) )}
         options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_institution_options_encoded.items()] )
-        print( f'\t(5/35)\tInstitution Name\t--\tPlease select from the following options:\n{options_str}' )
+        print( f'\t(5/34)\tAt which institution did this performance occur?{indent_str}Please select from the following options:\n{options_str}' )
         institution_name_key = self.prompt_until_valid_answer_given( 'Institution Name', acceptable_options=list( acceptable_institution_options_encoded ) )
         self._institution_name = acceptable_institution_options_encoded[institution_name_key]
         local_dict['INSTITUTION_NAME'] = self.institution_name
 
-        print( f'\n\t(6/35)\tType of Orthro Procedure\t--\tPlease enter "1" for Trauma or "2" for Arthro' )
+        print( f'\n\t(6/34)\tWhat was the Ortho Procedure Type?{indent_str}Please enter "1" for Arthro or "2" for Trauma.' )
         ortho_procedure_type = self.prompt_until_valid_answer_given( 'Type of Orthro Procedure', acceptable_options=['1', '2'] )
-        if ortho_procedure_type == '1':     self._ortho_procedure_type = 'Trauma'.upper()
-        elif ortho_procedure_type == '2':   self._ortho_procedure_type = 'Arthroscopy'.upper()
+        if ortho_procedure_type == '1':     self._ortho_procedure_type = 'Arthroscopy'.upper()
+        elif ortho_procedure_type == '2':   self._ortho_procedure_type = 'Trauma'.upper()
         local_dict['PROCEDURE_TYPE'] = self.ortho_procedure_type
 
         # Given the ortho procedure type, select the keys from the acceptable_ortho_procedure_names dictionary that begin with the ortho_procedure_type
-        print( f'\n\t(7/35)\tOrtho Procedure Name\t--\tPlease select from the following options:\n{options_str}' )
         acceptable_ortho_procedure_names = self._construct_dict_of_ortho_procedure_names( metatables=metatables )
         acceptable_ortho_procedure_name_options_encoded = {key: value for key, value in acceptable_ortho_procedure_names.items() if key.startswith( ortho_procedure_type )}
         options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_ortho_procedure_name_options_encoded.items()] )
+        print( f'\n\t(7/34)\tWhat is the name of Ortho Procedure?{indent_str}Please select from the following options:\n{options_str}' )
         procedure_name_key = self.prompt_until_valid_answer_given( 'Ortho Procedure Name', acceptable_options = list( acceptable_ortho_procedure_name_options_encoded ) )
         self._ortho_procedure_name = acceptable_ortho_procedure_name_options_encoded[procedure_name_key]
         local_dict['PROCEDURE_NAME'] = str( self.ortho_procedure_name ) # type: ignore
 
         if self.form_is_available:
-            print( f'\n\t(8/35)\tDo You know the Epic End Time?\t--\tPlease enter "1" for Yes of "2" for No.' )# (HH:MM) ' )
+            print( f'\n\t(8a/34)\tDo You know the Epic End Time?{indent_str}Please enter "1" for Yes of "2" for No.' )
             known_end_time = self.prompt_until_valid_answer_given( 'Known EPIC End Time', acceptable_options=['1', '2'] )
 
             valid_times, num_attempts, max_attempts = False, 0, 2
             while not valid_times and num_attempts < max_attempts:
-                epic_start_time = self.get_time_input( '\n\t(9.1/35)\tEpic Start Time (HH:MM): ' )
+                epic_start_time = self.get_time_input( '\n\t(8b/34)\tEpic Start Time (HH:MM in 24hr format): ' )
 
                 if known_end_time == '1':
-                    epic_end_time = self.get_time_input( '\n\t(9.2/35)\tEpic End Time (HH:MM): ' )
+                    epic_end_time = self.get_time_input( '\n\t(9/34)\tEpic End Time (HH:MM in 24hr format): ' )
                     if epic_start_time and epic_end_time:  # If both are not None
                         if epic_start_time < epic_end_time: valid_times = True
                         else:
                             print( f'\tAttempt {num_attempts + 1} failed:\n\t\tStart Time must be before End Time. You entered {epic_start_time} and {epic_end_time}.' )
                             num_attempts += 1
                     else:
-                        print( f'\tAttempt {num_attempts + 1} failed:\n\t\tInvalid times provided. Please use the HH:MM format.' )
+                        print( f'\tAttempt {num_attempts + 1} failed:\n\t\tInvalid times provided.{indent_str}Please use the HH:MM format.' )
                         num_attempts += 1
                 else:
                     valid_times, num_attempts = True, max_attempts # Exit the while loop
@@ -255,114 +263,115 @@ class ORDataIntakeForm( ResourceFile ):
             else:   self._epic_start_time, self._epic_end_time = epic_start_time, epic_end_time
             local_dict['EPIC_START_TIME'], local_dict['EPIC_END_TIME'] = self.epic_start_time, self.epic_end_time
         else:
-            print( f'\n\t(10/35)\tDo you know the Operation or EPIC Start Time\t--\tPlease enter "1" for Yes or "2" for No.' )
+            print( f'\n\t(10a/34) Do you know the Operation or EPIC Start Time?{indent_str}Please enter "1" for Yes or "2" for No.' )
             known_start_time = self.prompt_until_valid_answer_given( 'Known EPIC Start Time', acceptable_options = list( ['1', '2'] ) )
             if known_start_time == '1':
-                epic_start_time = self.get_time_input( '\t(10/35)\tKnown Epic Start Time (HH:MM):\t' )
-            else: epic_start_time = datetime.now().replace( hour=0, minute=0, second=0, microsecond=0 ).strftime( '%H:%M:%S')  # Assign midnight-today as the default start time
+                epic_start_time = self.get_time_input( f'\t(10b/34) Known Epic Start Time (HH:MM in 24hr format):\t' )
+            else: epic_start_time = datetime.now().replace( hour=0, minute=0, second=0, microsecond=0 ).strftime( '%H:%M:%S' )  # Assign midnight-today as the default start time
             local_dict['EPIC_START_TIME'] = epic_start_time
             self._epic_start_time = epic_start_time
 
 
-        print( f'\n\t(11/35)\tSide of Patient\'s Body\t--\tEnter "1" for Right, "2" for Left, "3" for Unknown, or "4" for N/A or not relevant.' )
-        patient_side = self.prompt_until_valid_answer_given( 'Side of Patient\'s Body', acceptable_options=['1', '2', '3'] )
-        if patient_side == '1':     self._side_of_patient_body = 'Right'.upper()
-        elif patient_side == '2':   self._side_of_patient_body = 'Left'.upper()
-        elif patient_side == '3':   self._side_of_patient_body = 'Unknown'.upper()
-        else: raise ValueError( 'You indicated N/A for the side of the patient body; please contact the data librarian to clarify this before proceding!' )
+        print( f'\n\t(11a/34) Do you know which Side of Patient\'s Body that the surgery was performed?{indent_str}Please enter "1" for Yes or "2" for No.' )
+        #Please enter "1" for Right, "2" for Left, "3" for Unknown, or "4" for N/A or not relevant.' )
+        known_patient_side = self.prompt_until_valid_answer_given( 'Known Side of Patient\'s Body', acceptable_options=['1', '2'] )
+        if known_patient_side == '1':
+            print( f'\n\t(11b/34) Which side of the patient\'s body was the surgery performed on?{indent_str}Please enter "1" for Right or "2" for Left.' )
+            patient_side = self.prompt_until_valid_answer_given( 'Side of Patient\'s Body', acceptable_options=['1', '2'] )
+            if patient_side == '1':     self._side_of_patient_body = 'Right'.upper()
+            elif patient_side == '2':   self._side_of_patient_body = 'Left'.upper()
+        else:                           self._side_of_patient_body = 'Unknown'.upper()
         local_dict['PATIENT_SIDE'] = self.side_of_patient_body
 
-        OR_location = input( '\n\t(12/35)\tOperating Room Name/Location (press Enter if Unknown):\t' ).upper()
+        OR_location = input( '\n\t(12/34) Operating Room Name/Location (press Enter if Unknown):\t' ).upper()
         if len( OR_location ) == 0: self._OR_location = 'Unknown'.upper()
         else:                       self._OR_location = OR_location
         local_dict['OR_LOCATION'] = self.OR_location
 
-        print( f'\n\t(13/35)\tDo you know the Supervising Surgeon\'s HawkID\t--\tPlease enter "1" for Yes or "2" for no:' )
+        print( f'\n\t(13a/34) Do you know the Supervising Surgeon\'s HawkID?{indent_str}Please enter "1" for Yes or "2" for No.' )
         known_supervising_hawkid = self.prompt_until_valid_answer_given( 'Known Supervising Surgeon HawkID', acceptable_options=['1', '2'] )
         if known_supervising_hawkid == '1':
             # create an encoding of the acceptable options for the supervising surgeon
             acceptable_supervising_surgeon_options_encoded = {str(i+1): surgeon for i, surgeon in enumerate( metatables.list_of_all_items_in_table( table_name='Surgeons' ) )}
             options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_supervising_surgeon_options_encoded.items()] )
 
-            print( f'\n\t(13/35)\tSupervising Surgeon HawkID\t--\tPlease select from the following list:\n{options_str}')
+            print( f'\n\t(13b/34) Supervising Surgeon HawkID{indent_str}Please select from the following list:\n{options_str}')
             supervising_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'Supervising Surgeon\'s HAWKID', acceptable_options = list( acceptable_supervising_surgeon_options_encoded ) )
             supervising_surgeon_hawk_id = acceptable_supervising_surgeon_options_encoded[supervising_surgeon_hawk_id]
         else:   supervising_surgeon_hawk_id = 'Unknown'.upper()
+        self._supervising_surgeon_hawk_id = metatables.get_uid( 'Surgeons', supervising_surgeon_hawk_id )
 
-        print( f"\n\t(14/35)\tSupervising Surgeon Presence\t--\tEnter '1' for Present, '2' for Retrospective Review, or '3' for Unknown:" )
-        supervising_surgeon_presence = self.prompt_until_valid_answer_given( 'Supervising Surgeon Presence', acceptable_options=['1', '2', '3'] )
-        if supervising_surgeon_presence == '1':     self._supervising_surgeon_presence = 'Present'.upper()
-        elif supervising_surgeon_presence == '2':   self._supervising_surgeon_presence = 'Retrospective Review'.upper()
-        elif supervising_surgeon_presence == '3':   self._supervising_surgeon_presence = 'Unknown'.upper()
-        else: raise ValueError( 'You indicated other for the supervision surgeon presence; please contact the data librarian to clarify this before proceding!' )
-        self._supervising_surgeon_hawk_id, self._supervising_surgeon_presence = metatables.get_uid( 'Surgeons', supervising_surgeon_hawk_id ), supervising_surgeon_presence
+        print( f'\n\t(14a/34) Do you know the Supervising Surgeon\'s Presence?{indent_str}Please enter "1" for Yes or "2" for No.' )
+        known_supervising_surgeon_presence = self.prompt_until_valid_answer_given( 'Known Supervising Surgeon Presence', acceptable_options=['1', '2'] )
+        if known_supervising_surgeon_presence == '1':
+            print( f'\n\t(14b/34) To indicate the supervising surgeon\'s presence{indent_str}Please enter "1" for Present or "2" for Retrospective Review.' )
+            supervising_surgeon_presence = self.prompt_until_valid_answer_given( 'Supervising Surgeon Presence', acceptable_options=['1', '2'] )
+            if supervising_surgeon_presence == '1':     supervising_surgeon_presence = 'Present'.upper()
+            elif supervising_surgeon_presence == '2':   supervising_surgeon_presence = 'Retrospective Review'.upper()
+        else:   supervising_surgeon_presence = 'Unknown'.upper()
+        self._supervising_surgeon_presence = supervising_surgeon_presence
         local_dict['SUPERVISING_SURGEON_UID'], local_dict['SUPERVISING_SURGEON_PRESENCE'] = self.supervising_surgeon_hawk_id, self.supervising_surgeon_presence
 
-        print( f'\n\t(15/35)\tDo you know the Performing Surgeon\'s HawkID\t--\tPlease enter "1" for Yes or "2" for no:' )
+        print( f'\n\t(15a/34) Do you know the Performing Surgeon\'s HawkID?{indent_str}Please enter "1" for Yes or "2" for No.' )
         known_performer_hawk_id = self.prompt_until_valid_answer_given( 'Known Performing Surgeon HawkID', acceptable_options=['1', '2'] )
         if known_performer_hawk_id == '1':
             # create an encoding of the acceptable options for the performing surgeon
             acceptable_performing_surgeon_options_encoded = {str(i+1): surgeon for i, surgeon in enumerate( metatables.list_of_all_items_in_table( table_name='Surgeons' ) )}
             options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_performing_surgeon_options_encoded.items()] )
             
-            print( f'\n\t(15/35)\tPerforming Surgeon HawkID\t--\tPlease select from the following list:\n{options_str}' )
+            print( f'\n\t(15b/34) Performing Surgeon HawkID{indent_str}Please select the from the following list:\n{options_str}' )
             performing_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'Performing Surgeon\'s HAWKID', acceptable_options=list( acceptable_performing_surgeon_options_encoded ) )
             performing_surgeon_hawk_id = acceptable_performing_surgeon_options_encoded[performing_surgeon_hawk_id]
         else:   performing_surgeon_hawk_id = 'Unknown'.upper()
 
-        print( f"\n\t(16/35)\tDo you know the Performing Surgeon\'s # of Years in Residency?\t--\tEnter '1' for Yes or '2' for No:" )
-        known_years = self.prompt_until_valid_answer_given( 'tPerforming Surgeon\'s Years in Residency', acceptable_options=['1','2'] )
+        print( f'\n\t(16a/34) Do you know the Performing Surgeon\'s # of Years in Residency/Experience?{indent_str}Please enter "1" for Yes or "2" for No.' )
+        known_years = self.prompt_until_valid_answer_given( 'Known Performing Surgeon\'s # of Years in Residency/Experience', acceptable_options=['1','2'] )
         if known_years == '1':
-            performer_year_in_residency = input( f'\n\t(16/35)\tPerforming Surgeon\'s Years in Residency:\t')
-        else: performer_year_in_residency = 'Unknown'.upper()
+            performer_year_in_residency = self._prompt_user_for_integer_input( '\n\t(16b/34) Performing Surgeon\'s # of Years in Residency/Experience:\t', acceptable_range=( 1, 50 ) )
+        else:                   performer_year_in_residency = 'Unknown'.upper()
         
-        print( f'\n\t(17/35)\tDo you know how many similar prior cases have been logged by the performing surgeon?\tEnter "1" for Yes or "2" for No\n\t--\tNOTE: 0 prior cases ***is NOT the same thing*** as unknown!! Please Enter "1" for Yes and then declare 0 known cases in the following prompt.')
-        known_number_of_similar_logged_cases = self.prompt_until_valid_answer_given( '# of Similar Cases Logged', acceptable_options=['1', '2'] )
+        print( f'\n\t(17a/34) Do you know how many Similar Prior Cases have been logged for the performing surgeon?{indent_str}Please enter "1" for Yes or "2" for No.')
+        known_number_of_similar_logged_cases = self.prompt_until_valid_answer_given( 'Known # of Similar Cases Logged', acceptable_options=['1', '2'] )
         if known_number_of_similar_logged_cases == '1':
-
-            performer_num_of_similar_logged_cases = input( f'\n\t(18/35)\tPerforming Surgeon\'s # of Similar Cases Logged (if none, enter "0"):\t' )
-            self._performer_num_of_similar_logged_cases     = int( performer_num_of_similar_logged_cases )
+            self._performer_num_of_similar_logged_cases     = self._prompt_user_for_integer_input( '\n\t(17b/34) Performing Surgeon\'s # of Similar Cases Logged (if none, enter "0").', acceptable_range=( 0, 500 ) )
         else: self._performer_num_of_similar_logged_cases   = None
         self._performing_surgeon_hawk_id, self._performer_year_in_residency = metatables.get_uid( 'Surgeons', performing_surgeon_hawk_id ), performer_year_in_residency
-        local_dict['PERFORMING_SURGEON_UID'], local_dict['PERFORMER_YEAR_IN_RESIDENCY'], local_dict['PERFORMER_NUM_OF_SIMILAR_LOGGED_CASES'] = self.performing_surgeon_hawk_id, self.performer_year_in_residency, self.performer_num_of_similar_logged_cases
+        local_dict['PERFORMING_SURGEON_UID'], local_dict['PERFORMER_YEAR_IN_RESIDENCY/EXPERIENCE'], local_dict['PERFORMER_NUM_OF_SIMILAR_LOGGED_CASES'] = self.performing_surgeon_hawk_id, self.performer_year_in_residency, self.performer_num_of_similar_logged_cases
 
-        print( f'\n\t(19/35)\tWas the Performing Surgeon Assisted?\tEnter "1" for Yes, "2" for No, or "3" for Unknown.' )
+        print( f'\n\t(18/34) Was the Performing Surgeon Assisted?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown.' )
         performer_was_assisted = self.prompt_until_valid_answer_given( 'Performing Surgeon Assistance', acceptable_options=['1', '2', '3'] )
         if performer_was_assisted == '1':
-            self._performer_was_assisted = True
-            dict_performance_enumerated_tasks = self._prompt_user_for_n_surgical_tasks_and_hawkids( metatables=metatables )
-
-            # If any of the values in the dict are empty, replace them with None
-            for key, value in dict_performance_enumerated_tasks.items():
-                if len( value ) == 0: dict_performance_enumerated_tasks[key] = None
+            self._performer_was_assisted,   dict_performance_enumerated_tasks       = True, self._prompt_user_for_n_surgical_tasks_and_hawkids( metatables=metatables ) # Prompt 19
+            for key, value in dict_performance_enumerated_tasks.items():    # If any of the values in the dict are empty, replace them with None
+                if len( value ) == 0:       dict_performance_enumerated_tasks[key]  = None
             self._performance_enumerated_task_performer = dict_performance_enumerated_tasks
-        elif performer_was_assisted == '2':     self._performer_was_assisted = False
-        # else:                                   self._performance_enumerated_task_performer = {'Unknown'.upper()}
-        local_dict['PERFORMER_WAS_ASSISTED'], local_dict['PERFORMANCE_ENUMERATED_TASK_PERFORMER'] = self.performer_was_assisted, self.performance_enumerated_task_performer
+        elif performer_was_assisted == '2': self._performer_was_assisted            = False
+        else:                               self._performer_was_assisted, self._performance_enumerated_task_performer = 'Unknown'.upper(), {'Unknown'.upper()}
+        local_dict['PERFORMER_WAS_ASSISTED'], local_dict['PERFORMANCE_ENUMERATED_TASK_PER_PERFORMER'] = self.performer_was_assisted, self.performance_enumerated_task_performer
 
-        print( f'\n\t(21/35)\tWere there any unusual features of the performance?\n\tEnter "1" for Yes, "2" for No, or "3" for Unknown.')
+        print( f'\n\t(20/34) Were there any unusual features of the performance?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown.')
         any_unusual_features_of_performance = self.prompt_until_valid_answer_given( 'Unusual Features of Performance', acceptable_options=['1', '2', '3'] )
         if any_unusual_features_of_performance == '1':
-            list_of_performance_features = input( f'\t(22/35)\tPlease detail any/all unusual features of the performance:\n\tAnswer: ' )
+            list_of_performance_features = input( f'\n\t(21/34) Please detail any/all unusual features of the performance:\n\tAnswer: ' )
             if len( list_of_performance_features ) > 0:     self._list_unusual_features_of_performance = list_of_performance_features
         elif any_unusual_features_of_performance == '2':    self._list_unusual_features_of_performance = None
         else:                                               self._list_unusual_features_of_performance = 'Unknown'.upper()
         local_dict['LIST_UNUSUAL_FEATURES'] = self.list_unusual_features_of_performance
 
-        print( f'\n\t(23/35)\tWere there any diagnostic notes about the surgical procedure?\n\tEnter "1" for Yes, "2" for No, or "3" for Unknown.')
+        print( f'\n\t(22/34) Were there any diagnostic notes about the surgical procedure?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown.')
         any_diagnostic_notes = self.prompt_until_valid_answer_given( 'Performing Surgeon Assistance', acceptable_options=['1', '2', '3'] )
         # if self.ortho_procedure_type == 'Arthroscopy' or ortho_procedure_type == '2':
         if any_diagnostic_notes == '1':
-            diagnostic_notes = input( f'\t(24/35)\tPlease enter any diagnostic notes about the surgical procedure:\n\tAnswer: ' )
+            diagnostic_notes = input( f'\n\t(23/34) Please enter any diagnostic notes about the surgical procedure:\n\tAnswer: ' )
             if len( diagnostic_notes ) > 0:                 self._diagnostic_notes = diagnostic_notes
         elif any_diagnostic_notes == '2':                   self._diagnostic_notes = None
         else:                                               self._diagnostic_notes = 'Unknown'.upper()
         local_dict['DIAGNOSTIC_NOTES'] = self.diagnostic_notes
 
-        print( f'\n\t(24/35)\tDo you have any additional comments or notes regarding BMI, pre-existing conditions, etc.?\n\tEnter "1" for Yes, "2" for No, or "3" for Unknown' )
+        print( f'\n\t(24/34) Do you have any additional comments or notes regarding BMI, pre-existing conditions, etc.?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown' )
         any_misc_comments = self.prompt_until_valid_answer_given( ' Miscellaneous Procedure Comments', acceptable_options=['1', '2', '3'])
         if any_misc_comments == '1':
-            misc_comments = input( f'\t(25/35)\tPlease enter any additional comments or notes:\n\t\t' )
+            misc_comments = input( f'\n\t(25/34) Please enter any additional comments or notes:\n\tAnswer: ' )
             if len( misc_comments ) > 0:                    self._misc_surgical_performance_comments = misc_comments
         elif any_diagnostic_notes == '2':                   self._misc_surgical_performance_comments = None
         else:                                               self._misc_surgical_performance_comments = 'Unknown'.upper()
@@ -371,39 +380,60 @@ class ORDataIntakeForm( ResourceFile ):
         # Need to save info to the running text file regardless of if the form is available
         self._running_text_file['SURGICAL_PROCEDURE_INFO'] = local_dict # type: ignore
     
+    def _prompt_user_for_integer_input( self, prompt: str, acceptable_range: Tuple[int, int], max_num_attempts: int=3 ) -> int:
+        num_attempts = 0
+        help_str = f'\tPlease enter an integer between {acceptable_range[0]} and {acceptable_range[1]}.'
+        while num_attempts < max_num_attempts:
+            user_input, num_attempts = input( f'\t{prompt}\n{help_str}\n\tAnswer (Attempt {num_attempts+1}/3): ' ), num_attempts + 1
+            try:
+                user_input = int( user_input )
+                if acceptable_range[0] <= user_input <= acceptable_range[1]: return user_input
+                else: print( f'\t--- Invalid entry! Please enter an integer between {acceptable_range[0]} and {acceptable_range[1]}.' )
+            except ValueError: print( f'\t--- Invalid entry! Please enter an integer between {acceptable_range[0]} and {acceptable_range[1]}.' )
+        raise ValueError( f'Failed to provide a valid integer input after {num_attempts} attempts.' )
 
-    def _prompt_user_for_n_surgical_tasks_and_hawkids( self, metatables: MetaTables ) -> dict:
-        num_tasks = int( input( '\t(20/35)\tHow many surgeons participated in the procedure?\n\tEnter an integer:\t' ) )
-        print( f'\tSelect from the following list of hawkIDs:\n\t\t{metatables.list_of_all_items_in_table( "Surgeons" )}')
-        assert num_tasks > 0, 'Invalid number of surgeons! Must be a positive integer.'
+    def _prompt_user_for_n_surgical_tasks_and_hawkids( self, metatables: MetaTables, max_num_attempts: int=3 ) -> dict:
+        # Extract answer from user for the number of participating surgeons
+        print( f'\n\t(19a/34) How many surgeons participated in the procedure?{indent_str}Please enter an integer (must be non-zero and positive).' )
+        num_tasks = self._prompt_user_for_integer_input( '\n(19a/34) # of Participating Surgeons', acceptable_range=( 1, 1000 ), max_num_attempts=max_num_attempts )
+
+        # Extract the HAWKIDs for each of the participating surgeons and prompt the user with an unstructured opportunity to detail the tasks that they performed.
+        acceptable_performing_surgeon_options_encoded = {str(i+1): surgeon for i, surgeon in enumerate( metatables.list_of_all_items_in_table( table_name='Surgeons' ) )}
+        options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_performing_surgeon_options_encoded.items()] )
+        print( f'\n\t(19b/34) To denote each of the participating surgeons, please select from the following list of HawkIDs:\n{options_str}\n')
         task_performers = {}
         for i in range( num_tasks ):
-            if i == 0:      hawkid = input( f'\t\t1st HAWKID:\t' )
-            elif i == 1:    hawkid = input( f'\t\t2nd HAWKID:\t' )
-            elif i == 2:    hawkid = input( f'\t\t3rd HAWKID:\t' )
-            else:           hawkid = input( f'\t\t{i+1}th HAWKID:\t' )
-            assert metatables.item_exists( table_name='Surgeons', item_name=hawkid ), f'HAWKID {hawkid} is not a registered surgeon in the system. Please enter a valid HAWKID.\nRegistered surgeon hawkids:\n{metatables.list_of_all_items_in_table( "Surgeons" )}'
-            task_performers[metatables.get_uid(table_name='SURGEONS', item_name=hawkid)] = input( f'\t\t\tEnter the task(s) performed by "{hawkid.upper()}":\t' )
+            if i == 0:      hawkid_encoding = input( f'\t\t1st Surgeon: ' )
+            elif i == 1:    hawkid_encoding = input( f'\t\t2nd Surgeon: ' )
+            elif i == 2:    hawkid_encoding = input( f'\t\t3rd Surgeon: ' )
+            else:           hawkid_encoding = input( f'\t\t{i+1}th Surgeon: ' )
+            hawkid = acceptable_performing_surgeon_options_encoded[hawkid_encoding]
+            task_performers[metatables.get_uid(table_name='SURGEONS', item_name=hawkid)] = input( f"\t\t\tPlease detail the task(s) performed by '{hawkid_encoding}'', i.e., {hawkid.upper()}: " )
         return task_performers
 
 
     def _prompt_user_for_skills_assessment_info( self, metatables: MetaTables ):
         print( f'\n\n--- Skills Assessment Information ---' )
     
-        print( f'\t(26/35)\tWas a Skills Assessment requested for this procedure?\n\tEnter "1" for Yes, "2" for No, or "3" for Unknown.')
+        print( f'\t(26a/34) Was a Skills Assessment requested for this procedure?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown.')
         assessment_requested = self.prompt_until_valid_answer_given( 'Skills Assessment Request', acceptable_options=['1', '2', '3'] )
         if assessment_requested == '1':
+            assessment_requested, assessment_title = True, input( '\n\t(26b/34) Please enter the full name of the requested assessment:\n\tAnswer: ' ).upper()
 
-            assessment_requested, assessment_title = True, input( '\n\t(25/32)\tPlease enter the full name of the requested assessment:\t' ).upper()
-
-            print( f'\n\t(27/35)\tAssessing Surgeon\'s HawkID --\tPlease select from the following list:\n\t\t{metatables.list_of_all_items_in_table( "Surgeons" )}' )
-            assessor_hawkid = self.prompt_until_valid_answer_given( 'Assessing Surgeon\'s HAWKID', acceptable_options=metatables.list_of_all_items_in_table( 'Surgeons' ) )
-            assessor_hawkid = metatables.get_uid( table_name='SURGEONS', item_name=assessor_hawkid )
-
-            print( f'\n\t(28/35)\tDo you have any additional details about the assessment (e.g., date of assessment, score, etc.)?\n\tEnter "1" for Yes or "2" for No.')
+            print( f'\n\t(27a/34) Do you know the HAWKID of the assessor?{indent_str}Please enter "1" for Yes or "2" for No.' )
+            assessor_known = self.prompt_until_valid_answer_given( 'Assessor HAWKID', acceptable_options=['1', '2'] )
+            if assessor_known == '1':
+                # create an encoding of the acceptable options for the assessor
+                acceptable_assessor_options_encoded = {str(i+1): surgeon for i, surgeon in enumerate( metatables.list_of_all_items_in_table( table_name='Surgeons' ) )}
+                options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_assessor_options_encoded.items()] )
+                print( f'\n\t(27b/34) Assessing Surgeon\'s HawkID{indent_str}Please select the from the following list:\n{options_str}' )
+                assessor_hawkid = self.prompt_until_valid_answer_given( 'Performing Surgeon\'s HAWKID', acceptable_options=list( acceptable_assessor_options_encoded ) )
+                assessor_hawkid = acceptable_assessor_options_encoded[assessor_hawkid]
+            else: assessor_hawkid = 'Unknown'.upper()
+            
+            print( f'\n\t(28/34) Do you have any additional details about the assessment (e.g., date of assessment, score, etc.)?{indent_str}Please enter "1" for Yes or "2" for No.')
             known_details = self.prompt_until_valid_answer_given( 'Additional Assessment Details', acceptable_options=['1', '2'])
-
-            if known_details == '1':    self._assessment_details = input( '\n\t(29/35)\tPlease enter any additional details about the assessment:\n\t\t' )
+            if known_details == '1':    self._assessment_details = input( '\n\t(29/34) Please enter any additional details about the assessment:\n\tAnswer: ' )
             else:                       self._assessment_details = None
             self._assessment_title, self._assessor_hawk_id = assessment_title, assessor_hawkid
         elif assessment_requested == '2':
@@ -418,19 +448,19 @@ class ORDataIntakeForm( ResourceFile ):
     def _prompt_user_for_storage_device_info( self ):
         print( f'\n\n--- Storage Device Information ---' )
         
-        self._storage_device_name_and_type = input( '\t(30/35)\tPlease enter the name and type of the storage device:\t' )
+        self._storage_device_name_and_type = input( '\t(30/34) Please enter the name and type of the storage device:\n\tAnswer: ' )
 
-        full_path_name = input( '\t(31/35)\tPlease enter the full directory name of the *local* folder containing the case data:\t' )
-        while not os.path.exists( full_path_name ):#or not full_path_name.lower() in ['', 'escape', 'exit', 'stop', 'quit', 'n/a', 'na', 'unknown', 'none', 'not applicable']:
-            print( f'!!!!!Input directory path is not accessible on this system!!!!!\n\tPlease double-check the validity of that directory and try again.' )
-            full_path_name = input( '\t(31/35)\tPlease enter the full directory name of the *local* folder containing the case data:\n\t' )
+        while True:
+            full_path_name = input( '\n\t(31/34) Please enter the full directory name of the *local* folder containing the case data:\n\tAnswer: ' )
+            if os.path.exists( full_path_name ):    break
+            else:                                   print( f'!!!!!Input directory path is not accessible on this system!!!!!\n\tPlease double-check the validity of that directory and try again.' )
         self._relevant_folder = Path( full_path_name )
 
-        print( f'\n\t(32/35)\tWas radiology contacted for this procedure?\n\tEnter "1" for Yes, "2" for No, or "3" for Unknown.' )
+        print( f'\n\t(32/34) Was radiology contacted for this procedure?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown.' )
         radiology_contacted = self.prompt_until_valid_answer_given( 'Radiology Contact Information', acceptable_options=['1', '2', '3'] )
         if radiology_contacted == '1':
-            radiology_contact_date = parser.parse( input( '\t(33/35)\tRadiology Contact Date (YYYY-MM-DD):\t' ) ).date().strftime( '%Y-%m-%d' )
-            radiology_contact_time = self.get_time_input( '\t(34/35)\tRadiology Contact Time (HH:MM):\t' )
+            radiology_contact_date = parser.parse( input( '\n\t(33/34) Radiology Contact Date (YYYY-MM-DD):\t' ) ).date().strftime( '%Y-%m-%d' )
+            radiology_contact_time = self.get_time_input( '\n\t(34/34) Radiology Contact Time (HH:MM in 24hr format):\t' )
             self._radiology_contact_date,   self._radiology_contact_time = radiology_contact_date, radiology_contact_time
         elif radiology_contacted in ['2', '3']:    self._radiology_contact_date, self._radiology_contact_time = None, None
         else:   raise ValueError( f'Invalid entry for Radiology Contacted! Please only enter "1" for Yes or "2" for No. You entered {radiology_contacted}' )
@@ -441,9 +471,11 @@ class ORDataIntakeForm( ResourceFile ):
         
 
     def construct_digital_file( self, verbose: Opt[bool]=False ) -> None:
-        assert self._uid, 'UID must be set before calleding the IntakeForm saved full file name.'
+        assert self._uid, 'UID must be set before calling the IntakeForm saved full file name.'
         self._running_text_file['FORM_LAST_MODIFIED'] = datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
+        print('test before')
         json_str = json.dumps( self.running_text_file, indent=4, default=ORDataIntakeForm._custom_serializer )
+        print('test after')
         with open( self.saved_ffn, 'w' ) as f:
             f.write( json_str )
             if verbose:     print( f'\t-- SUCCESS -- OR Data Intake Form saved to:\t{self.saved_ffn}\n' )
@@ -457,8 +489,8 @@ class ORDataIntakeForm( ResourceFile ):
 
     @staticmethod
     def _custom_serializer( obj ) -> str:
-        if isinstance( obj, WindowsPath ):
-            return str( obj )  # Convert WindowsPath to string
+        if isinstance( obj, WindowsPath ):  return str( obj )  # Convert WindowsPath to string
+        elif isinstance( obj, set ):        return str( list( obj ) ) # Convert set to list    
         raise TypeError( f"Object of type {obj.__class__.__name__} is not JSON serializable ")
 
 
@@ -512,11 +544,11 @@ class ORDataIntakeForm( ResourceFile ):
     @property
     def performer_year_in_residency( self )             -> Opt[Union[int, str]]:    return self._performer_year_in_residency
     @property
-    def performer_was_assisted( self )                  -> Opt[bool]:               return self._performer_was_assisted
+    def performer_was_assisted( self )                  -> Opt[Union[bool, str]]:   return self._performer_was_assisted
     @property
     def performer_num_of_similar_logged_cases( self )   -> Opt[int]:                return self._performer_num_of_similar_logged_cases
     @property
-    def performance_enumerated_task_performer( self )   -> Opt[dict]:               return self._performance_enumerated_task_performer
+    def performance_enumerated_task_performer( self )   -> Opt[Union[dict, set]]:   return self._performance_enumerated_task_performer
     @property
     def list_unusual_features_of_performance( self )    -> Opt[str]:                return self._list_unusual_features_of_performance
     @property
@@ -542,11 +574,6 @@ class ORDataIntakeForm( ResourceFile ):
     
 
     def __str__( self ) -> str:
-        # Print out the json formatted information as it would be shown in a text file.
-        json_str = json.dumps( self.saved_ffn_str, indent=4 )
-        lines = json_str.split('\n')
-        out_str = f'\t-- OR Data Intake Form --\n'
-        for line in lines:
-            if line.strip() not in ['{', '}', '},']:
-                out_str += line + '\n'
-        return out_str
+        if self.saved_ffn is not None:
+            with open( self.saved_ffn, 'r' ) as f:  return ''.join('\t' + line for line in f)
+        else:                                       return f'No file found at {self.saved_ffn_str}'

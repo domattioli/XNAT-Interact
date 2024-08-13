@@ -314,7 +314,6 @@ class MetaTables( UIDandMetaInfo ):
         4. Image Hashes, i.e., unique identifiers for images that have been processed.
 
     **For now we are using a json file to represent our tables. 
-        - I (dom mattioli) will be the only one allowed to add anything and I will control the 'metatables.json' file via a protected branch in the github repository
         - In the future it might make more sense to use a simple relational database.
 
     # Example usage (if not building from scratch, try adding a new table other than those listed above):
@@ -402,17 +401,28 @@ class MetaTables( UIDandMetaInfo ):
         self.add_new_item( 'grOups', 'Open_reduction_hip_fracture–Cannulated_hip_screw' )
         self.add_new_item( 'grOups', 'Closed_reduction_hip_fracture–Cannulated_hip_screw' )
         self.add_new_item( 'grOups', 'Percutaneous_sacroliac_fixation' )
-        self.add_new_item( 'groUps', 'PEDIATRIC_SUPRACONDYLaR_HUMERUS_FRACTURE_reduction_and_pinning' )
+        self.add_new_item( 'groUps', 'PEDIATRIC_SUPRACONDYLaR_HUMERUS_FRACTURE_reduction_and_pinning' ) #FYI caps doesn't matter -- it all gets capitalized anyway.
         self.add_new_item( 'grOups', 'Open_and_percutaneous_pilon_fractures' )
         self.add_new_item( 'grOups', 'Intramedullary_nail-CMN' )
         self.add_new_item( 'grOups', 'Intramedullary_nail-Antegrade_femoral' )
         self.add_new_item( 'grOups', 'Intramedullary_nail-Retrograde_femoral' )
         self.add_new_item( 'grOups', 'Intramedullary_nail-Tibia' )
         self.add_new_item( 'grOups', 'Scaphoid_Fracture' )
+        self.add_new_item( 'grOups', 'sacroiliac_screw' )
+        self.add_new_item( 'grOups', 'slipped_capital_femoral_epiphysis' )
 
         # arthro
-        self.add_new_item( 'groups', 'Shoulder_ARTHROSCOPY' )
-        self.add_new_item( 'groups', 'KNEE_ARTHROSCOPY' )
+        self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-Diagnostic' )
+        self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-Rotator_Cuff_Repair' )
+        self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-SLAP' )
+        self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-Distal_Clavical_Resect/Subacrom_Decomp' )
+        self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-Labrum' )
+        self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-Other' ) # to-do: eventually do an accounting of performances selected as other so we can provide more specific options
+        self.add_new_item( 'groups', 'KNEE_ARTHROSCOPY-Diagnostic' )
+        self.add_new_item( 'groups', 'KNEE_ARTHROSCOPY-Cartilage_Resurfacing' )
+        self.add_new_item( 'groups', 'KNEE_ARTHROSCOPY-Medial_Patella_Femoral_Ligament' )
+        self.add_new_item( 'groups', 'KNEE_ARTHROSCOPY-Meniscal_Transplant' )
+        self.add_new_item( 'groups', 'KNEE_ARTHROSCOPY-Other' )
         self.add_new_item( 'groups', 'Hip_ARTHROSCOPY' )
         self.add_new_item( 'groups', 'Ankle_ARTHROSCOPY' )
 

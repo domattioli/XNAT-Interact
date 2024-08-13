@@ -6,6 +6,9 @@ from pathlib import Path
 import pwinput
 import argparse 
 
+import xml.etree.ElementTree as ET
+
+from pyxnat import Interface
 from src.utilities import MetaTables, USCentralDateTime, XNATLogin, XNATConnection, ImageHash
 from src.xnat_experiment_data import *
 from src.xnat_scan_data import *
@@ -96,6 +99,80 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
     return metatables
 
 
+def download_queried_data( validated_login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables, verbose: Opt[bool]=False ) -> None:
+    # for the given project, prompt the user which subjects they want to query, then of those subjects, which of their data they want to download, then download it.
+    print( f'\n-----Beginning data download process-----\n' )
+
+    download_folder = Path( os.path.expanduser( "~" ) ) / "Downloads"
+    print( f'\t...Downloading all source data to:\t{download_folder}' )
+    print( f'\t...')
+    
+    # contraints = [ ('xnat:subjectData/PROJECT', '=', metatables.xnat_project_name)]
+    with Interface( server=validated_login.xnat_project_url, user=validated_login.validated_username, password=validated_login.validated_password ) as xnat:
+        # Get all subject instances w their labels and corresponding experiment labels.
+        proj_inst = xnat.select.project( metatables.xnat_project_name )
+        subj_labels = []
+        for s in proj_inst.subjects().get():
+            subject_xml = proj_inst.subject(s).get().decode('utf-8')
+            root = ET.fromstring(subject_xml)
+            label = root.attrib.get('label')
+            subj_labels.append(label)
+        exp_labels = ['SOURCE_DATA-'+s for s in subj_labels]
+
+        # Write data to downloads folder, mimicky xnat directory structure
+        home_dl_dir = rf'C:\Users\dmattioli\Downloads\Source_Data'
+        count_files = 0
+        for el, sl in zip( exp_labels, subj_labels ):
+            f = xnat.select( f'/project/{xnat_connection.xnat_project_name}/subject/{sl}/experiment/{el}/scan/0/resource/SRC/*' )
+            source_dir, derived_dir = rf'{home_dl_dir}\{sl}', rf'{home_dl_dir}\{sl}\DERIVED' # SRC is automatically created by .get()
+            if not os.path.exists( source_dir ):    os.makedirs( source_dir )
+            if not os.path.exists( derived_dir ):   os.makedirs( derived_dir )
+                # os.mkdir( )
+            
+            # Notify the user that data exists here already and ask if its ok to overwrite it
+            if os.path.exists( source_dir ) and os.path.exists( derived_dir ):
+                print( f'\t...Data already exists in {source_dir}. This function may overwrite it -- is that ok?\t--\tPlease enter "1" for Yes or "2" for No.' )
+                overwrite = ORDataIntakeForm.prompt_until_valid_answer_given( 'Overwrite Data?', acceptable_options=['1', '2'] )
+                assert overwrite == '1', 'To-Do: Implement exception to user declaring that they do not want to overwrite data (prompt for a new directory).'
+            write_d = f.get( dest_dir=source_dir, extract=True ) # type: ignore
+            count_files += 1
+        
+        print( f'\t...Downloaded {count_files} files to {home_dl_dir}...' )
+
+        # Print out the folder hierarchy of that folder
+        folder_hierarchy = "\t"
+        for root, dirs, files in os.walk(home_dl_dir):
+            level = root.replace(home_dl_dir, '').count(os.sep)
+            indent = ' ' * 4 * level
+            folder_hierarchy += f'{indent}{os.path.basename(root)}/\n'
+            sub_indent = ' ' * 4 * (level + 1)
+            for f in files:
+                folder_hierarchy += f'{sub_indent}{f}\n'
+        
+        print(folder_hierarchy)
+
+    # # Prompt user for if they want to download data for a specific institution
+    # print( f'\tWould you like to download data for a specific institution?\t--\tPlease enter "1" for Yes or "2" for No.' )
+    # institution_specific = intake_form.prompt_until_valid_answer_given( 'Query by Institution?', acceptable_options=['1', '2'] )
+    # if institution_specific == '1':
+    #     acceptable_institution_options_encoded = {str(i+1): institution for i, institution in enumerate( metatables.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ) )}
+    #     options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_institution_options_encoded.items()] )
+    #     print( f'\tPlease select from the following institutions:\n{options_str}' )
+    #     institution_name_key = intake_form.prompt_until_valid_answer_given( 'Institution Name', acceptable_options=list( acceptable_institution_options_encoded ) )
+    #     institution_name = acceptable_institution_options_encoded[institution_name_key]
+    # else:   institution_name = None
+
+    # print( f'\tWould you like to download data for a specific ortho procedure type?\t--\tPlease enter "1" for Yes or "2" for No.' )
+    # ortho_procedure_specific = intake_form.prompt_until_valid_answer_given( 'Query Orthro Procedure Type?', acceptable_options=['1', '2'] )
+    # if ortho_procedure_specific == '1':
+    #     acceptable_procedure_options_encoded = {str(i+1): procedure for i, procedure in enumerate( ['ARTHRO', 'TRAUMA'] )}
+    #     options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_procedure_options_encoded.items()] )
+    #     print( f'\tPlease select from the following ortho procedure types:\n{options_str}' )
+    #     ortho_procedure_type_key = intake_form.prompt_until_valid_answer_given( 'Ortho Procedure Type', acceptable_options=list( acceptable_procedure_options_encoded ) )
+    #     ortho_procedure_type = acceptable_procedure_options_encoded[ortho_procedure_type_key]
+    # else:   ortho_procedure_type = None
+
+
 def header_footer_print( header_or_footer: str ):
     if header_or_footer == 'header': # Print header
         print( '\n'*15 + f'===' *50 )
@@ -118,9 +195,9 @@ def main():
             choice = prompt_function( verbose=verbose )
             if choice == '1':
                 metatables = upload_new_case( validated_login=validated_login, xnat_connection=xnat_connection, metatables=metatables, verbose=verbose )
+            elif choice == '3':
+                download_queried_data( validated_login=validated_login, xnat_connection=xnat_connection, metatables=metatables, verbose=verbose ) 
             # # elif choice == 2:
-            #     # function2()
-            # # elif choice == 3:
             # #     function3()
             # else:
             #     print( "Invalid choice" )

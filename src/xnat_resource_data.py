@@ -296,8 +296,8 @@ class ORDataIntakeForm( ResourceFile ):
         else:                           self._side_of_patient_body = 'Unknown'.upper()
         local_dict['PATIENT_SIDE'] = self.side_of_patient_body
 
-        print( f'\n\t(12/34) Operating Room Name/Location (press Enter if Unknown).' )
-        OR_location = input( '\n\tAnswer:\t' ).upper().replace( '"', "'" )
+        print( f'\n\t(12/34) Operating Room Name/Location.\n\t\tPlease press Enter if Unknown.' )
+        OR_location = input( '\tAnswer:\t' ).upper().replace( '"', "'" )
         if len( OR_location ) == 0: self._OR_location = 'Unknown'.upper()
         else:                       self._OR_location = OR_location
         local_dict['OR_LOCATION'] = self.OR_location
@@ -382,7 +382,7 @@ class ORDataIntakeForm( ResourceFile ):
         else:                                               self._diagnostic_notes = 'Unknown'.upper()
         local_dict['DIAGNOSTIC_NOTES'] = self.diagnostic_notes
 
-        print( f'\n\t(24/34) Do you have any additional comments or notes regarding BMI, pre-existing conditions, etc.?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown' )
+        print( f'\n\t(24/34) Do you have any additional comments or notes regarding BMI, pre-existing conditions, etc.?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown.' )
         any_misc_comments = self.prompt_until_valid_answer_given( ' Miscellaneous Procedure Comments', acceptable_options=['1', '2', '3'])
         if any_misc_comments == '1':
             misc_comments = input( f'\n\t(25/34) Please enter any additional comments or notes:\n\tAnswer: ' ).replace( '"', "'" )
@@ -408,8 +408,8 @@ class ORDataIntakeForm( ResourceFile ):
 
     def _prompt_user_for_n_surgical_tasks_and_hawkids( self, metatables: MetaTables, max_num_attempts: int=3 ) -> dict:
         # Extract answer from user for the number of participating surgeons
-        print( f'\n\t(19a/34) How many surgeons participated in the procedure?{indent_str}Please enter an integer (must be non-zero and positive).' )
-        num_tasks = self._prompt_user_for_integer_input( '\n(19a/34) # of Participating Surgeons', acceptable_range=( 1, 1000 ), max_num_attempts=max_num_attempts )
+        print( f'\n\t(19a/34) How many surgeons participated in the procedure (residents, supervisors, everyone)?{indent_str}Please enter an integer (must be non-zero and positive).' )
+        num_tasks = self._prompt_user_for_integer_input( '\n\t(19a/34) # of Participating Surgeons', acceptable_range=( 1, 1000 ), max_num_attempts=max_num_attempts )
 
         # Extract the HAWKIDs for each of the participating surgeons and prompt the user with an unstructured opportunity to detail the tasks that they performed.
         acceptable_performing_surgeon_options_encoded = {str(i+1): surgeon for i, surgeon in enumerate( metatables.list_of_all_items_in_table( table_name='Surgeons' ) )}

@@ -165,6 +165,11 @@ class ExperimentData():
         except:
             self._write_error_log_file( metatables=metatables, validated_login=validated_login, status_text=status_text, error_message=e )
             raise
+
+        # Delete local copy of the metatables
+        if verbose:     print( f'\t...Deleting local copy of metatables...' )
+        if os.path.exists( metatables.config_ffn ): os.remove( metatables.config_ffn )
+        else: print(f'---------- error deleting metatables config file; no file found at:----------\n\t\t{metatables.config_ffn}')
         return metatables
     
     def _write_error_log_file( self, metatables: MetaTables, validated_login: XNATLogin, status_text: str, error_message: Exception ) -> str:

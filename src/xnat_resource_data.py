@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path, WindowsPath
+import shutil
 
 from typing import List, Dict, Any, Tuple, Optional as Opt, Union
 
@@ -485,6 +486,10 @@ class ORDataIntakeForm( ResourceFile ):
         with open( self.saved_ffn, 'w' ) as f:
             f.write( json_str )
             if verbose:     print( f'\t-- SUCCESS -- OR Data Intake Form saved to:\t{self.saved_ffn}\n' )
+        
+        # Copy the file to the inputted parent folder of the data.
+        dest_ffn = self.relevant_folder / self.filename
+        shutil.copy( self.saved_ffn, dest_ffn )
 
 
     def push_to_xnat( self, subj_inst, verbose: Opt[bool] = False ):

@@ -130,7 +130,7 @@ class ExperimentData():
         try:
             zipped_data, metatables = self.write( metatables=metatables, verbose=verbose )
         except Exception as e:
-            if verbose: print( f'\t!!! Failed to write zipped file; exiting without publishing to XNAT.\n\tError given:\n\t{e}' )
+            if verbose: print( f'\n!!! Failed to write zipped file; exiting without publishing to XNAT.\n\tError given:\n\t{e}' )
             raise
 
         # Get subject instance so we can delete it if necessary during the ensuing try-except block(s)
@@ -397,6 +397,7 @@ class SourceESVSession( ExperimentData ):
         all_ffns = list( self.intake_form.relevant_folder.rglob("*.[jJ][pP][gG]") ) + list( self.intake_form.relevant_folder.rglob("*.[jJ][pP][eE][gG]") )
         if len( all_ffns ) == 0: # prompt the user to confirm that they do indeed want to proceed without any images.
             print( f'\n\tNo image files were found in the inputted folder; if this is correct, enter "1" to proceed, otherwise "2" to exit.' )
+            print( f'\t\tFiles found: {all_ffns}' )
             proceed_without_images = self.intake_form.prompt_until_valid_answer_given( 'No Images in Found in Folder', acceptable_options=['1', '2'] ) 
             if proceed_without_images != '1': raise ValueError( f'User did not enter "1" to proceed without images; software currently does not support this option -- exiting application...' )
             print( f'\n\t...Proceeding without images...' )

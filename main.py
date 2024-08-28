@@ -110,7 +110,7 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
     
     # Publish data to xnat
     metatables = source_data.write_publish_catalog_subroutine( metatables=metatables, xnat_connection=xnat_connection, validated_login=validated_login, verbose=verbose, delete_zip=False )
-    if verbose: print( f'\n-----Exiting Upload Process-----\n' )
+    if verbose: print( f'\n-----Concluding Upload Process-----\n' )
     return metatables
 
 

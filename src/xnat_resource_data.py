@@ -174,7 +174,7 @@ class ORDataIntakeForm( ResourceFile ):
                 self._operation_date = parser.parse( date_str ).date().strftime('%Y-%m-%d')
                 break
             except KeyboardInterrupt:
-                print( f"\nOperation cancelled by user. Exiting application..." )
+                print( f'\n\n...User cancelled task via Ctrl+C...' )
                 sys.exit( 0 )
             except:
                 num_attempts += 1

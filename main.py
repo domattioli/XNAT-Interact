@@ -1,5 +1,6 @@
 from typing import Optional as Opt, Tuple, Union, List
 
+import sys
 import os
 from pathlib import Path
 
@@ -87,8 +88,10 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
                     print( f'\n\tRe-doing the form...' )
                     intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose ) #to-do: causes an error and the above try block fails.
                 else:            break
-        except:
-            raise ValueError( f"\t\tThe provided path did not lead to a successful intake form. Please try again, or contact the Data Librarian for help." )
+        except KeyboardInterrupt:
+            print( f'\n\n...User cancelled task via Ctrl+C...' )
+            sys.exit( 0 )
+        except:                 raise ValueError( f"\t\tThe provided path did not lead to a successful intake form. Please try again, or contact the Data Librarian for help." )
     else: # Prompt user to create a new intake form; then print it to confirm
         while True:
             intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose )
@@ -107,8 +110,7 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
     elif intake_form.ortho_procedure_type.upper() == 'TRAUMA':
         raise ValueError( f"\tThe provided procedure type is not yet supported. Please contact the Data Librarian for help." )
         source_data = SourceRFSession( metatables=metatables, login=validated_login, verbose=verbose )
-    else:
-        raise ValueError( f"\tThe provided procedure type is not yet supported. This is a bug that should be reported to Data Librarian." )
+    else:                       raise ValueError( f"\tThe provided procedure type is not yet supported. This is a bug that should be reported to Data Librarian." )
     
     # Publish data to xnat
     metatables = source_data.write_publish_catalog_subroutine( metatables=metatables, xnat_connection=xnat_connection, validated_login=validated_login, verbose=verbose, delete_zip=False )

@@ -270,6 +270,8 @@ class XNATConnection( UIDandMetaInfo ):
     def close( self ):
         if hasattr( self, '_server' ):
             self._server.disconnect()
+            # Delete the local copy of the Metatables.
+            if os.path.exists( self.config_ffn ):      os.remove( self.config_ffn )
         self._open = False
         print( f"\n\t*Prior connection to XNAT server, '{self.uid}', has been closed -- local metatable data will be deleted!\n" )
 

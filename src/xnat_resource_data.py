@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path, WindowsPath
 
 from typing import List, Dict, Any, Tuple, Optional as Opt, Union
@@ -166,13 +167,20 @@ class ORDataIntakeForm( ResourceFile ):
         print( f'\n\t(2/34)\tDo you have a *PAPER* Intake Form available filled-out for this procedure?{indent_str}Please enter "1" for Yes or "2" for No' )
         form_available = self.prompt_until_valid_answer_given( 'Form Availability', acceptable_options=['1', '2'] ) # to-do: Automate acceptable_options based on the type of input expected bc we may change the metatables values for this and then these prompts wont reflect those changes.
 
-        while True:
+        num_attempts, max_num_attempts = 0, 2
+        while True and num_attempts < max_num_attempts:
             try:
                 date_str = input( '\n\t(3/34)\tPlease enter the Operation Date (YYYY-MM-DD):\t' )
                 self._operation_date = parser.parse( date_str ).date().strftime('%Y-%m-%d')
                 break
+            except KeyboardInterrupt:
+                print( f"\nOperation cancelled by user. Exiting application..." )
+                sys.exit( 0 )
             except:
+                num_attempts += 1
                 print( "Invalid date format. Please enter the date in YYYY-MM-DD format." )
+        if num_attempts == max_num_attempts:
+            raise ValueError( f"Maximum number of attempts, {max_num_attempts}, reached. Exiting." )
 
         if form_available == '1':       self._form_available = True
         elif form_available == '2':     self._form_available = False

@@ -296,7 +296,7 @@ class ORDataIntakeForm( ResourceFile ):
         else:                           self._side_of_patient_body = 'Unknown'.upper()
         local_dict['PATIENT_SIDE'] = self.side_of_patient_body
 
-        OR_location = input( '\n\t(12/34) Operating Room Name/Location (press Enter if Unknown):\t' ).upper()
+        OR_location = input( '\n\t(12/34) Operating Room Name/Location (press Enter if Unknown):\t' ).upper().replace( '"', "'" )
         if len( OR_location ) == 0: self._OR_location = 'Unknown'.upper()
         else:                       self._OR_location = OR_location
         local_dict['OR_LOCATION'] = self.OR_location
@@ -365,7 +365,7 @@ class ORDataIntakeForm( ResourceFile ):
         print( f'\n\t(20/34) Were there any unusual features of the performance?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown.')
         any_unusual_features_of_performance = self.prompt_until_valid_answer_given( 'Unusual Features of Performance', acceptable_options=['1', '2', '3'] )
         if any_unusual_features_of_performance == '1':
-            list_of_performance_features = input( f'\n\t(21/34) Please detail any/all unusual features of the performance:\n\tAnswer: ' )
+            list_of_performance_features = input( f'\n\t(21/34) Please detail any/all unusual features of the performance:\n\tAnswer: ' ).replace( '"', "'" )
             if len( list_of_performance_features ) > 0:     self._list_unusual_features_of_performance = list_of_performance_features
         elif any_unusual_features_of_performance == '2':    self._list_unusual_features_of_performance = None
         else:                                               self._list_unusual_features_of_performance = 'Unknown'.upper()
@@ -375,7 +375,7 @@ class ORDataIntakeForm( ResourceFile ):
         any_diagnostic_notes = self.prompt_until_valid_answer_given( 'Performing Surgeon Assistance', acceptable_options=['1', '2', '3'] )
         # if self.ortho_procedure_type == 'Arthroscopy' or ortho_procedure_type == '2':
         if any_diagnostic_notes == '1':
-            diagnostic_notes = input( f'\n\t(23/34) Please enter any diagnostic notes about the surgical procedure:\n\tAnswer: ' )
+            diagnostic_notes = input( f'\n\t(23/34) Please enter any diagnostic notes about the surgical procedure:\n\tAnswer: ' ).replace( '"', "'" )
             if len( diagnostic_notes ) > 0:                 self._diagnostic_notes = diagnostic_notes
         elif any_diagnostic_notes == '2':                   self._diagnostic_notes = None
         else:                                               self._diagnostic_notes = 'Unknown'.upper()
@@ -384,7 +384,7 @@ class ORDataIntakeForm( ResourceFile ):
         print( f'\n\t(24/34) Do you have any additional comments or notes regarding BMI, pre-existing conditions, etc.?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown' )
         any_misc_comments = self.prompt_until_valid_answer_given( ' Miscellaneous Procedure Comments', acceptable_options=['1', '2', '3'])
         if any_misc_comments == '1':
-            misc_comments = input( f'\n\t(25/34) Please enter any additional comments or notes:\n\tAnswer: ' )
+            misc_comments = input( f'\n\t(25/34) Please enter any additional comments or notes:\n\tAnswer: ' ).replace( '"', "'" )
             if len( misc_comments ) > 0:                    self._misc_surgical_performance_comments = misc_comments
         elif any_diagnostic_notes == '2':                   self._misc_surgical_performance_comments = None
         else:                                               self._misc_surgical_performance_comments = 'Unknown'.upper()
@@ -421,7 +421,7 @@ class ORDataIntakeForm( ResourceFile ):
             elif i == 2:    hawkid_encoding = input( f'\t\t3rd Surgeon: ' )
             else:           hawkid_encoding = input( f'\t\t{i+1}th Surgeon: ' )
             hawkid = acceptable_performing_surgeon_options_encoded[hawkid_encoding]
-            task_performers[metatables.get_uid(table_name='SURGEONS', item_name=hawkid)] = input( f"\t\t\tPlease detail the task(s) performed by '{hawkid_encoding}'', i.e., {hawkid.upper()}: " )
+            task_performers[metatables.get_uid( table_name='SURGEONS', item_name=hawkid )] = input( f"\t\t\tPlease detail the task(s) performed by '{hawkid_encoding}'', i.e., {hawkid.upper()}: " ).replace( '"', "'" )
         return task_performers
 
 
@@ -431,7 +431,7 @@ class ORDataIntakeForm( ResourceFile ):
         print( f'\t(26a/34) Was a Skills Assessment requested for this procedure?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown.')
         assessment_requested = self.prompt_until_valid_answer_given( 'Skills Assessment Request', acceptable_options=['1', '2', '3'] )
         if assessment_requested == '1':
-            assessment_requested, assessment_title = True, input( '\n\t(26b/34) Please enter the full name of the requested assessment:\n\tAnswer: ' ).upper()
+            assessment_requested, assessment_title = True, input( '\n\t(26b/34) Please enter the full name of the requested assessment:\n\tAnswer: ' ).upper().replace( '"', "'" )
 
             print( f'\n\t(27a/34) Do you know the HAWKID of the assessor?{indent_str}Please enter "1" for Yes or "2" for No.' )
             assessor_known = self.prompt_until_valid_answer_given( 'Assessor HAWKID', acceptable_options=['1', '2'] )
@@ -446,7 +446,7 @@ class ORDataIntakeForm( ResourceFile ):
             
             print( f'\n\t(28/34) Do you have any additional details about the assessment (e.g., date of assessment, score, etc.)?{indent_str}Please enter "1" for Yes or "2" for No.')
             known_details = self.prompt_until_valid_answer_given( 'Additional Assessment Details', acceptable_options=['1', '2'])
-            if known_details == '1':    self._assessment_details = input( '\n\t(29/34) Please enter any additional details about the assessment:\n\tAnswer: ' )
+            if known_details == '1':    self._assessment_details = input( '\n\t(29/34) Please enter any additional details about the assessment:\n\tAnswer: ' ).replace( '"', "'" )
             else:                       self._assessment_details = None
             self._assessment_title, self._assessor_hawk_id = assessment_title, assessor_hawkid
         elif assessment_requested == '2':
@@ -461,7 +461,7 @@ class ORDataIntakeForm( ResourceFile ):
     def _prompt_user_for_storage_device_info( self ):
         print( f'\n\n--- Storage Device Information ---' )
         
-        self._storage_device_name_and_type = input( '\t(30/34) Please enter the name and type of the storage device:\n\tAnswer: ' )
+        self._storage_device_name_and_type = input( '\t(30/34) Please enter the name and type of the storage device:\n\tAnswer: ' ).replace( '"', "'" )
 
         while True:
             full_path_name = input( '\n\t(31/34) Please enter the full directory name of the *local* folder containing the case data:\n\tAnswer: ' )

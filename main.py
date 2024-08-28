@@ -81,7 +81,7 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
             intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, parent_folder=form_pn, verbose=verbose )
             while True:
                 print( f'\n\tPlease review the created intake form:\n{intake_form}' )
-                print( f'\n\tIs anything incorrect and you would like to re-enter the intake form?\n\t\t-- Please enter "1" for Yes or "2" for No.' )
+                print( f'\n\tIs anything incorrect/would you like to re-enter the intake form?\n\t\t-- Please enter "1" for Yes or "2" for No.' )
                 redo_form = ORDataIntakeForm.prompt_until_valid_answer_given( 'Re-do Intake Form', acceptable_options=['1', '2'] )
                 if redo_form == '1':    intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose ) #to-do: causes an error and the above try block fails.
                 else:                   break
@@ -89,14 +89,16 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
             raise ValueError( f"\t\tThe provided path did not lead to a successful intake form. Please try again, or contact the Data Librarian for help." )
     else: # Prompt user to create a new intake form; then print it to confirm
         while True:
-            print('hello')
             intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose )
-            print( 'goodbye')
             print( f'\n\tPlease review the created intake form:\n{intake_form}' )
-            print( f'\n\tDo you want to proceed with this digital intake form? If anything then it is advised that you re-enter the information (Answer=No).\n\t\t-- Please enter "1" for Yes or "2" for No.' )
+            print( f'\n\tDo you want to proceed with this digital intake form? If anything is incorrect, then it is advised that you re-enter the information (Answer=2 for "No").\n\t\t-- Please enter "1" for Yes or "2" for No.' )
             redo_form = ORDataIntakeForm.prompt_until_valid_answer_given( 'Re-do Intake Form', acceptable_options=['1', '2'] )
-            if redo_form == '1':    continue
-            else:                   break
+            if redo_form != '1':
+                print( f'\n\tRe-doing the form...' )
+                continue
+            else:
+                print( f'\n\tProceeding with the intake form as is...' )
+                break
     
     # Depending on the procedure type, create the appropriate source data object.
     if intake_form.ortho_procedure_type.upper() == 'ARTHROSCOPY':

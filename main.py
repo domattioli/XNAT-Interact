@@ -102,7 +102,7 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
                 print( f'\n\tRe-doing the form...' )
                 continue
             else:               break
-    if verbose:                 print( f'\n\tProceeding with the intake form as is...' )
+    if verbose:                 print( f'\n\tProceeding with the intake form as is...\n' )
     
     # Depending on the procedure type, create the appropriate source data object.
     if intake_form.ortho_procedure_type.upper() == 'ARTHROSCOPY':

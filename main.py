@@ -83,7 +83,9 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
                 print( f'\n\tPlease review the created intake form:\n{intake_form}' )
                 print( f'\n\tIs everything correct?\n\t\t-- Please enter "1" for Yes or "2" for No (re-create the intake form).' )
                 accept_form = ORDataIntakeForm.prompt_until_valid_answer_given( 'Accept Intake Form As-Is', acceptable_options=['1', '2'] )
-                if accept_form == '2':    intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose ) #to-do: causes an error and the above try block fails.
+                if accept_form == '2':
+                    print( f'\n\tRe-doing the form...' )
+                    intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose ) #to-do: causes an error and the above try block fails.
                 else:            break
         except:
             raise ValueError( f"\t\tThe provided path did not lead to a successful intake form. Please try again, or contact the Data Librarian for help." )

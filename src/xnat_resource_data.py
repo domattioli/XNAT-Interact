@@ -5,6 +5,7 @@ import shutil
 
 from typing import List, Dict, Any, Tuple, Optional as Opt, Union
 
+import re
 from datetime import datetime, date as dtdate, time as dttime
 from dateutil import parser
 
@@ -194,7 +195,10 @@ class ORDataIntakeForm( ResourceFile ):
     
     def get_time_input( self, prompt ) -> str:
         for _ in range(2):  # Gives the user 1 opportunity to try again
+            # Replace hyphens and spaces with colons as applicable
             user_input = input( prompt )
+            user_input = re.sub( r'[-\s]', ':', user_input )
+            
             try: return parser.parse( user_input ).time().strftime( '%H:%M' )
             except ValueError: print( f"\t\t --- Invalid time provided; you entered: {user_input}{indent_str}Please use the HH:MM format.\n" )
         raise ValueError( "Failed to provide a valid time after 2 attempts." )

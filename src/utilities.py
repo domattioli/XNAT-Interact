@@ -419,7 +419,7 @@ class MetaTables( UIDandMetaInfo ):
         self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-Labrum' )
         self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-Superior_Labrum_Anterior_to_Posterior' )
         self.add_new_item( 'groups', 'SHOULDER_ARTHROSCOPY-Other' ) # to-do: eventually do an accounting of performances selected as other so we can provide more specific options
-        self.add_new_item( 'groups', 'KNEE_ARTHROSCOPY-Pre-Diagnostic' )
+        self.add_new_item( 'groups', 'KNEE_ARTHROSCOPY-Pre_Diagnostic' )
         self.add_new_item( 'groups', 'KNEE_ARTHROSCOPY-Post_Diagnostic' )
         self.add_new_item( 'groups', 'KNEE_ARTHROSCOPY-Cartilage_Resurfacing' )
         self.add_new_item( 'groups', 'KNEE_ARTHROSCOPY-Medial_Patella_Femoral_Ligament' )
@@ -434,6 +434,7 @@ class MetaTables( UIDandMetaInfo ):
         self.add_new_table( 'IMAGE_HASHES', ['subject', 'INSTANCE_NUM'] ) # need additional columns to reference uids from other tables
 
         self.add_new_table( 'Surgeons', ['first_name', 'last_name', 'middle_initial'] )
+        self.add_new_item( 'surgeons', 'unknown', extra_columns_values={'first_name':'', 'last_name': '', 'middle_initial': '' } )
         self.add_new_item( 'surgeons', 'karamm', extra_columns_values={'first_name':'MATTHEW', 'last_name': 'KARAM', 'middle_initial': 'D' } )
         self.add_new_item( 'surgeons', 'kowalskih', extra_columns_values={'first_name':'HEATHER', 'last_name': 'KOWALSKI', 'middle_initial': 'R' } )
         self.add_new_item( 'surgeons', 'mbollier', extra_columns_values={'first_name':'MATTHEW', 'last_name': 'BOLLIER', 'middle_initial': 'J' } )
@@ -444,7 +445,6 @@ class MetaTables( UIDandMetaInfo ):
         self.add_new_item( 'surgeons', 'cjmaly', extra_columns_values={'first_name':'CONNOR', 'last_name': 'MALY', 'middle_initial': 'J' } )
         self.add_new_item( 'surgeons', 'ryanse', extra_columns_values={'first_name':'SARAH', 'last_name': 'RYAN', 'middle_initial': 'E' } )
         self.add_new_item( 'surgeons', 'brwilkinson', extra_columns_values={'first_name':'BRADY', 'last_name': 'WILKINSON', 'middle_initial': 'R' } )
-        self.add_new_item( 'surgeons', 'unknown', extra_columns_values={'first_name':'', 'last_name': '', 'middle_initial': '' } )
 
         self.add_new_item( 'registered_users', 'gthomas' )
         self.add_new_item( 'registered_users', 'andersondd' )

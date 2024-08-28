@@ -296,7 +296,8 @@ class ORDataIntakeForm( ResourceFile ):
         else:                           self._side_of_patient_body = 'Unknown'.upper()
         local_dict['PATIENT_SIDE'] = self.side_of_patient_body
 
-        OR_location = input( '\n\t(12/34) Operating Room Name/Location (press Enter if Unknown):\t' ).upper().replace( '"', "'" )
+        print( f'\n\t(12/34) Operating Room Name/Location (press Enter if Unknown).' )
+        OR_location = input( '\n\tAnswer:\t' ).upper().replace( '"', "'" )
         if len( OR_location ) == 0: self._OR_location = 'Unknown'.upper()
         else:                       self._OR_location = OR_location
         local_dict['OR_LOCATION'] = self.OR_location

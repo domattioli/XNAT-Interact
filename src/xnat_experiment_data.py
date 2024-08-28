@@ -343,7 +343,7 @@ class SourceRFSession( ExperimentData ): # to-do: Need to detail past and presen
 ## Class for arthroscopy post-op diagnostic images.
 class SourceESVSession( ExperimentData ):
     '''Class representing the XNAT Experiment for Endoscopy Videos. Inherits from ExperimentData.'''
-    def __init__( self, intake_form: ORDataIntakeForm, metatables: MetaTables ) -> None:        
+    def __init__( self, intake_form: ORDataIntakeForm, metatables: MetaTables ) -> None:
         super().__init__( intake_form=intake_form, invoking_class='SourceESVSession' ) # Call the __init__ method of the base class
         self._populate_df( metatables=metatables )
         self._check_session_validity( metatables=metatables )
@@ -397,8 +397,8 @@ class SourceESVSession( ExperimentData ):
         all_ffns = list( self.intake_form.relevant_folder.rglob("*.[jJ][pP][gG]") ) + list( self.intake_form.relevant_folder.rglob("*.[jJ][pP][eE][gG]") )
         if len( all_ffns ) == 0: # prompt the user to confirm that they do indeed want to proceed without any images.
             print( f'\n\tNo image files were found in the inputted folder; if this is correct, enter "1" to proceed, otherwise "2" to exit.' )
-            proceed = input( f'\tAnswer:\t')
-            if proceed != '1': raise ValueError( f'User did not enter "1" to proceed without images; exiting.' )
+            proceed_without_images = self.intake_form.prompt_until_valid_answer_given( 'No Images in Found in Folder', acceptable_options=['1', '2'] ) 
+            if proceed_without_images != '1': raise ValueError( f'User did not enter "1" to proceed without images; software currently does not support this option -- exiting application...' )
             print( f'\n\t...Proceeding without images...' )
         # assert len( all_ffns ) > 0, f"No image files found in the inputted folder; make sure that all image files in folder have the correct ('.jpg' or '.jpeg') extension.\n\tDirectory given:  {self.intake_form.relevant_folder}."
             all_ffns = mp4_ffn

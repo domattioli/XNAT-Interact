@@ -473,9 +473,7 @@ class ORDataIntakeForm( ResourceFile ):
     def construct_digital_file( self, verbose: Opt[bool]=False ) -> None:
         assert self._uid, 'UID must be set before calling the IntakeForm saved full file name.'
         self._running_text_file['FORM_LAST_MODIFIED'] = datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
-        print('test before')
         json_str = json.dumps( self.running_text_file, indent=4, default=ORDataIntakeForm._custom_serializer )
-        print('test after')
         with open( self.saved_ffn, 'w' ) as f:
             f.write( json_str )
             if verbose:     print( f'\t-- SUCCESS -- OR Data Intake Form saved to:\t{self.saved_ffn}\n' )

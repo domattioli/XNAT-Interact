@@ -5,6 +5,7 @@
 /src/__pycache__
 /src/old_sandboxing
 /src/delete_contents_of_server
+/doc/Hawk_IDs_of_UIowa_Residents.xlsx
 
 # Don't ignore the 'tmp' directory but do ignore everything within the 'tmp' directory
 !/data/tmp  

@@ -39,7 +39,7 @@ class ResourceFile( UIDandMetaInfo ):
         # Separate items into arthroscopy and trauma items
         items = metatables.list_of_all_items_in_table( table_name='Groups' )
         arthroscopy_items = [item for item in items if 'arthroscopy' in item.lower()]
-        trauma_items = [item for item in items if 'arthroscopy' not in item.lower()]
+        trauma_items = [item for item in items if 'arthroscopy' not in item.lower()] # Note: "not" in is used here
 
         # Create keys for arthroscopy items and for trauma items, combine them into a dictionary
         arthroscopy_keys    = [f"1{letter.upper()}" for letter      in string.ascii_lowercase[:len( arthroscopy_items )]]

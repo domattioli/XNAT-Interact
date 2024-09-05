@@ -10,11 +10,19 @@ import argparse
 import xml.etree.ElementTree as ET
 
 from pyxnat import Interface
+from pyxnat.core.jsonutil import JsonTable
+
 from src.utilities import MetaTables, USCentralDateTime, XNATLogin, XNATConnection, ImageHash
 from src.xnat_experiment_data import *
 from src.xnat_scan_data import *
 from src.xnat_resource_data import ORDataIntakeForm
 
+import pandas as pd
+from tabulate import tabulate
+
+import datetime
+
+import string
 
 def parse_args() -> Tuple[str, str, bool]:
     parser = argparse.ArgumentParser(description='XNAT Login and Connection')
@@ -118,78 +126,202 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
     return metatables
 
 
+# ---- Functions for querying and downloading data ----
+def format_as_table( json_table: JsonTable ) -> pd.DataFrame:  return pd.DataFrame( [item for item in json_table] )
+
+
+def print_preview_of_xnat_data( pd_table: pd.DataFrame) -> None:
+    print(f'\n{"---"*15} Preview of XNAT Data {"---"*15}')
+    print( f'\tTotal # Performances: {len(pd_table)}' )
+
+    # Columns to display: procedure operation_date upload_date upload_time
+    pd_copy = pd_table.copy()
+    pd_copy.index = pd_copy.index + 1
+    pd_copy['upload_time'] = pd_copy['upload_time'].apply(lambda x: x.strftime('%H:%M'))
+    pd_copy.reset_index(inplace=True)
+    pd_copy.rename(columns={'index': 'Row'}, inplace=True)
+    columns = ['Row', 'procedure', 'operation_date', 'upload_date', 'upload_time']
+    table = pd_copy[columns].values.tolist()
+    headers = columns
+
+    # Generate the table with tabulate
+    table_str = tabulate(table, headers, tablefmt='plain', stralign='left', numalign='left')
+
+    # Add a tab to each line of the table
+    table_str_with_tab = '\n'.join(['\t' + line for line in table_str.split('\n')])
+
+    # Print the table with tabs
+    print(table_str_with_tab)
+    print( f'{"---"*50}\n' )
+
+
 def download_queried_data( validated_login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables, verbose: Opt[bool]=False ) -> None:
     # for the given project, prompt the user which subjects they want to query, then of those subjects, which of their data they want to download, then download it.
     print( f'\n-----Beginning data download process-----\n' )
 
-    download_folder = Path( os.path.expanduser( "~" ) ) / "Downloads"
-    print( f'\t...Downloading all source data to:\t{download_folder}' )
-    print( f'\t...')
+    # Ask user for a download location.
+    print( f'\tPlease enter the full path to the folder where you would like to download the data:\t' )
+    download_folder = input( f'\tAnswer:\t' )
+    while not os.path.exists( download_folder ):
+        print( f'\t--- The provided path does not exist. Please try again.' )
+        download_folder = input( f'\tAnswer:\t' )
+    # download_folder = Path( os.path.expanduser( "~" ) ) / "Downloads"
+    download_folder = Path( download_folder )
+    download_folder = download_folder / 'XNAT_Download'
+    if not os.path.exists( download_folder ):    os.makedirs( download_folder )
     
-    # contraints = [ ('xnat:subjectData/PROJECT', '=', metatables.xnat_project_name)]
+    # Open the connection then begin a query/download
     with Interface( server=validated_login.xnat_project_url, user=validated_login.validated_username, password=validated_login.validated_password ) as xnat:
-        # Get all subject instances w their labels and corresponding experiment labels.
-        proj_inst = xnat.select.project( metatables.xnat_project_name )
-        subj_labels = []
-        for s in proj_inst.subjects().get():
-            subject_xml = proj_inst.subject(s).get().decode('utf-8')
-            root = ET.fromstring(subject_xml)
-            label = root.attrib.get('label')
-            subj_labels.append(label)
-        exp_labels = ['SOURCE_DATA-'+s for s in subj_labels]
+        # Ask user if they want to preview all data currently in the database and then specify a query.
+        print( f'\n\tWould you like to preview all data currently in the database, or perform a specific query?\t--\tPlease enter "1" for Yes or "2" for No.' )
+        preview_data = ORDataIntakeForm.prompt_until_valid_answer_given( 'Preview Data?', acceptable_options=['1', '2'] )
+        if preview_data == '1':
+            constraints =  [('xnat:esvSessionData/PROJECT', '=', 'GROK_AHRQ_Data'),
+                            'OR',
+                            ('xnat:rfSessionData/PROJECT' , '=', 'GROK_AHRQ_Data' )
+                            ]
+            # Perform query that retrieves all experiments.
+            all_data_pd = format_as_table( xnat.select('xnat:esvSessionData').where( constraints ) ) # type: ignore
+            cols_to_remove = ['age', 'project']
+            all_data_pd.drop( columns=cols_to_remove, inplace=True )
+            all_data_pd.rename( columns={'date': 'operation_date'}, inplace=True )
 
-        # Write data to downloads folder, mimicky xnat directory structure
-        home_dl_dir = rf'C:\Users\dmattioli\Downloads\Source_Data'
-        count_files = 0
-        for el, sl in zip( exp_labels, subj_labels ):
-            f = xnat.select( f'/project/{xnat_connection.xnat_project_name}/subject/{sl}/experiment/{el}/scan/0/resource/SRC/*' )
-            source_dir, derived_dir = rf'{home_dl_dir}\{sl}', rf'{home_dl_dir}\{sl}\DERIVED' # SRC is automatically created by .get()
-            if not os.path.exists( source_dir ):    os.makedirs( source_dir )
-            if not os.path.exists( derived_dir ):   os.makedirs( derived_dir )
-                # os.mkdir( )
+            # Perform query that retrieves the subject names, given the subject ids from the prior query.
+            new_constraints =  [('xnat:subjectData/PROJECT', '=', 'GROK_AHRQ_Data'), 'AND']
+            sub_constraints = []
+            subject_ids = all_data_pd['subject_id'].unique()
+            for i, subject_id in enumerate(subject_ids):
+                if i > 0:
+                    sub_constraints.append('OR')
+                sub_constraints.append( ('xnat:subjectData/SUBJECT_ID', '=', subject_id) )
+            new_constraints.append( sub_constraints )
+            subj_pd = format_as_table( xnat.select('xnat:subjectData').where(new_constraints) )  # type: ignore
+            cols_to_remove = ['gender_text', 'handedness_text', 'dob', 'educ', 'add_ids', 'race', 'ethnicity', 'invest_csv', 'ses', 'projects']
+            subj_pd.drop( columns=cols_to_remove, inplace=True )
+
+            # Merge the two tables together
+            all_data_pd = all_data_pd.reset_index(drop=True)
+            subj_pd = subj_pd.reset_index(drop=True)
+            all_data_pd['procedure'] = subj_pd['sub_group']
+            all_data_pd['subject_id'] = subj_pd['xnat_col_subjectdatalabel']
+            # all_data_pd.drop( columns=['subject_id', 'expt_id'], inplace=True )
+            all_data_pd['insert_date'] = pd.to_datetime(all_data_pd['insert_date']) # Split insert_date into two columns
+            all_data_pd['upload_date'] = all_data_pd['insert_date'].dt.date
+            all_data_pd['upload_time'] = all_data_pd['insert_date'].dt.time
+            all_data_pd.drop( columns=['insert_date'], inplace=True )
+            print_preview_of_xnat_data( all_data_pd )
+
+            # Now we can ask user to specify their query.
+            print( f'\n\tWould you like to filter the data by Operation Date?\t--\tPlease enter "1" for Yes or "2" for No.' )
+            filter_by_date = ORDataIntakeForm.prompt_until_valid_answer_given( 'Filter by Operation Date?', acceptable_options=['1', '2'] )
+            if filter_by_date == '1':                                                       # Filter by date
+                print( f'\tPlease enter the start- and end-date for the operation date (YYYY-MM-DD):\t' )
+                attempts = 0
+                while attempts < 3:
+                    start_date = input( f'\tStart Date:\t' )
+                    try:
+                        # Validate the date input
+                        datetime.datetime.strptime(start_date, '%Y-%m-%d')
+                        break
+                    except ValueError:
+                        print("Invalid date format. Please enter the start-date in the format YYYY-MM-DD.")
+                        attempts += 1
+                if attempts == 3:
+                    print("Exceeded maximum number of attempts!")
+                    sys.exit(1)
+                while attempts < 3:
+                    end_date = input( f'\tEnd Date:\t' )
+                    try:
+                        # Validate the date input
+                        datetime.datetime.strptime(end_date, '%Y-%m-%d')
+                        break
+                    except ValueError:
+                        print("Invalid date format. Please enter the end-date in the format YYYY-MM-DD.")
+                        attempts += 1
+                if attempts == 3:
+                    print("Exceeded maximum number of attempts!")
+                    sys.exit(1)
+                
+                # Filter the data by the operation date
+                all_data_pd['operation_date'] = pd.to_datetime( all_data_pd['operation_date'] ).dt.date
+                all_data_pd = all_data_pd[(all_data_pd['operation_date'] >= start_date) & (all_data_pd['operation_date'] <= end_date)]
+                print_preview_of_xnat_data( all_data_pd )
+
+            # print( f'Would you like to filter the data by Procedure?\t--\tPlease enter "1" for Yes or "2" for No.' )
+            # filter_by_procedure = ORDataIntakeForm.prompt_until_valid_answer_given( 'Filter by Procedure?', acceptable_options=['1', '2'] )
+            # if filter_by_procedure == '1':                                                      # Filter by procedure
+            #     indent_str = f'\n\t\t-- '
+            #     print( f'\n\tWhich Ortho Procedure Type are do you want?{indent_str}Please enter "1" for Arthro, "2" for Trauma, "3" for Arthro & Trauma, "4" for Derived, or "5" for All' )
+            #     ortho_procedure_type = ORDataIntakeForm.prompt_until_valid_answer_given( 'Type of Orthro Procedure', acceptable_options=['1', '2', '3', '4', '5'] )
+            #     if ortho_procedure_type == '1':     ortho_procedure_type = 'Arthroscopy'.upper()
+            #     elif ortho_procedure_type == '2':   ortho_procedure_type = 'Trauma'.upper()
+            #     elif ortho_procedure_type == '3':   ortho_procedure_type = 'BOTH'.upper()
+            #     elif ortho_procedure_type == '4':   ortho_procedure_type = 'Derived'.upper(); raise ValueError( f"\tThe provided procedure type is not yet supported. Please contact the Data Librarian for help." )
+            #     elif ortho_procedure_type == '5':   ortho_procedure_type = 'All'.upper(); raise ValueError( f"\tThe provided procedure type is not yet supported. Please contact the Data Librarian for help." )
+
+            #     # acceptable_ortho_procedure_names = ORDataIntakeForm._construct_dict_of_ortho_procedure_names( metatables=metatabl es )
+            #     # Separate items into arthroscopy and trauma items
+            #     items = metatables.list_of_all_items_in_table( table_name='Groups' )
+            #     arthroscopy_items = [item for item in items if 'arthroscopy' in item.lower()]
+            #     trauma_items = [item for item in items if 'arthroscopy' not in item.lower()]
+
+            #     # Create keys for arthroscopy items and for trauma items, combine them into a dictionary
+            #     arthroscopy_keys    = [f"1{letter.upper()}" for letter      in string.ascii_lowercase[:len( arthroscopy_items )]]
+            #     other_keys          = [f"2{letter.upper()}" for letter      in string.ascii_lowercase[:len( trauma_items )]]
+            #     arthroscopy_dict    = {key: item            for key, item   in zip( arthroscopy_keys, arthroscopy_items )}
+            #     other_dictacceptable_ortho_procedure_names= {key: item            for key, item   in zip( other_keys, trauma_items )}
+            #     acceptable_procedure_options = {**arthroscopy_dict, **other_dict}
+
+            #     acceptable_ortho_procedure_name_options_encoded = {key: value for key, value in acceptable_ortho_procedure_names.items() if key.startswith( ortho_procedure_type )}
+            #     options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_ortho_procedure_name_options_encoded.items()] )
+            #     print( f'\n\t(7/34)\tWhat is the name of Ortho Procedure?{indent_str}Please select from the following options:\n{options_str}' )
+            #     procedure_name_key = ORDataIntakeForm.prompt_until_valid_answer_given( 'Ortho Procedure Name', acceptable_options = list( acceptable_ortho_procedure_name_options_encoded ) )
+            #     all_data_pd = all_data_pd[ all_data_pd['procedure'].str.contains(procedure_name_key) ]
+            #     print_preview_of_xnat_data( all_data_pd )
+
+
+        # Ask user if they want to download all data currently in the database.
+        print( f'\n\tWould you like to download all data currently in the database?\t--\tPlease enter "1" for Yes or "2" for No.' )
+        download_all_data = ORDataIntakeForm.prompt_until_valid_answer_given( 'Preview Data?', acceptable_options=['1', '2'] )
+        if download_all_data == '1':
+            print( f'\t...Downloading all data currently in the database...' )
+            print( f'\t...Downloading all source data to:\t{download_folder}' )
+            print( f'\t...')
+        
+            # Get all subject instances w their labels and corresponding experiment labels.
+            proj_inst = xnat.select.project( metatables.xnat_project_name )
+            subj_labels = []
+            for s in proj_inst.subjects().get():
+                subject_xml = proj_inst.subject(s).get().decode('utf-8')
+                root = ET.fromstring(subject_xml)
+                label = root.attrib.get('label')
+                subj_labels.append(label)
+            exp_labels = ['SOURCE_DATA-'+s for s in subj_labels]
+
+            # Write data to specified folder, creating a new subfolder called XNAT_Query, mimick xnat directory structure
+            count_files = 0
+            for el, sl in zip( exp_labels, subj_labels ):
+                print( 'hello')
+                f = xnat.select( f'/project/{xnat_connection.xnat_project_name}/subject/{sl}/experiment/{el}/scan/0/resource/SRC/*' )
+                source_dir, derived_dir = rf'{download_folder}\{sl}', rf'{download_folder}\{sl}\DERIVED' # SRC is automatically created by .get()
+                if not os.path.exists( source_dir ):    os.makedirs( source_dir )
+                if not os.path.exists( derived_dir ):   os.makedirs( derived_dir )
+                    # os.mkdir( )
+                
+                # # Notify the user that data exists here already and ask if its ok to overwrite it
+                # if os.path.exists( source_dir ) and os.path.exists( derived_dir ):
+                #     print( f'\t...Data already exists in {source_dir}. This function may overwrite it -- is that ok?\t--\tPlease enter "1" for Yes or "2" for No.' )
+                #     overwrite = ORDataIntakeForm.prompt_until_valid_answer_given( 'Overwrite Data?', acceptable_options=['1', '2'] )
+                #     assert overwrite == '1', 'To-Do: Implement exception to user declaring that they do not want to overwrite data (prompt for a new directory).'
+                write_d = f.get( dest_dir=source_dir, extract=True ) # type: ignore
+                count_files += 1
             
-            # Notify the user that data exists here already and ask if its ok to overwrite it
-            if os.path.exists( source_dir ) and os.path.exists( derived_dir ):
-                print( f'\t...Data already exists in {source_dir}. This function may overwrite it -- is that ok?\t--\tPlease enter "1" for Yes or "2" for No.' )
-                overwrite = ORDataIntakeForm.prompt_until_valid_answer_given( 'Overwrite Data?', acceptable_options=['1', '2'] )
-                assert overwrite == '1', 'To-Do: Implement exception to user declaring that they do not want to overwrite data (prompt for a new directory).'
-            write_d = f.get( dest_dir=source_dir, extract=True ) # type: ignore
-            count_files += 1
-        
-        print( f'\t...Downloaded {count_files} files to {home_dl_dir}...' )
+                print( f'\t...Downloaded {count_files} files to {download_folder}!' )
+        else: # Present database preview to user and allow them to specify their query.
+            pass
+        print( f'\n-----Concluding Download Process-----\n' )
 
-        # Print out the folder hierarchy of that folder
-        folder_hierarchy = "\t"
-        for root, dirs, files in os.walk(home_dl_dir):
-            level = root.replace(home_dl_dir, '').count(os.sep)
-            indent = ' ' * 4 * level
-            folder_hierarchy += f'{indent}{os.path.basename(root)}/\n'
-            sub_indent = ' ' * 4 * (level + 1)
-            for f in files:
-                folder_hierarchy += f'{sub_indent}{f}\n'
-        
-        print(folder_hierarchy)
 
-    # # Prompt user for if they want to download data for a specific institution
-    # print( f'\tWould you like to download data for a specific institution?\t--\tPlease enter "1" for Yes or "2" for No.' )
-    # institution_specific = intake_form.prompt_until_valid_answer_given( 'Query by Institution?', acceptable_options=['1', '2'] )
-    # if institution_specific == '1':
-    #     acceptable_institution_options_encoded = {str(i+1): institution for i, institution in enumerate( metatables.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ) )}
-    #     options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_institution_options_encoded.items()] )
-    #     print( f'\tPlease select from the following institutions:\n{options_str}' )
-    #     institution_name_key = intake_form.prompt_until_valid_answer_given( 'Institution Name', acceptable_options=list( acceptable_institution_options_encoded ) )
-    #     institution_name = acceptable_institution_options_encoded[institution_name_key]
-    # else:   institution_name = None
-
-    # print( f'\tWould you like to download data for a specific ortho procedure type?\t--\tPlease enter "1" for Yes or "2" for No.' )
-    # ortho_procedure_specific = intake_form.prompt_until_valid_answer_given( 'Query Orthro Procedure Type?', acceptable_options=['1', '2'] )
-    # if ortho_procedure_specific == '1':
-    #     acceptable_procedure_options_encoded = {str(i+1): procedure for i, procedure in enumerate( ['ARTHRO', 'TRAUMA'] )}
-    #     options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_procedure_options_encoded.items()] )
-    #     print( f'\tPlease select from the following ortho procedure types:\n{options_str}' )
-    #     ortho_procedure_type_key = intake_form.prompt_until_valid_answer_given( 'Ortho Procedure Type', acceptable_options=list( acceptable_procedure_options_encoded ) )
-    #     ortho_procedure_type = acceptable_procedure_options_encoded[ortho_procedure_type_key]
-    # else:   ortho_procedure_type = None
 
 
 def header_footer_print( header_or_footer: str ):

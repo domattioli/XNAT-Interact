@@ -28,6 +28,16 @@ __all__ = ['ScanFile', 'SourceDicomDeIdentified', 'MTurkSemanticSegmentation', '
 #--------------------------------------------------------------------------------------------------------------------------
 ## Base class for scan files, designed for inheritence.
 class ScanFile( UIDandMetaInfo ):
+    """
+    Base class for scan files, designed for inheritence. This class is designed to be extensible for all image-sets and videos that are uploaded to XNAT. 
+    As of Oct 2024, tt is intended to be used as a base class for the ArthroDiagnosticImage, ArthroVideo, SourceDicomDeIdentified, and MTurkSemanticSegmentation classes.
+    
+    Attributes:
+    See the attributes of UIDandMetaInfo class.
+
+    Example Usage:
+    None -- this is a base class and should not be instantiated directly.
+    """
     def __init__( self, intake_form: ORDataIntakeForm, ffn: Path ):
         super().__init__() # Call the __init__ method of the base class to create a uid for this instance
         assert os.path.isfile( ffn ), f'Inputted file not found: {ffn}'
@@ -102,7 +112,18 @@ class ScanFile( UIDandMetaInfo ):
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class(es) for arthro files files
 class ArthroDiagnosticImage( ScanFile ):
-    '''Class representing the XNAT Scan for Arthroscopic Diagnostic Images. Inherits from ScanFile.'''
+    '''
+    Class representing the XNAT Scan for Arthroscopic Diagnostic Images. Inherits from ScanFile.
+
+    Attributes:
+    still_num: str -- The still/frame number of the image within the sequence. Assumed to be within the title for arthro cases.
+
+    Methods:
+    None are intended for direct use by the user beyond the __init__ method.
+
+    Example usage:
+    ArthroDiagnosticImage( img_ffn=Path( r'...\\...\examplefoldername' ), still_num='1', parent_uid='1_2_840_10008', metatables=..., intake_form=... )
+    '''
     def __init__( self, img_ffn: Path, still_num: str, parent_uid: str, metatables: MetaTables, intake_form: ORDataIntakeForm ):
         super().__init__( intake_form=intake_form, ffn=img_ffn )  # Call the __init__ method of the base class
         self._datetime, self._still_num = USCentralDateTime(), still_num
@@ -164,7 +185,18 @@ class ArthroDiagnosticImage( ScanFile ):
 
 #--------------------------------------------------------------------------------------------------------------------------
 class ArthroVideo( ScanFile ):
-    '''Class representing the XNAT Scan for Arthroscopic Videos. Inherits from ScanFile.'''
+    '''
+    Class representing the XNAT Scan for Arthroscopic Videos. Inherits from ScanFile.
+    
+    Attributes:
+    None -- see ScanFile for inherited attributes.
+
+    Methods:
+    None are intended for direct use by the user beyond the __init__ method.
+
+    Example usage:
+    ArthroVideo( vid_ffn=Path( r'...\\...\examplefoldername' ), metatables=..., intake_form=... )
+    '''
     def __init__( self, vid_ffn: Path, metatables: MetaTables, intake_form: ORDataIntakeForm ):
         super().__init__( intake_form=intake_form, ffn=vid_ffn )  # Call the __init__ method of the base class
         self._validate_input()
@@ -186,8 +218,17 @@ class ArthroVideo( ScanFile ):
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for dicom (trauma) files
 class SourceDicomDeIdentified( ScanFile ):
-    ''' # Example usage:
-    print( SourceDicomDeIdentified( r'...\\data\\examples\\SourceDicomDeIdentified_Example_File' ) )
+    '''
+    Class representing the XNAT Scan for Source Dicom Files. Inherits from ScanFile.
+
+    Attributes:
+    None -- see ScanFile for inherited attributes.
+
+    Methods:
+    None are intended for direct use by the user beyond the __init__ method.
+
+    # Example usage:
+    SourceDicomDeIdentified( dcm_ffn=Path( r'...\\...\exampledcmfilename' ), metatables=..., intake_form=... )
     '''
     def __init__( self, dcm_ffn: Path, metatables: MetaTables, intake_form: ORDataIntakeForm ):
         super().__init__( intake_form=intake_form, ffn=dcm_ffn )  # Call the __init__ method of the base class
@@ -262,8 +303,17 @@ class SourceDicomDeIdentified( ScanFile ):
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for *a single* mturk batch file *row*
 class MTurkSemanticSegmentation( ScanFile ):
-    ''' # Example usage:
-    print( MTurkSemanticSegmentation( pd.read_csv( r'...\\data\\examples\\MTurkSemanticSegmentation_Example_File.csv' ) ) )
+    '''
+    A class representing the XNAT Scan for MTurk Semantic Segmentation. Inherits from ScanFile.
+
+    Attributes:
+    tbd
+
+    Methods:
+    tbd
+
+    # Example usage:
+    tbd
     '''
     # def __init__( self, assignment: pd.Series, metatables: MetaTables, intake_form: ORDataIntakeForm ): #to-do: allow for different input types eg batch file data or pulled-from-xnat data
     #     super().__init__( intake_form=intake_form, assignment )  # to:do -- cant pass assignment to super().__init__ because it expects a Path object. need to rethink the baseclass.

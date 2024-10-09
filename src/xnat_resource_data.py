@@ -12,6 +12,9 @@ from dateutil import parser
 import json
 from collections import OrderedDict
 
+import pandas as pd
+from pathlib import Path
+
 from src.utilities import UIDandMetaInfo, MetaTables, USCentralDateTime, XNATLogin, USCentralDateTime
 
 import pytz
@@ -23,19 +26,56 @@ ordered_keys_of_intake_text_file = ['FORM_LAST_MODIFIED', 'OPERATION_DATE', 'SUB
 
 indent_str = f'\n\t\t-- '
 
+
+#### `ResourceFile` Class:
 class ResourceFile( UIDandMetaInfo ):
-    """This can represent a resource at any level, e.g., project, subject, experiment, scan, etc."""
+    """
+    Represents a resource file at any level within the XNAT project, such as project, subject, experiment, or scan.
+
+    Attributes:
+        metatables (MetaTables): MetaTables object for managing table data.
+        login (XNATLogin): Validated login object for XNAT.
+    
+    Methods:
+        _init_all_fields(): Placeholder to initialize all fields, must be implemented in subclasses.
+        _construct_dict_of_ortho_procedure_names(): Constructs a dictionary of orthopedic procedure names categorized by type.
+
+    Example Usage:
+    None -- abstract class intended to be subclassed.
+    """
     def __init__( self, metatables: MetaTables, login: XNATLogin ):
+        """
+        Initialize the ResourceFile with given metatables and login credentials.
+
+        Args:
+            metatables (MetaTables): MetaTables object for managing table data.
+            login (XNATLogin): Validated login object for XNAT.
+        
+        Raises:
+            AssertionError: If the user is not registered in the system.
+        """
         assert metatables.is_user_registered( login.validated_username ), f'User with HAWKID {login.validated_username} is not registered in the system!'
         super().__init__() # Call the __init__ method of the base class to create a uid for this instance
         
 
-    def _init_all_fields( self )    -> None:        raise NotImplementedError( 'This method must be implemented in the subclass.' ) # This is a placeholder for the subclass to implement
+    def _init_all_fields( self )    -> None:        raise NotImplementedError( 'This method must be implemented in the subclass.' )
         
+
     def __str__( self )             -> str:         return '-----'*5 + f'\nOR Data Intake Form\n' + '-----'*5 + '\n\n'
 
+
     def _construct_dict_of_ortho_procedure_names( self, metatables: MetaTables ) -> Dict[str, str]:
-        """This method is intended to be used to create a dictionary of all ortho procedure names that are in the metatables."""
+        """
+        Create a dictionary of all orthopedic procedure names from the metatables.
+        
+        Procedures are categorized into arthroscopy and trauma items.
+
+        Args:
+            metatables (MetaTables): MetaTables object containing data about available procedures.
+
+        Returns:
+            Dict[str, str]: Dictionary mapping keys to procedure names.
+        """
         # Separate items into arthroscopy and trauma items
         items = metatables.list_of_all_items_in_table( table_name='Groups' )
         arthroscopy_items = [item for item in items if 'arthroscopy' in item.lower()]
@@ -58,22 +98,47 @@ class InvalidInputError( Exception ):
 
 class ORDataIntakeForm( ResourceFile ):
     """
-    This class is for describing a subject-experiment intake, i.e., a subject's source data experiment.
-    It is intended to be used for the OR Data Intake Form, which is a paper form that is filled out by someone immediately after a surgical procedure.
-    The form is then used to create a text file that is used to populate the XNAT database with the relevant information.
-    The UID generated represents the subject and the source data experiment.
+    Describes a subject's source data experiment from the OR Data Intake Form.
+
+    The OR Data Intake Form is filled out immediately after a surgical procedure and is used to populate the XNAT database.
+    
+    Attributes:
+        metatables (MetaTables): MetaTables object for managing table data.
+        login (XNATLogin): Validated login object for XNAT.
+        input_data (Union[None, Path, pd.Series]): Input data for the intake form.
+        verbose (Optional[bool]): Whether to enable verbose output.
+        write_tmp_file (Optional[bool]): Whether to write a temporary file.
+    
+    Methods:
+    prompt_until_valid_answer_given(): Prompt the user until a valid answer is given, giving 3 chances by default before raising error.
+    get_time_input(): Get a time input from the user, formatting it for xnat.
+    construct_digital_file(): Construct a digital file from the intake form, either following user prompts or reading from a file.
+    push_to_xnat(): Push the intake form to XNAT.
+
+    Example Usage:
+    ORDataIntakeForm( metatables=..., login=., input_data=..., verbose=True, write_tmp_file=True )
     """
-    def __init__( self, metatables: MetaTables, login: XNATLogin, parent_folder: Opt[str]=None, verbose: Opt[bool]=False, write_tmp_file: Opt[bool]=True ):
+    def __init__( self, metatables: MetaTables, login: XNATLogin, input_data: Union[None, Path, pd.Series]=None, verbose: Opt[bool]=False, write_tmp_file: Opt[bool]=True ):
+        """
+        Initialize the ORDataIntakeForm with given metatables, login credentials, and input data.
+
+        Args:
+            metatables (MetaTables): MetaTables object for managing table data.
+            login (XNATLogin): Validated login object for XNAT.
+            input_data (Union[None, Path, pd.Series], optional): Input data for the intake form. Defaults to None.
+            verbose (Optional[bool], optional): Whether to enable verbose output. Defaults to False.
+            write_tmp_file (Optional[bool], optional): Whether to write a temporary file. Defaults to True.
+        """
         super().__init__( metatables=metatables, login=login ) # Call the __init__ method of the base class -- bug:? goes all the way to our utility class and generates a uid.
 
         # Init dict (and future json-formatted text file) with required keys.
         self._init_all_fields( metatables=metatables )
         
         # Either read in the inputted text file and distribute that data, or prompt the user for the data.
-        if parent_folder:
-            self._read_from_file( parent_folder, verbose=verbose )
-        else:
-            if verbose:     print( f'\n...Processing OR Data Intake Form...' )
+        if verbose:     print( f'\n...Processing OR Data Intake Form...' )
+        if isinstance( input_data, pd.Series ): self._read_from_series( data_row=input_data, metatables=metatables, verbose=verbose )
+        elif isinstance( input_data, Path ):    self._read_from_file( parent_folder=input_data, verbose=verbose )
+        else:                                   # User must define intake form from a set of prompts.
             self._prompt_user_for_filer_name_and_operation_date( metatables=metatables )
             self._prompt_user_for_scan_quality()
             self._prompt_user_for_surgical_procedure_info( metatables=metatables )
@@ -87,7 +152,125 @@ class ORDataIntakeForm( ResourceFile ):
         # self._create_text_file_reconstruction( verbose=verbose ) # commenting out bc we want it saved to a temp folder corresponding to this subject
 
 
-    def _read_from_file( self, parent_folder: str, verbose: Opt[bool]=False ) -> None:
+    def _read_from_series( self, data_row: pd.Series, metatables: MetaTables, verbose: Opt[bool]=False ) -> None:
+        """
+        Read data from a Pandas Series and populate the intake form fields.
+
+        Args:
+            data_row (pd.Series): The data row from which to populate the fields.
+            metatables (MetaTables): MetaTables object for managing table data.
+            verbose (Optional[bool], optional): Whether to enable verbose output. Defaults to False.
+        """
+        # Define the expected columns
+        expected_columns = [
+            f'Filer\nHawkID', f'Operation\nDate', f'Quality', f'Institution\nName', f'Procedure\nName',
+            f'Epic\nStart\nTime', f'Epic\nEnd\nTime', f'Side of\nPatient\nBody', f'OR Room\nName/\nLocation',
+            f'Supervising\nSurgeon\nHawkID', f'Supervising\nSurgeon\nPresence', f'Performing\nSurgeon\nHawkID',
+            f'Performing\nSurgeon\n# Years\nExperience', f'Performing\nSurgeon\n# Prior\nCases',
+            f'# of\nParticipating\nPerforming\nSurgeons', f'Performer\nHawkID-Task', f'Unusual\nFeatures',
+            f'Diagnotistic\nNotes', f'Additional\nComments', f'Skills\nAssessment\nRequested', f'Assessor\nHawkID',
+            f'Additional\nAssessment\nDetails', f'Name/\nType of\nStorage\nDevice', f'Full Path to Data',
+            f'Was\nRadiology\nContacted', f'Radiology\nContact\nDate', f'Radiology\nContact\nTime']
+
+        # Verify that all expected columns exist within the actual columns for the series
+        actual_columns = set( data_row.index )
+        missing_columns = set( expected_columns ) - actual_columns
+        if not missing_columns:
+            print("The Excel file has all the expected columns.")
+        else:
+            print("The Excel file is missing some expected columns.")
+            print(f"Missing columns: {missing_columns}")
+            print(f"Expected columns: {expected_columns}")
+            print(f"Actual columns: {list(actual_columns)}")
+
+        # Begin assigning information, building list of issues, if any, as feedback to user.
+        self._form_available = False
+        issues = {}
+        self._filer_name = data_row['Filer\nHawkID']
+        if self.filer_name not in metatables.list_of_all_items_in_table( table_name='REGISTERED_USERS' ):           issues[f'Filer\nHawkID'] = f'Filer name "{self.filer_name}" not registered w/ the database.'
+        
+        self._operation_date = data_row['Operation\nDate']
+        if not self.operation_date:                                                                                 issues[f'Operation\nDate'] = f'Operation Date is missing and required.'
+        elif not re.match( r'\d{4}-\d{2}-\d{2}', self.operation_date ):                                             issues[f'Operation\nDate'] = f'Operation Date "{self.operation_date}" is not in the correct format (YYYY-MM-DD).'
+
+        self._scan_quality = data_row['Quality'].lower()
+        if self.scan_quality is 'unknown': self._scan_quality = ''
+        if self.scan_quality not in ['usable', 'unusable', 'questionable', '']:                                     issues[f'Quality'] = f'Quality "{self.scan_quality}" is not one of the expected values.'
+
+        self._institution_name = data_row['Institution\nName']
+        if self.institution_name not in metatables.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ):    issues[f'Institution\nName'] = f'Institution name "{self.institution_name}"is not registered w/ the database.'
+        
+        self._ortho_procedure_name = data_row['Procedure\nName'.upper()]
+        if self.ortho_procedure_name not in metatables.list_of_all_items_in_table( table_name='Groups' ):
+            issues[f'Procedure\nName'] = f'Procedure name "{self.ortho_procedure_name}"is not registered w/ the database.'
+            issues[f'Procedure\nType'] = f'Procedure type cannot reliably be discerned because the inputted procedure name is not registed w the database and we currently dont ask the user to explicitly declare it.'
+ 
+        if "ARTHROSCOPY" in self.ortho_procedure_name.upper():  self._ortho_procedure_type = 'ARTHRO'
+        else:  self._ortho_procedure_type = 'TRAUMA'
+
+        self._epic_start_time = data_row['Epic\nStart\nTime']
+        if not self.epic_start_time:                                                                                issues[f'Epic\nStart\nTime'] = f'Epic Start Time is missing and required.'
+        self._epic_end_time = data_row['Epic\nEnd\nTime']
+        if self.epic_end_time and self.epic_end_time < self.epic_start_time:                                        issues[f'Epic\nEnd\nTime'] = f'Epic End Time "{self.epic_end_time}" cannot be before Start Time "{self.epic_start_time}".'
+        
+        self._side_of_patient_body = data_row['Side of\nPatient\nBody'].upper()
+        if self.side_of_patient_body not in ['RIGHT', 'LEFT', 'BOTH', 'UNKNOWN']:                                   issues[f'Side of\nPatient\nBody'] = f'Side of Patient Body "{self.side_of_patient_body}" is not one of the expected values.'
+
+        self._OR_location = data_row['OR Room\nName/\nLocation']
+
+        self._supervising_surgeon_hawk_id = data_row['Supervising\nSurgeon\nHawkID'].upper()
+        if self.supervising_surgeon_hawk_id not in metatables.list_of_all_items_in_table( table_name='Surgeons' ):  issues[f'Supervising\nSurgeon\nHawkID'] = f'Supervising Surgeon HawkID "{self.supervising_surgeon_hawk_id}" is not registered w/ the database.'
+
+        self._supervising_surgeon_presence = data_row['Supervising\nSurgeon\nPresence'].upper()
+        if self.supervising_surgeon_presence not in ['PRESENT', 'RETROSPECTIVE_REVIEW', 'OTHER-SEE_ADDITIONAL_COMMENTS']:
+            issues[f'Supervising\nSurgeon\nPresence'] = f'Supervising Surgeon Presence "{self.supervising_surgeon_presence}" is not one of the expected values.'
+
+        self._performing_surgeon_hawk_id = data_row['Performing\nSurgeon\nHawkID'].upper()
+        if self.performing_surgeon_hawk_id not in metatables.list_of_all_items_in_table( table_name='Surgeons' ):   issues[f'Performing\nSurgeon\nHawkID'] = f'Performing Surgeon HawkID "{self.performing_surgeon_hawk_id}" is not registered w/ the database.'
+
+        self._performer_year_in_residency = data_row['Performing\nSurgeon\n# Years\nExperience']
+        if not isinstance( self.performer_year_in_residency, int ) or self.performer_year_in_residency <= 0:        issues[f'Performing\nSurgeon\n# Years\nExperience'] = f'Performing Surgeon Years in Residency "{self.performer_year_in_residency}" is not a valid value -- must be a positive integer.'
+        
+        self._performer_num_of_similar_logged_cases = data_row['Performing\nSurgeon\n# Prior\nCases']
+        if not isinstance( self.performer_num_of_similar_logged_cases, int ) or self.performer_num_of_similar_logged_cases < 0: issues[f'Performing\nSurgeon\n# Prior\nCases'] = f'Performing Surgeon Number of Similar Logged Cases "{self.performer_num_of_similar_logged_cases}" is not a valid value -- must be a non-negative integer.'
+
+        # Parsing string describing surgeon tasks
+        num_surgeons = data_row['# of\nParticipating\nPerforming\nSurgeons']
+        if not isinstance( num_surgeons, int ) or num_surgeons < 0: issues[f'# of\nParticipating\nPerforming\nSurgeons'] = f'Number of Participating Performing Surgeons "{num_surgeons}" is not a valid value -- must be a non-negative integer.'
+        performer_tasks_string = data_row['Performer\nHawkID-Task']
+        task_pattern = r'^\{(?:\s*([a-zA-Z0-9_]+)\s*:\s*([^,{}]+)\s*,)*\s*([a-zA-Z0-9_]+)\s*:\s*([^,{}]+)\s*\}$'
+        if not re.match( task_pattern, performer_tasks_string ):                                                    issues[f'Performer\nHawkID-Task'] = f'Performer HawkID-Task "{performer_tasks_string}" is not in the expected format, i.e., {{hawkid: task}}".'
+        key_value_pattern = r'([a-zA-Z0-9_]+)\s*:\s*([^,{}]+)'
+        matches = re.findall( key_value_pattern, performer_tasks_string )
+        surgeon_task_dict = {key: value for key, value in matches}
+        for key in surgeon_task_dict.keys():
+            if key not in metatables.list_of_all_items_in_table(table_name='Surgeons'):                             issues[f'Performer\nHawkID-Task'] = f'HawkID "{key}" in Performer HawkID-Task is not registered w/ the database.'
+        if len(surgeon_task_dict) != num_surgeons:                                                                  issues[f'Performer\nHawkID-Task'] = f'The number of HawkIDs in Performer HawkID-Task does not match the number of Participating Performing Surgeons "{num_surgeons}".'
+        self._performance_enumerated_task_performer = surgeon_task_dict
+
+        self._list_unusual_features_of_performance = data_row['Unusual\nFeatures']
+        self._diagnostic_notes = data_row['Diagnotistic\nNotes']
+        self._misc_surgical_performance_comments = data_row['Additional\nComments']
+        self._assessment_title = data_row['Skills\nAssessment\nRequested']
+        self._assessor_hawk_id = data_row['Assessor\nHawkID']
+        self._assessment_details = data_row['Additional\nAssessment\nDetails']
+
+        self._storage_device_name_and_type = data_row['Name/\nType of\nStorage\nDevice']
+        self._relevant_folder = Path( data_row['Full\nPath\nto\nData'] )
+
+        if data_row['Was\nRadiology\nContacted'] == 'Y':
+            self._radiology_contact_date = data_row['Radiology\nContact\nDate']
+            self._radiology_contact_time = data_row['Radiology\nContact\nTime']
+
+
+    def _read_from_file( self, parent_folder: Path, verbose: Opt[bool]=False ) -> None:
+        """
+        Read data from a JSON-formatted text file and populate the intake form fields.
+
+        Args:
+            parent_folder (Path): The parent folder containing the text file.
+            verbose (Optional[bool], optional): Whether to enable verbose output. Defaults to False.
+        """
         ffn = os.path.join( parent_folder, self.filename_str )
         if verbose:     print( f'\n\t...Initializing OR Intake From from "{ffn}"...' )
         with open( ffn, 'r', encoding='cp1252' ) as jf:     self._running_text_file = json.loads( jf.read() )
@@ -132,7 +315,7 @@ class ORDataIntakeForm( ResourceFile ):
     def _init_all_fields( self, metatables: MetaTables ) -> None:
         # Required inputs -- user must at the very least acknowledge that they do not have the information
         self._filer_name, self._operation_date, self._form_available = '', '', False
-        self._institution_name, self._ortho_procedure_type, self._ortho_procedure_namem, self._epic_start_time = '', '', '', ''
+        self._institution_name, self._ortho_procedure_type, self._ortho_procedure_name, self._epic_start_time = '', '', '', ''
         self._storage_device_name_and_type, self._radiology_contact_date, self._radiology_contact_time, self._relevant_folder = None, None, None, Path('') # While required, it would be good to show a "null" value in the json file if this is truly unknown.
         self._scan_quality = ''
 
@@ -289,10 +472,11 @@ class ORDataIntakeForm( ResourceFile ):
         #Please enter "1" for Right, "2" for Left, "3" for Unknown, or "4" for N/A or not relevant.' )
         known_patient_side = self.prompt_until_valid_answer_given( 'Known Side of Patient\'s Body', acceptable_options=['1', '2'] )
         if known_patient_side == '1':
-            print( f'\n\t(11b/34) Which side of the patient\'s body was the surgery performed on?{indent_str}Please enter "1" for Right or "2" for Left.' )
-            patient_side = self.prompt_until_valid_answer_given( 'Side of Patient\'s Body', acceptable_options=['1', '2'] )
+            print( f'\n\t(11b/34) Which side of the patient\'s body was the surgery performed on?{indent_str}Please enter "1" for Right, "2" for Left, or "3" for Both.' )
+            patient_side = self.prompt_until_valid_answer_given( 'Side of Patient\'s Body', acceptable_options=['1', '2', '3'] )
             if patient_side == '1':     self._side_of_patient_body = 'Right'.upper()
             elif patient_side == '2':   self._side_of_patient_body = 'Left'.upper()
+            elif patient_side == '3':   self._side_of_patient_body = 'Both'.upper()
         else:                           self._side_of_patient_body = 'Unknown'.upper()
         local_dict['PATIENT_SIDE'] = self.side_of_patient_body
 
@@ -319,9 +503,10 @@ class ORDataIntakeForm( ResourceFile ):
         known_supervising_surgeon_presence = self.prompt_until_valid_answer_given( 'Known Supervising Surgeon Presence', acceptable_options=['1', '2'] )
         if known_supervising_surgeon_presence == '1':
             print( f'\n\t(14b/34) To indicate the supervising surgeon\'s presence{indent_str}Please enter "1" for Present or "2" for Retrospective Review.' )
-            supervising_surgeon_presence = self.prompt_until_valid_answer_given( 'Supervising Surgeon Presence', acceptable_options=['1', '2'] )
+            supervising_surgeon_presence = self.prompt_until_valid_answer_given( 'Supervising Surgeon Presence', acceptable_options=['1', '2', '3'] )
             if supervising_surgeon_presence == '1':     supervising_surgeon_presence = 'Present'.upper()
             elif supervising_surgeon_presence == '2':   supervising_surgeon_presence = 'Retrospective Review'.upper()
+            elif supervising_surgeon_presence == '3':   supervising_surgeon_presence = 'Other-See_Additional_Comments'.upper()
         else:   supervising_surgeon_presence = 'Unknown'.upper()
         self._supervising_surgeon_presence = supervising_surgeon_presence
         local_dict['SUPERVISING_SURGEON_UID'], local_dict['SUPERVISING_SURGEON_PRESENCE'] = self.supervising_surgeon_hawk_id, self.supervising_surgeon_presence

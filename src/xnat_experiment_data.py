@@ -28,7 +28,38 @@ __all__ = ['SourceRFSession', 'SourceESVSession']
 #--------------------------------------------------------------------------------------------------------------------------
 ## Base class for all xnat experiment sessions.
 class ExperimentData():
-    def __init__( self, intake_form: ORDataIntakeForm, invoking_class: str ) -> None:    
+    """
+    A class representing the base structure of an XNAT Experiment, in which all source- and derived-data are stored.
+    - Experiments may only exist as a child of a subject, and may contain multiple scans and resources.
+
+    Attributes:
+    intake_form (ORDataIntakeForm): digitized json-formatted form detailing the surgical data to be uploaded to XNAT. This is also uploaded.
+    tmp_source_data_dir (Path): local tmp directory in which all source data is temporarily stored before being pushed to XNAT.
+    df (pd.DataFrame): dataframe containing all relevant data for the experiment session, e.g., a fluorosequence of 15 images will have 15 rows in df.
+    is_valid (bool): flag indicating whether the experiment session is valid and can be pushed to XNAT.
+    schema_prefix_str (str): string prefix for the schema type of the experiment session, e.g., 'rf' for radio fluoroscopic data.
+    scan_type_label (str): string label for the type of scan data, e.g., 'DICOM' for radio fluoroscopic data.
+
+    Methods:
+    - Most of these methods are for instantiating only and are not meant to be called directly.
+    - Some methods are intentionally undefined with the expectation that they will be defined in inherited classes.
+
+    publish_to_xnat(): Publishes the experiment session to XNAT, including all associated scans and resources.
+    write(): Writes the experiment session to a zipped folder in a temporary local directory, which can then be pushed to XNAT.
+    write_publish_catalog_subroutine(): Writes the experiment session to a zipped folder and then publishes it to XNAT, including metatables.
+
+    Example Usage:
+    None -- this is a base class and should not be instantiated directly.
+    """
+    def __init__( self, intake_form: ORDataIntakeForm, invoking_class: str ) -> None:
+        """
+        Initialize the ExperimentData object with the inputted ORDataIntakeForm object and the invoking class name.
+        
+        Args:
+        intake_form (ORDataIntakeForm): digitized json-formatted form detailing the surgical data to be uploaded to XNAT. This is also uploaded.
+        invoking_class (str): name of the class that is invoking this class, e.g., 'SourceRFSession' or 'SourceESVSession'.
+            - This is used to determine the schema_prefix_str and scan_type_label attributes, the former of which is necessary and the latter of which is helpful for XNAT publishing.
+        """
         assert os.path.isdir( intake_form.relevant_folder ), f"Inputted path must be a valid directory; inputted path: {intake_form.relevant_folder}"
         assert os.path.exists( intake_form.saved_ffn_str ), f"Inputted IntakeForm must be valid; no file found at: {intake_form.saved_ffn_str}"
 
@@ -193,9 +224,38 @@ class ExperimentData():
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for all radio fluoroscopic (source image) sessions.
-class SourceRFSession( ExperimentData ): # to-do: Need to detail past and present identifiers for a subject.
-    ''' '''
+class SourceRFSession( ExperimentData ):
+    """
+    A class representing the XNAT Experiment for Radio Fluoroscopic (RF) Source Images. Inherits from ExperimentData. Intended for structuring trauma cases with fluoroscopic image sequences.
+
+    Inputs:
+    - dcm_dir (Path): directory containing all dicom files detailing a surgical performance.
+    - intake_form (ORDataIntakeForm): digitized json-formatted form detailing the surgical data to be uploaded to XNAT.
+    - login (XNATLogin): login object containing the user's validated username and password.
+    - xnat_connection (XNATConnection): connection object containing the user's validated xnat server and project name.
+    - metatables (MetaTables): metatables object containing the user's validated metatables configuration.
+
+    Attributes:
+    intake_form (ORDataIntakeForm): digitized json-formatted form detailing the surgical data to be uploaded to XNAT. This is also uploaded.
+    tmp_source_data_dir (Path): local tmp directory in which all source data is temporarily stored before being pushed to XNAT.
+    df (pd.DataFrame): dataframe containing all relevant data for the experiment session, e.g., a fluorosequence of 15 images will have 15 rows in df.
+    is_valid (bool): flag indicating whether the experiment session is valid and can be pushed to XNAT.
+    schema_prefix_str (str): string prefix for the schema type of the experiment session, e.g., 'rf' for radio fluoroscopic data.
+    scan_type_label (str): string label for the type of scan data, e.g., 'DICOM' for radio fluoroscopic data.
+
+    Methods (unique to this inherited class):
+    write(): Writes the SourceRFSession to a zipped folder in a temporary local directory, which can then be pushed to XNAT.
+    - See docstring for ExperimentData for other methods.
+
+    Example Usage:
+    SourceRFSession( dcm_dir=Path('path/to/dcm_dir'), intake_form=ORDataIntakeForm, login=XNATLogin, xnat_connection=XNATConnection, metatables=MetaTables )
+    """
     # def __init__( self, dcm_dir: Path, intake_form: ORDataIntakeForm, login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables, past_upload_data: Opt[pd.DataFrame] = None ):
+    #     """
+    #     Initialize the SourceRFSession object with the inputted ORDataIntakeForm object and the invoking class name.
+    #
+    #     Populate a dataframe to represent all intraoperative images in the inputted folder. Check the validity of the session and mine metadata for the session.
+    #      """
     #     super().__init__( intake_form=intake_form ) # Call the __init__ method of the base class
     #     self._validate_past_upload_data_input()
     #     self._populate_df()
@@ -347,8 +407,34 @@ class SourceRFSession( ExperimentData ): # to-do: Need to detail past and presen
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for arthroscopy post-op diagnostic images.
 class SourceESVSession( ExperimentData ):
-    '''Class representing the XNAT Experiment for Endoscopy Videos. Inherits from ExperimentData.'''
+    """
+    A class representing the XNAT Experiment for Arthroscopy Post-Op Diagnostic Images and Intraoperative videos. Inherits from ExperimentData. Intended for structuring arthro cases.
+
+    Inputs:
+    - intake_form (ORDataIntakeForm): digitized json-formatted form detailing the surgical data to be uploaded to XNAT. This is also uploaded.
+    - metatables (MetaTables): metatables object containing the user's validated metatables configuration.
+
+    Attributes:
+    intake_form (ORDataIntakeForm): digitized json-formatted form detailing the surgical data to be uploaded to XNAT. This is also uploaded.
+    tmp_source_data_dir (Path): local tmp directory in which all source data is temporarily stored before being pushed to XNAT.
+    df (pd.DataFrame): dataframe containing all relevant data for the experiment session, e.g., a fluorosequence of 15 images will have 15 rows in df.
+    is_valid (bool): flag indicating whether the experiment session is valid and can be pushed to XNAT.
+    schema_prefix_str (str): string prefix for the schema type of the experiment session, e.g., 'esv' for endoscopic video data.
+    scan_type_label (str): string label for the type of scan data, e.g., 'DICOM_MP4' for arthroscopic video data.
+
+    Methods (unique to this inherited class):
+    write(): Writes the SourceESVSession to a zipped folder in a temporary local directory, which can then be pushed to XNAT.
+    - See docstring for ExperimentData for other methods.
+
+    Example Usage:
+    SourceESVSession( intake_form=ORDataIntakeForm, metatables=MetaTables )
+    """
     def __init__( self, intake_form: ORDataIntakeForm, metatables: MetaTables ) -> None:
+        """
+        Initializes the SourceESVSession object.
+        
+        Populate a dataframe to represent all post-op images and intraoperative videos in the inputted folder. Check the validity of the session and mine metadata for the session.
+        """
         super().__init__( intake_form=intake_form, invoking_class='SourceESVSession' ) # Call the __init__ method of the base class
         self._populate_df( metatables=metatables )
         self._check_session_validity( metatables=metatables )

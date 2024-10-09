@@ -20,16 +20,43 @@ from pydicom.uid import UID as pydicom_UID, generate_uid as generate_pydicomUID
 import matplotlib.pyplot as plt
 
 
-# Define list for allowable imports from this module -- do not want to import _local_variables.
+# Define list for allowable imports from this module -- do not want to import _local_variables. As more classes are added you will need to update this list.
 __all__ = ['UIDandMetaInfo', 'XNATLogin', 'MetaTables', 'XNATConnection', 'USCentralDateTime', 'ImageHash']
 
 
-data_librarian_hawk_id = 'dmattioli' # Update as needed.
+
+data_librarian_hawk_id = 'dmattioli' # Update as needed. *** Not sure if changing this to stelong will cause errors.
+
+
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Helper class for inserting all information that should only be used locally within the _local_variables class def below:
 class _local_variables:
+    """
+    This class defines and stores local variables used in the XNAT-Interact project.
+        - Almost all classes defined in this file and the 'xnat_..._data.py' files will inherit from this class so that we can easily access this information.
+
+    Attributes:
+        xnat_project_name (str): The name of the XNAT project.
+        xnat_url (str): The URL of the XNAT server.
+        xnat_config_folder_name (str): The name of the XNAT configuration folder.
+        config_fn (str): The name of the database configuration file.
+        template_img_dir (str): The directory path of the template image.
+        tmp_data_dir (str): The directory path for temporary data storage.
+        redacted_string (str): A redacted string used for Python-to-XNAT upload script.
+        config_ffn (str): The full file path of the database configuration file.
+        required_login_keys (list): A list of required login keys.
+        xnat_project_url (str): The URL of the XNAT project.
+        default_meta_table_columns (list): A list of default meta table columns.
+        template_img (numpy.ndarray): The template image read from the template image directory.
+        acceptable_img_dtypes (list): A list of acceptable image data types.
+        required_img_size_for_hashing (tuple): The required image size for hashing.
+        mturk_batch_col_names (list): A list of MTurk batch column names.
+    """
     def __init__( self ):
+        """
+        Initialize the _local_variables instance.
+        """
         self._img_sizes = ( 256, 256 )
         self.__dict__.update( self._set_local_variables() )
 
@@ -38,18 +65,18 @@ class _local_variables:
 
 
     def _read_template_image( self, template_ffn: str ) -> np.ndarray:
+        """
+        Read the template image from the given file path. The image should be saved in the project files (pulled from github repository).
+        """
         return cv2.resize( cv2.imread( template_ffn, cv2.IMREAD_GRAYSCALE ), self._img_sizes ).astype( np.uint8 )
 
 
     def __getattr__( self, attr ):
-        if attr in self.__dict__:
-            return self.__dict__[attr]
-        else:
-            raise AttributeError( f"Attribute {attr} is not yet defined." )
+        if attr in self.__dict__:       return self.__dict__[attr]
+        else:                           raise AttributeError( f"Attribute {attr} is not yet defined." )
     
 
-    def __str__( self ) -> str:
-        return '\n'.join([f'{k}:\t{v}' for k, v in self.__dict__.items()])
+    def __str__( self ) -> str:         return '\n'.join([f'{k}:\t{v}' for k, v in self.__dict__.items()])
 
 
     def _set_local_variables( self ) -> dict: # !!DO NOT DELETE!! This is the only place where these local variables/paths are defined.
@@ -95,7 +122,20 @@ class _local_variables:
 #--------------------------------------------------------------------------------------------------------------------------
 ## Base class for all utitlities to inherit from.
 class UIDandMetaInfo:
+    """
+    A utility class for managing UID generation and metadata information.
+
+    Attributes:
+        uid (str): Unique identifier for the instance.
+    
+    Methods:
+        generate_uid(): Generate a unique identifier.
+        is_valid_pydcom_uid(): Validate the format of a UID.
+    """
     def __init__( self ):
+        """
+        Initialize the UIDandMetaInfo instance and generate a unique identifier.
+        """
         self._local_variables = _local_variables()
         self._uid = self.generate_uid()
     
@@ -145,8 +185,27 @@ class UIDandMetaInfo:
         return {k: v.upper() if isinstance(v, str) else v for k, v in kwargs.items()}
 
 
-    def generate_uid( self )                    -> str:                 return str( generate_pydicomUID( prefix=None, entropy_srcs=[self.now_datetime] ) ).replace( '.', '_' )
-    def is_valid_pydcom_uid( self, uid_str: str )   -> bool:            return pydicom_UID( uid_str.replace( '_', '.' ) ).is_valid
+    def generate_uid( self )                    -> str:
+        """
+        Generate a unique identifier for the instance.
+
+        Returns:
+            str: A newly generated unique identifier.
+        """
+        return str( generate_pydicomUID( prefix=None, entropy_srcs=[self.now_datetime] ) ).replace( '.', '_' )
+    
+    
+    def is_valid_pydcom_uid( self, uid_str: str )   -> bool:
+        """
+        Validate the format of the given UID.
+
+        Args:
+            uid (str): The UID to validate.
+
+        Returns:
+            bool: True if the UID is valid, i.e., no periods allowed in xnat entity names, False otherwise.
+        """
+        return pydicom_UID( uid_str.replace( '_', '.' ) ).is_valid
                                                 
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -206,8 +265,21 @@ class XNATLogin( UIDandMetaInfo ):
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for establishing a connection to the xnat server with specific credentials.
 class XNATConnection( UIDandMetaInfo ):
-    '''
-    to-do: document explanation of class
+    """A class representing a connection to an XNAT server.
+    Inputs:
+    - login_info: An instance of XNATLogin class containing the login information for the XNAT server.
+    - stay_connected: A boolean indicating whether to stay connected to the server after verifying the login. Default is False.
+    - verbose: A boolean indicating whether to print connection details. Default is False.
+    Attributes:
+    - login_info: An instance of XNATLogin class containing the login information for the XNAT server.
+    - server: An Interface object representing the XNAT server connection.
+    - project_query_str: A string representing the query string for the XNAT project.
+    - project_handle: A pyxnatProject object representing the XNAT project handle.
+    - is_verified: A boolean indicating whether the login has been verified.
+    - is_open: A boolean indicating whether the connection is open.
+    - get_user: A string representing the validated username.
+    - get_password: A string representing the validated password.
+    
 
     # Example usage:
     my_login_info = {'URL': 'https://rpacs.iibi.uiowa.edu/xnat/', 'USERNAME': '...', 'PASSWORD': '...'}
@@ -216,7 +288,7 @@ class XNATConnection( UIDandMetaInfo ):
     print( my_connection )
     # my_connection = XNATConnection( my_login, my, stay_connected=True ) 
     # print( my_connection )
-    '''
+    """
     _instance = None
 
     def __new__( cls, *args, **kwargs ): # Only one instance of this class should be allowed to exist at a time.
@@ -577,6 +649,15 @@ class MetaTables( UIDandMetaInfo ):
 
 
     def is_user_registered( self, user_name: Opt[str] = None ) -> bool:
+        """
+        Check if a user is registered in the system.
+
+        Args:
+            username (str): The username to check.
+
+        Returns:
+            bool: True if the user is registered, False otherwise.
+        """
         '''Note that this will automatically capitalize the inputted user_name.'''
         if user_name is None:   user_name = self.accessor_username
         return user_name.upper() in self.tables['REGISTERED_USERS']['NAME'].values
@@ -594,6 +675,15 @@ class MetaTables( UIDandMetaInfo ):
 
 
     def list_of_all_items_in_table( self, table_name: str ) -> list:
+        """
+        List all items in the specified metadata table.
+
+        Args:
+            table_name (str): The name of the table.
+
+        Returns:
+            List[str]: A list of all items in the specified table.
+        """
         if table_name.upper() in self.tables and not self.tables[table_name.upper()].empty:
             return list (self.tables[table_name.upper()]['NAME'] )
         else:   return [] # Return an empty list if the table does not exist or is empty

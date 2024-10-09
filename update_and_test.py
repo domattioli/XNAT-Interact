@@ -5,6 +5,12 @@ import typing
 
 
 def is_repo_up_to_date():
+    """
+    Check if the local Git repository is up to date with the remote repository.
+
+    Returns:
+        bool: True if the local repository is up to date, False otherwise.
+    """
     try:
         # Check if the local repository is up to date with the remote
         result = subprocess.run(['git', 'fetch'], check=True, capture_output=True, text=True)
@@ -18,7 +24,14 @@ def is_repo_up_to_date():
         print(e)
         return False
 
+
 def update_repo():
+    """
+    Update the local Git repository if it is not up to date.
+
+    Returns:
+        str: A message indicating the success or failure of the repository update.
+    """
     if not is_repo_up_to_date():
         try:
             # Pull all changes from the remote repository, including deletions
@@ -33,11 +46,23 @@ def update_repo():
 
 
 def check_that_virtualenv_activated():
+    """
+    Check if a virtual environment is activated.
+
+    Returns:
+        bool: True if a virtual environment is activated, False otherwise.
+    """
     if 'VIRTUAL_ENV' in os.environ: return True
     else:                           return False
     
 
 def test_virtual_env():
+    """
+    Test if all required Python libraries are available in the virtual environment.
+
+    Returns:
+        bool: True if all required libraries are available.
+    """
     # List all libraries used in the project
     import typing
     import json
@@ -71,6 +96,9 @@ def test_virtual_env():
     return True
 
 def main():
+    """
+    Main function to ensure XNAT-INTERACT installation is correct, up to date, and all requirements are satisfied.
+    """
     print(f'\n\t...ensuring that XNAT-INTERACT installation is correct and up-to-date...\n')
     try:
         check_that_virtualenv_activated()

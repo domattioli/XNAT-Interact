@@ -25,6 +25,12 @@ import datetime
 import string
 
 def parse_args() -> Tuple[str, str, bool]:
+    """
+    Parse command-line arguments for XNAT login and connection.
+
+    Returns:
+        Tuple[str, str, bool]: A tuple containing the XNAT username, password, and a flag indicating verbose mode.
+    """
     parser = argparse.ArgumentParser(description='XNAT Login and Connection')
     parser.add_argument('--username', type=str, default=None, help='XNAT username')
     parser.add_argument('--password', type=str, default=None, help='XNAT password')
@@ -36,12 +42,31 @@ def parse_args() -> Tuple[str, str, bool]:
 
 
 def prompt_function( verbose: bool ) -> str:
+    """
+    Prompt the user to select a task to perform.
+
+    Args:
+        verbose (bool): Whether to enable verbose output.
+
+    Returns:
+        str: The selected task ('1' for Uploading Source Data, '2' for Uploading Derived Data, or '3' for Downloading Data).
+    """
     if verbose: print( f'\n...selecting task to perform...' )
     print( f'\tTask selection:\n\t\t-- Please enter "1" for Uploading Source Data, "2" for Uploading Derived Data, or "3" for Downloading Data.' )
     return ORDataIntakeForm.prompt_until_valid_answer_given( 'Select a task', acceptable_options=['1', '2', '3'] )
 
 
 def prompt_login( username: Opt[str]=None, password: Opt[str]=None ) -> Tuple[str, str]:
+    """
+    Prompt the user for their XNAT login credentials if not provided.
+
+    Args:
+        username (Optional[str]): XNAT username.
+        password (Optional[str]): XNAT password.
+
+    Returns:
+        Tuple[str, str]: A tuple containing the username and password.
+    """
     if username is None:
         username = input( f"\tHawkID Username:\t" )
     if password is None:
@@ -50,6 +75,20 @@ def prompt_login( username: Opt[str]=None, password: Opt[str]=None ) -> Tuple[st
 
 
 def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, verbose: Opt[bool]=True ) -> Tuple[XNATLogin, XNATConnection, MetaTables]:
+    """
+    Attempt to login and connect to the XNAT server.
+
+    Args:
+        username (Optional[str]): XNAT username.
+        password (Optional[str]): XNAT password.
+        verbose (Optional[bool]): Whether to enable verbose output.
+
+    Returns:
+        Tuple[XNATLogin, XNATConnection, MetaTables]: Validated login, XNAT connection, and metatables.
+
+    Raises:
+        ValueError: If the login credentials do not lead to a successful connection.
+    """
     if username is not None and password is not None:
         if verbose: print( f"\n...logging in and trying to connect to the server as '{username}' with password {'*' * len( password )} ...\n" )
         validated_login = XNATLogin( { 'Username': username, 'Password': password, 'Url': 'https://rpacs.iibi.uiowa.edu/xnat/' }, verbose=verbose )
@@ -70,10 +109,31 @@ def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, 
 
 
 def prompt_source_and_group() -> Tuple[str, str]:
+    """
+    Prompt the user to provide the acquisition site and surgical procedure.
+
+    Returns:
+        Tuple[str, str]: Acquisition site and surgical procedure name.
+    """
     return input( "Acquisition Site: " ), input( "Surgical Procedure: " )
     
 
 def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables, verbose: Opt[bool]=False ) -> MetaTables:
+    """
+    Begin the data intake process to upload new source data to XNAT.
+
+    Args:
+        validated_login (XNATLogin): Validated login object.
+        xnat_connection (XNATConnection): Established XNAT connection.
+        metatables (MetaTables): MetaTables object for managing table data.
+        verbose (Optional[bool]): Whether to enable verbose output.
+
+    Returns:
+        MetaTables: Updated MetaTables after data upload.
+
+    Raises:
+        ValueError: If the procedure type is not supported or if the intake form creation fails.
+    """
     print( f'\n-----Beginning data intake process-----\n' )
     if verbose: print( f"\n...Uploading new source data to XNAT...")
 
@@ -87,7 +147,7 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
             print( f"\t\tThe provided path either (1) does not exist or (2) does not contain a 'RECONSTRUCTED_OR_DATA_INTAKE_FORM' in it. Please try again." )
             form_pn = input( f"\n\tPlease enter the full path to the *parent folder* of the intake form:\t" )
         try:
-            intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, parent_folder=form_pn, verbose=verbose )
+            intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, input_data=Path( form_pn ), verbose=verbose )
             while True:
                 print( f'\n\tPlease review the created intake form:\n{intake_form}' )
                 print( f'\n\tIs everything correct?\n\t\t-- Please enter "1" for Yes or "2" for No (re-create the intake form).' )
@@ -127,10 +187,26 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
 
 
 # ---- Functions for querying and downloading data ----
-def format_as_table( json_table: JsonTable ) -> pd.DataFrame:  return pd.DataFrame( [item for item in json_table] )
+def format_as_table( json_table: JsonTable ) -> pd.DataFrame:
+    """
+    Convert a JSON table to a Pandas DataFrame.
+
+    Args:
+        json_table (JsonTable): JSON data to be converted.
+
+    Returns:
+        pd.DataFrame: Converted Pandas DataFrame.
+    """
+    return pd.DataFrame( [item for item in json_table] )
 
 
 def print_preview_of_xnat_data( pd_table: pd.DataFrame) -> None:
+    """
+    Print a preview of the XNAT data.
+
+    Args:
+        pd_table (pd.DataFrame): DataFrame containing the XNAT data to preview.
+    """
     print(f'\n{"---"*15} Preview of XNAT Data {"---"*15}')
     print( f'\tTotal # Performances: {len(pd_table)}' )
 

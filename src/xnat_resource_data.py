@@ -118,6 +118,8 @@ class ORDataIntakeForm( ResourceFile ):
     Example Usage:
     ORDataIntakeForm( metatables=..., login=., input_data=..., verbose=True, write_tmp_file=True )
     """
+
+    
     def __init__( self, metatables: MetaTables, login: XNATLogin, input_data: Union[None, Path, pd.Series]=None, verbose: Opt[bool]=False, write_tmp_file: Opt[bool]=True ):
         """
         Initialize the ORDataIntakeForm with given metatables, login credentials, and input data.
@@ -194,7 +196,7 @@ class ORDataIntakeForm( ResourceFile ):
         elif not re.match( r'\d{4}-\d{2}-\d{2}', self.operation_date ):                                             issues[f'Operation\nDate'] = f'Operation Date "{self.operation_date}" is not in the correct format (YYYY-MM-DD).'
 
         self._scan_quality = data_row['Quality'].lower()
-        if self.scan_quality is 'unknown': self._scan_quality = ''
+        if self.scan_quality == 'unknown': self._scan_quality = ''
         if self.scan_quality not in ['usable', 'unusable', 'questionable', '']:                                     issues[f'Quality'] = f'Quality "{self.scan_quality}" is not one of the expected values.'
 
         self._institution_name = data_row['Institution\nName']

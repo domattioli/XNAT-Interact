@@ -1,0 +1,23 @@
+digraph main_flowchart {
+	rankdir=TB size="8,10"
+	Start [label=Start shape=ellipse]
+	ParseArgs [label="Parse Arguments" shape=box]
+	PromptLogin [label="Prompt Login Credentials" shape=box]
+	TryLogin [label="Try Login and Connect" shape=diamond]
+	TaskSelection [label="Task Selection" shape=box]
+	UploadSource [label="Upload Source Data" shape=box]
+	ValidateConfirm [label="Validate and Confirm" shape=box]
+	CreateSourceObj [label="Create Source Data Object" shape=box]
+	PublishData [label="Publish Data" shape=box]
+	End [label=End shape=ellipse]
+	Start -> ParseArgs
+	ParseArgs -> PromptLogin
+	PromptLogin -> TryLogin
+	TryLogin -> TaskSelection [label=Successful]
+	TaskSelection -> UploadSource [label="Option 1"]
+	UploadSource -> ValidateConfirm
+	ValidateConfirm -> CreateSourceObj
+	CreateSourceObj -> PublishData
+	PublishData -> End
+	TryLogin -> End [label=Failed]
+}

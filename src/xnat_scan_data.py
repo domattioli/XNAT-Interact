@@ -233,6 +233,7 @@ class SourceDicomDeIdentified( ScanFile ):
     def __init__( self, dcm_ffn: Path, metatables: MetaTables, intake_form: ORDataIntakeForm ):
         super().__init__( intake_form=intake_form, ffn=dcm_ffn )  # Call the __init__ method of the base class
         assert self.is_dicom( self.ffn ), f'Inputted file must be a dicom file: {self.ffn}'
+        self._datetime = USCentralDateTime()
         self._read_image( metatables=metatables )
         self._parse_for_derived_metadata()
         self._deidentify_dicom()
@@ -243,6 +244,9 @@ class SourceDicomDeIdentified( ScanFile ):
         self._metadata = dcmread( self.ffn )
         self._image = ImageHash( reference_table=metatables, img=self.metadata.pixel_array )
 
+    def _validate_image( self ): # valid if the image has not yet been seen and if it does not match the template image.
+        assert isinstance( self.image, ImageHash ), f'BUG: cannot be validate because the object.image data is not in ImageHash format.'
+        self._is_valid = not self.image.in_img_hash_metatable and not self.is_similar_to_template_image()
 
     def _parse_for_derived_metadata( self ):
         # Look for acquisition site info in the metadata:
@@ -256,7 +260,7 @@ class SourceDicomDeIdentified( ScanFile ):
         self._derived_metadata['ACQUISITION_SITE'] = acq_site_str.strip() 
 
         # Group info: # to-do: use an ml classifier?
-        self._derived_metadata['GROUP'] = ''
+        # self._derived_metadata['GROUP'] = ''
         
         # Date and time info:
         dt_str = ''
@@ -265,25 +269,30 @@ class SourceDicomDeIdentified( ScanFile ):
                 dt_str = self.metadata.ContentDate + ' ' + self.metadata.ContentTime
         elif  'InstanceCreationDate' in self.metadata and len( dt_str ) == 0:
             dt_str = self.metadata.InstanceCreationDate + ' ' + self.metadata.InstanceCreationTime
-        else:
-            raise ValueError( 'SourceDicomDeIdentified''s extract_date_and_time() method did not produce usable information.' )
-        self._derived_metadata['DATETIME'] = USCentralDateTime( dt_str.strip() )
+        self._derived_metadata['DATETIME'] = str( USCentralDateTime( dt_str.strip() ) )
+        
+        # Also check for ContentTime, SeriesTime, and StudyTime.
+        self._derived_metadata['TIMEINFO'] = {}
+        if 'ContentTime' in self.metadata:   self._derived_metadata['TIMEINFO']['ContentTime'] = self.metadata.ContentTime
+        if 'SeriesTime' in self.metadata:    self._derived_metadata['TIMEINFO']['SeriesTime'] = self.metadata.SeriesTime
+        if 'StudyTime' in self.metadata:     self._derived_metadata['TIMEINFO']['StudyTime'] = self.metadata.StudyTime
+        self._derived_metadata['TIMEINFO'] = str( self._derived_metadata['TIMEINFO'] )
 
         # UID info:
+        self._derived_metadata['UID_INFO'] = {}
         for element in self.metadata.iterall():
             if "UID" in element.name:
                 self._derived_metadata['UID_INFO'][element.name] = element.value.replace( '.', '_' ) # Must replace '.' with underscores because that is how theyre stored in xnat
-        # self._derived_metadata = { 'DICOM_UID': self.generate_uid() }
+        # Convert the dict to a string for storage in the metadata
+        self._derived_metadata['UID_INFO'] = str( self._derived_metadata['UID_INFO'] )
 
 
     def _person_names_callback( self, dcm_data, data_element ):
-        if data_element.VR == "PN":
-            data_element.value = self.redacted_string
+        if data_element.VR == "PN":                     data_element.value = self.redacted_string
 
 
     def _curves_callback( self, dcm_data, data_element ):
-        if data_element.tag.group & 0xFF00 == 0x5000:
-            del dcm_data[data_element.tag]
+        if data_element.tag.group & 0xFF00 == 0x5000:   del dcm_data[data_element.tag]
 
 
     def _deidentify_dicom( self ): # remove all sensitive metadata info
@@ -293,8 +302,7 @@ class SourceDicomDeIdentified( ScanFile ):
         self._metadata.remove_private_tags()
         for i in range( 0x6000, 0x60FF, 2 ):
             tag = (i, 0x3000)
-            if tag in self.metadata:
-                del self._metadata[tag]
+            if tag in self.metadata:                    del self._metadata[tag]
     
         # De-identify embedded pixel data
         # to-do: with a gpu we could use a more advanced approach like ocr and simply blur the text within the image.

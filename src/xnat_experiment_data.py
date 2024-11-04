@@ -68,8 +68,9 @@ class ExperimentData():
         self._df, self._is_valid = pd.DataFrame(), False    # Derived in derived classes' init method
 
         assert invoking_class in __all__, f"Invoking class must be one of the following strings: {__all__}; you entered: {invoking_class}"
-        if invoking_class == 'SourceRFSession':    self._schema_prefix_str, self._scan_type_label = 'rf', 'DICOM'
-        elif invoking_class == 'SourceESVSession': self._schema_prefix_str, self._scan_type_label = 'esv', 'DICOM_MP4'
+        if invoking_class   == 'SourceRFSession':   self._schema_prefix_str, self._scan_type_label = 'rf',  'DICOM'
+        elif invoking_class == 'SourceESVSession':  self._schema_prefix_str, self._scan_type_label = 'esv', 'DICOM_MP4'
+        elif invoking_class == 'DerivedData':       self._schema_prefix_str, self._scan_type_label = 'otherDicom', 'DERIVED'
 
     @property
     def intake_form( self )             -> ORDataIntakeForm:        return self._intake_form
@@ -85,7 +86,7 @@ class ExperimentData():
     def scan_type_label( self )         -> str:                     return self._scan_type_label
 
     
-    def _populate_df( self ):                                       raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
+    def _populate_df( self, metatables: MetaTables ):               raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
     def _check_session_validity( self, metatables: MetaTables ):    raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
 
 
@@ -250,20 +251,20 @@ class SourceRFSession( ExperimentData ):
     Example Usage:
     SourceRFSession( dcm_dir=Path('path/to/dcm_dir'), intake_form=ORDataIntakeForm, login=XNATLogin, xnat_connection=XNATConnection, metatables=MetaTables )
     """
-    # def __init__( self, dcm_dir: Path, intake_form: ORDataIntakeForm, login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables, past_upload_data: Opt[pd.DataFrame] = None ):
-    #     """
-    #     Initialize the SourceRFSession object with the inputted ORDataIntakeForm object and the invoking class name.
-    #
-    #     Populate a dataframe to represent all intraoperative images in the inputted folder. Check the validity of the session and mine metadata for the session.
-    #      """
-    #     super().__init__( intake_form=intake_form ) # Call the __init__ method of the base class
-    #     self._validate_past_upload_data_input()
-    #     self._populate_df()
-    #     self._check_session_validity()
-    #     if self.is_valid:
-    #         self._mine_session_metadata() # necessary for publishing to xnat.
-    #     # self._match_past_file_names( past_file_names ) # to-do: ? the Case_Database.csv file in the R-drive FLuoroscopy folder contains info about previous name information of these files. for now i am just going to tryst in my image hash protocol for preventing duplicates.
-    #         self.update_intake_form()
+    def __init__( self, dcm_dir: Path, intake_form: ORDataIntakeForm, login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables, past_upload_data: Opt[pd.DataFrame] = None ):
+        """
+        Initialize the SourceRFSession object with the inputted ORDataIntakeForm object and the invoking class name.
+    
+        Populate a dataframe to represent all intraoperative images in the inputted folder. Check the validity of the session and mine metadata for the session.
+         """
+        super().__init__( intake_form=intake_form ) # Call the __init__ method of the base class
+        self._validate_past_upload_data_input()
+        self._populate_df()
+        self._check_session_validity()
+        if self.is_valid:
+            self._mine_session_metadata() # necessary for publishing to xnat.
+        # self._match_past_file_names( past_file_names ) # to-do: ? the Case_Database.csv file in the R-drive FLuoroscopy folder contains info about previous name information of these files. for now i am just going to tryst in my image hash protocol for preventing duplicates.
+            self.update_intake_form()
 
     # @property
     # def _all_dicom_ffns( self ) -> list:
@@ -411,7 +412,7 @@ class SourceESVSession( ExperimentData ):
     A class representing the XNAT Experiment for Arthroscopy Post-Op Diagnostic Images and Intraoperative videos. Inherits from ExperimentData. Intended for structuring arthro cases.
 
     Inputs:
-    - intake_form (ORDataIntakeForm): digitized json-formatted form detailing the surgical data to be uploaded to XNAT. This is also uploaded.
+    - intake_form (ORDataIntakeForm): digitized json-formatted form detailing the surgical data to be uploaded to XNAT. This is also uploaded with the source data.
     - metatables (MetaTables): metatables object containing the user's validated metatables configuration.
 
     Attributes:
@@ -432,7 +433,6 @@ class SourceESVSession( ExperimentData ):
     def __init__( self, intake_form: ORDataIntakeForm, metatables: MetaTables ) -> None:
         """
         Initializes the SourceESVSession object.
-        
         Populate a dataframe to represent all post-op images and intraoperative videos in the inputted folder. Check the validity of the session and mine metadata for the session.
         """
         super().__init__( intake_form=intake_form, invoking_class='SourceESVSession' ) # Call the __init__ method of the base class
@@ -450,8 +450,6 @@ class SourceESVSession( ExperimentData ):
 
     def _mine_session_metadata( self ):
         assert self.df.empty is False, 'Dataframe of dicom files is empty.'
-        # self._derive_experiment_datetime() # should be inputted for now because I'm not sure how to derive this from images and mp4s unless we use directory names, which aren't reliable
-        # self._assign_experiment_uid()
         
         # For each row, generate a new file name now that we have a session label.
         vid_count = 0
@@ -471,11 +469,6 @@ class SourceESVSession( ExperimentData ):
                     raise ValueError( f"Unrecognized object type: {type( self.df.loc[idx, 'OBJECT'] )}." )
 
 
-    def _init_esv_session_dataframe( self ):
-        df_cols = { 'FN': 'str', 'NEW_FN': 'str', 'OBJECT': 'object', 'TYPE': 'str', 'IS_VALID': 'bool'}
-        self._df = pd.DataFrame( {col: pd.Series( dtype=dt ) for col, dt in df_cols.items()} )
-
-
     def _populate_df( self, metatables: MetaTables ):
         # Read in mp4 data
         mp4_ffn = list( self.intake_form.relevant_folder.rglob("*.[mM][pP]4") )
@@ -484,7 +477,7 @@ class SourceESVSession( ExperimentData ):
         if isinstance( self.mp4, list ): # Check that all mp4 files are valid
             for vid in self.mp4: assert vid.is_valid, f"Could not open video file: {vid.ffn}"
 
-        # Read all jpg images;  sort images by their creationg date-time, append mp4 ffn to the list before we build the dataframe
+        # Read all jpg images;  sort images by their creation date-time, append mp4 ffn to the list before we build the dataframe
         all_ffns = list( self.intake_form.relevant_folder.rglob("*.[jJ][pP][gG]") ) + list( self.intake_form.relevant_folder.rglob("*.[jJ][pP][eE][gG]") )
         if len( all_ffns ) == 0: # prompt the user to confirm that they do indeed want to proceed without any images.
             print( f'\n\tNo image files were found in the inputted folder; if this is correct, enter "1" to proceed, otherwise "2" to exit.' )
@@ -498,7 +491,8 @@ class SourceESVSession( ExperimentData ):
             all_ffns = sorted( all_ffns, key=lambda x: os.path.getctime( x ) ) + mp4_ffn
         
         # Assemble into a dataframe
-        self._init_esv_session_dataframe()
+        df_cols = { 'FN': 'str', 'NEW_FN': 'str', 'OBJECT': 'object', 'TYPE': 'str', 'IS_VALID': 'bool'}    # ---Used to be its own function---
+        self._df = pd.DataFrame( {col: pd.Series( dtype=dt ) for col, dt in df_cols.items()} )              # ---------------------------------
         self._df = self._df.reindex( np.arange( len( all_ffns ) ) )
         mp4_idx = 0
         for idx, ffn in enumerate( all_ffns ):
@@ -590,3 +584,7 @@ class SourceESVSession( ExperimentData ):
                 video.__del__()
         except Exception as e:
             pass
+
+
+#--------------------------------------------------------------------------------------------------------------------------
+## Class for derived data.

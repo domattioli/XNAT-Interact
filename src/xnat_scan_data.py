@@ -122,7 +122,7 @@ class ArthroDiagnosticImage( ScanFile ):
     None are intended for direct use by the user beyond the __init__ method.
 
     Example usage:
-    ArthroDiagnosticImage( img_ffn=Path( r'...\\...\examplefoldername' ), still_num='1', parent_uid='1_2_840_10008', metatables=..., intake_form=... )
+    ArthroDiagnosticImage( img_ffn=Path( r'...\\...\\examplefoldername' ), still_num='1', parent_uid='1_2_840_10008', metatables=..., intake_form=... )
     '''
     def __init__( self, img_ffn: Path, still_num: str, parent_uid: str, metatables: MetaTables, intake_form: ORDataIntakeForm ):
         super().__init__( intake_form=intake_form, ffn=img_ffn )  # Call the __init__ method of the base class
@@ -195,7 +195,7 @@ class ArthroVideo( ScanFile ):
     None are intended for direct use by the user beyond the __init__ method.
 
     Example usage:
-    ArthroVideo( vid_ffn=Path( r'...\\...\examplefoldername' ), metatables=..., intake_form=... )
+    ArthroVideo( vid_ffn=Path( r'...\\...\\examplefoldername' ), metatables=..., intake_form=... )
     '''
     def __init__( self, vid_ffn: Path, metatables: MetaTables, intake_form: ORDataIntakeForm ):
         super().__init__( intake_form=intake_form, ffn=vid_ffn )  # Call the __init__ method of the base class
@@ -228,7 +228,7 @@ class SourceDicomDeIdentified( ScanFile ):
     None are intended for direct use by the user beyond the __init__ method.
 
     # Example usage:
-    SourceDicomDeIdentified( dcm_ffn=Path( r'...\\...\exampledcmfilename' ), metatables=..., intake_form=... )
+    SourceDicomDeIdentified( dcm_ffn=Path( r'...\\...\\exampledcmfilename' ), metatables=..., intake_form=... )
     '''
     def __init__( self, dcm_ffn: Path, metatables: MetaTables, intake_form: ORDataIntakeForm ):
         super().__init__( intake_form=intake_form, ffn=dcm_ffn )  # Call the __init__ method of the base class
@@ -303,8 +303,8 @@ class SourceDicomDeIdentified( ScanFile ):
             if tag in self.metadata:                    del self._metadata[tag]
     
         # Redact AccessionNumber and StudyID fields
-        if hasattr( self._metadata, 'AccessionNumber' ):    self._metadata.AccessionNumber = 'REDACTED BY XNAT-INTERACT SCRIPT'
-        if hasattr( self._metadata, 'StudyID' ):            self._metadata.StudyID = 'REDACTED BY XNAT-INTERACT SCRIPT'
+        if hasattr( self._metadata, 'AccessionNumber' ):    self._metadata.AccessionNumber = 'REDACTED 4 XNAT'
+        if hasattr( self._metadata, 'StudyID' ):            self._metadata.StudyID = 'REDACTED 4 XNAT'
 
         # De-identify embedded pixel data
         # to-do: with a gpu we could use a more advanced approach like ocr and simply blur the text within the image.

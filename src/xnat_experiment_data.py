@@ -251,158 +251,164 @@ class SourceRFSession( ExperimentData ):
     Example Usage:
     SourceRFSession( dcm_dir=Path('path/to/dcm_dir'), intake_form=ORDataIntakeForm, login=XNATLogin, xnat_connection=XNATConnection, metatables=MetaTables )
     """
-    def __init__( self, dcm_dir: Path, intake_form: ORDataIntakeForm, login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables, past_upload_data: Opt[pd.DataFrame] = None ):
+    def __init__( self, intake_form: ORDataIntakeForm, metatables: MetaTables ):
         """
         Initialize the SourceRFSession object with the inputted ORDataIntakeForm object and the invoking class name.
     
         Populate a dataframe to represent all intraoperative images in the inputted folder. Check the validity of the session and mine metadata for the session.
          """
-        super().__init__( intake_form=intake_form ) # Call the __init__ method of the base class
-        self._validate_past_upload_data_input()
-        self._populate_df()
-        self._check_session_validity()
+        super().__init__( intake_form=intake_form, invoking_class='SourceRFSession' ) # Call the __init__ method of the base class
+        self._populate_df( metatables=metatables )
+        self._check_session_validity( metatables=metatables )
+        if self.is_valid:   self._mine_session_metadata() # necessary for publishing to xnat.
+
+    def _populate_df( self, metatables: MetaTables ):
+        self._init_rf_session_dataframe()
+        all_ffns = self._all_dicom_ffns()
+        self._df = self._df.reindex( np.arange( len( all_ffns ) ) )
+        for idx, ffn in enumerate( all_ffns ):
+            fn, ext = os.path.splitext( os.path.basename( ffn ) )
+            if ext != '.dcm':
+                self._df.loc[idx, ['FN', 'EXT', 'IS_VALID']] = [fn, ext, False]
+                continue
+            deid_dcm = SourceDicomDeIdentified( dcm_ffn=ffn, metatables=metatables, intake_form=self.intake_form )
+            self._df.loc[idx, ['FN', 'EXT', 'OBJECT', 'IS_VALID']] = [fn, ext, deid_dcm, deid_dcm.is_valid]
+            # if deid_dcm.is_valid:
+            #     dt_data = self._query_dicom_series_time_info( deid_dcm )
+            #     self._df.loc[idx, ['DATE', 'INSTANCE_TIME', 'SERIES_TIME', 'INSTANCE_NUM']] = dt_data
+
+        # Need to check within-case for duplicates -- apparently those do exist.
+        hash_strs = set()
+        for idx, row in self.df.iterrows():
+            if row['IS_VALID']:
+                if row['OBJECT'].image.hash_str in hash_strs:   self._df.at[idx, 'IS_VALID'] = False
+                else:                                           hash_strs.add( row['OBJECT'].image.hash_str )
+        
+    def _check_session_validity( self, metatables: MetaTables ): # Invalid only when empty or all shots are invalid -- to-do: may also want to check that instance num and time are monotonically increasing
+        self._is_valid = self.df['IS_VALID'].any() and not metatables.item_exists( table_name='SUBJECTS', item_name=self.intake_form.uid )
+        
+    def _mine_session_metadata( self ):
+        assert self.df.empty is False, 'Dataframe of dicom files is empty.'
+        
+        # Process the dataframe to overwrite metadata and ensure consistency
+        num_valid_shots = self.df['IS_VALID'].sum()
+        for idx, row in self.df.iterrows():
+            if row['IS_VALID'] is False:    continue
+            
+            # Append ContentTime and InstanceNumber to the DataFrame
+            dicom_obj = row['OBJECT']
+            self._df.at[idx, 'ContentTime']     = dicom_obj.ContentTime     if hasattr( dicom_obj, 'ContentTime' )      else None
+            self._df.at[idx, 'InstanceNumber']  = dicom_obj.InstanceNumber  if hasattr( dicom_obj, 'InstanceNumber' )   else None
+            
+            # Pull date and UID info and write as new private-tag pair so we can overwrite it with standardized info.
+            if hasattr( dicom_obj, 'StudyDate' ):
+                dicom_obj.metadata.add_new((0x0019, 0x1001), 'DA', 'Old_StudyDate: ' + dicom_obj.StudyDate )
+            dicom_obj.StudyDate = self.intake_form.operation_date # Provided by intake form
+            if hasattr( dicom_obj, 'StudyTime' ):
+                dicom_obj.metadata.add_new((0x0019, 0x1002), 'TM', 'Old_StudyTime: ' + dicom_obj.StudyTime )
+            dicom_obj.StudyTime = self.intake_form.epic_start_time # Provided by intake form
+            if hasattr( dicom_obj, 'StudyInstanceUID' ):
+                dicom_obj.metadata.add_new((0x0019, 0x1002), 'UI', 'Old_StudyInstanceUID: ' + dicom_obj.StudyInstanceUID)
+            dicom_obj.StudyInstanceUID = self.intake_form.uid
+            if hasattr( dicom_obj, 'SeriesInstanceUID' ):
+                dicom_obj.metadata.add_new((0x0019, 0x1003), 'UI', 'Old_SeriesInstanceUID: ' + dicom_obj.SeriesInstanceUID)
+            dicom_obj.SeriesInstanceUID = self.intake_form.uid
+            if hasattr( dicom_obj, 'SOPInstanceUID' ):
+                dicom_obj.metadata.add_new((0x0019, 0x1004), 'UI', 'Old_SOPInstanceUID: ' + dicom_obj.SOPInstanceUID)
+            dicom_obj.SOPInstanceUID = self.intake_form.uid
+            if hasattr( dicom_obj, 'NumberOfStudyRelatedInstances' ):
+                dicom_obj.metadata.add_new((0x0019, 0x1005), 'IS', 'Old_NumberOfStudyRelatedInstances: ' + dicom_obj.NumberOfStudyRelatedInstances)
+                dicom_obj.NumberOfStudyRelatedInstances = num_valid_shots
+            
+            # Walk through each key-value pair in the _derived_metadata dict and add_new to the DICOM object as a long length text tag.
+            for key, value in dicom_obj._derived_metadata.items():
+                dicom_obj.metadata.add_new( (0x0019, 0x1000), 'LT', f'{key}: {value}' )
+             
+            # Create a private long length text tag to explain what this function did.
+            dicom_obj.metadata.add_new( (0x0019, 0x1006), 'LT', f'Metadata de-identified & standardized by XNAT-Interact script on {dicom_obj._derived_metadata["DATETIME"]}.' )
+
+            # Save the modified DICOM object back to the DataFrame
+            self._df.at[idx, 'OBJECT'] = dicom_obj
+        
+            # Generate a new file name for each shot in the session given its instance number, then overwrite metadata to ensure consistency throughout all shots.
+            if row['IS_VALID']: self._df.at[idx, 'NEW_FN'] = dicom_obj.generate_source_image_file_name( str( dicom_obj.metadata.InstanceNumber ), self.intake_form.uid )
+
+        # self._derive_acquisition_site_info() # to-do: should warn the user that any mined info is inconsistent with their input
+        self._df = self.df.sort_values( by='NEW_FN', inplace=False )
+
+    # ---------------------------------_populate_df Helper Methods---------------------------------
+    def _all_dicom_ffns( self ) -> list:
+        # Filter out files with extensions other than .dcm
+        all_ffns = [f for f in self.intake_form.relevant_folder.rglob("*") if f.suffix.lower() == '.dcm' or f.suffix == '']
+        return [f for f in all_ffns if f.suffix.lower() == '.dcm' or f.suffix == '']
+
+    def _init_rf_session_dataframe( self ):
+        df_cols = { 'FN': 'str', 'EXT': 'str', 'NEW_FN': 'str', 'OBJECT': 'object', 'IS_VALID': 'bool',
+                    'DATE': 'str', 'SERIES_TIME': 'str', 'INSTANCE_TIME': 'str', 'INSTANCE_NUM': 'str' }
+        self._df = pd.DataFrame( {col: pd.Series( dtype=dt ) for col, dt in df_cols.items()} )
+
+    def _query_dicom_series_time_info( self, deid_dcm: SourceDicomDeIdentified ) -> list:
+        dt_data = [deid_dcm.datetime.date, deid_dcm.datetime.time, None, deid_dcm.metadata.InstanceNumber]
+        if 'SeriesTime' in deid_dcm.metadata:    dt_data[2] = deid_dcm.metadata.SeriesTime
+        if 'ContentTime' in deid_dcm.metadata:   dt_data[2] = deid_dcm.metadata.ContentTime
+        if 'StudyTime' in deid_dcm.metadata:     dt_data[2] = deid_dcm.metadata.StudyTime
+        return dt_data
+    # ---------------------------------_populate_df Helper Methods---------------------------------
+
+    def __str__( self ) -> str:
+        select_cols = ['NEW_FN', 'IS_VALID']
+        df, intake_form = self.df[select_cols].copy(), self.intake_form
+        num_valid, num_rows = df['IS_VALID'].sum(), len( df )
+        valid_str = f'{self.is_valid} ({num_valid}/{num_rows})'
         if self.is_valid:
-            self._mine_session_metadata() # necessary for publishing to xnat.
-        # self._match_past_file_names( past_file_names ) # to-do: ? the Case_Database.csv file in the R-drive FLuoroscopy folder contains info about previous name information of these files. for now i am just going to tryst in my image hash protocol for preventing duplicates.
-            self.update_intake_form()
+            return f' -- {self.__class__.__name__} --\nUID:\t{intake_form.uid}\nAcquisition Site:\t{intake_form.acquisition_site}\nGroup:\t\t\t{intake_form.group}\nDate-Time:\t\t{intake_form.datetime}\nValid:\t\t\t{valid_str}\n{df.head()}\n...\n{df.tail()}'
+        else:
+            return f' -- {self.__class__.__name__} --\nUID:\t{None}\nAcquisition Site:\t{intake_form.acquisition_site}\nGroup:\t\t\t{intake_form.group}\nDate-Time:\t\t{None}\nValid:\t\t\t{valid_str}\n{df.head()}\n...\n{df.tail()}'
 
-    # @property
-    # def _all_dicom_ffns( self ) -> list:
-    #     assert os.path.isdir( self.pn ), f'First input must refer to a directory of dicom files detailing a surgical performance; you entered: "{self.pn}".'
-    #     return glob.glob( os.path.join( self.pn, '**', '*' ), recursive=True )
+    def write( self, metatables: MetaTables, verbose: Opt[bool] = False ) -> Tuple[dict, MetaTables]:
+        """
+        Writes the SourceRFSession to a zipped folder in a temporary local directory, which can then be pushed to XNAT.
+        Inputs:
+        - metatables (MetaTables): metatables object containing the user's validated metatables configuration.
+        - verbose (bool): flag indicating whether to print intermediate steps to the console.
 
+        Outputs:
+        - zipped_data (dict): dictionary containing the path to the zipped folder of source data.
+        - metatables (MetaTables): metatables object containing the user's validated metatables configuration.
 
-    # def _init_rf_session_dataframe( self ):
-    #     df_cols = { 'FN': 'str', 'EXT': 'str', 'NEW_FN': 'str', 'DICOM': 'object', 'IS_VALID': 'bool',
-    #                 'DATE': 'str', 'SERIES_TIME': 'str', 'INSTANCE_TIME': 'str', 'INSTANCE_NUM': 'str' }
-    #     self._df = pd.DataFrame( {col: pd.Series( dtype=dt ) for col, dt in df_cols.items()} )
-
-
-    # def _populate_df( self ):
-    #     self._init_rf_session_dataframe()
-    #     all_ffns = self._all_dicom_ffns
-    #     self._df = self._df.reindex( np.arange( len( all_ffns ) ) )
-    #     for idx, ffn in enumerate( all_ffns ):
-    #         fn, ext = os.path.splitext( os.path.basename( ffn ) )
-    #         if ext != '.dcm':
-    #             self._df.loc[idx, ['FN', 'EXT', 'IS_VALID']] = [fn, ext, False]
-    #             continue
-    #         deid_dcm = SourceDicomDeIdentified( dcm_ffn=ffn, metatables=self.metatables )
-    #         self._df.loc[idx, ['FN', 'EXT', 'DICOM', 'IS_VALID']] = [fn, ext, deid_dcm, deid_dcm.is_valid]
-    #         if deid_dcm.is_valid:
-    #             dt_data = self._query_dicom_series_time_info( deid_dcm )
-    #             self._df.loc[idx, ['DATE', 'INSTANCE_TIME', 'SERIES_TIME', 'INSTANCE_NUM']] = dt_data
-
-    #     # Need to check within-case for duplicates -- apparently those do exist.
-    #     hash_strs = set()
-    #     for idx, row in self.df.iterrows():
-    #         if row['IS_VALID']:
-    #             if row['DICOM'].image.hash_str in hash_strs:
-    #                 self._df.at[idx, 'IS_VALID'] = False
-    #             else:
-    #                 hash_strs.add( row['DICOM'].image.hash_str )
-                    
-
-    # def _query_dicom_series_time_info( self, deid_dcm: SourceDicomDeIdentified ) -> list:
-    #     dt_data = [deid_dcm.datetime.date, deid_dcm.datetime.time, None, deid_dcm.metadata.InstanceNumber]
-    #     if 'SeriesTime' in deid_dcm.metadata:    dt_data[2] = deid_dcm.metadata.SeriesTime
-    #     if 'ContentTime' in deid_dcm.metadata:   dt_data[2] = deid_dcm.metadata.ContentTime
-    #     if 'StudyTime' in deid_dcm.metadata:     dt_data[2] = deid_dcm.metadata.StudyTime
-    #     return dt_data
-
-
-    # def _mine_session_metadata( self ):
-    #     assert self.df.empty is False, 'Dataframe of dicom files is empty.'
-    #     self._derive_experiment_datetime()
-    #     self._derive_experiment_uid()
+        Example Usage:
+        rf_sess.write( metatables=MetaTables, verbose=True )
+        """
+        assert self.is_valid, f"Session is invalid; could be for several reasons. try evaluating whether all of the image hash_strings already exist in the matatable."
         
-    #     # For each row, generate a new file name now that we have a session label.
-    #     for idx, row in self.df.iterrows():
-    #         if row['IS_VALID']:
-    #             self._df.at[idx, 'NEW_FN'] = row['DICOM'].generate_source_image_file_name( str( row['INSTANCE_NUM'] ), self.uid )
+        # (Try to) Add the subject to the metatables
+        metatables.add_new_item( table_name='SUBJECTS', item_name=self.intake_form.uid, item_uid=self.intake_form.uid, verbose=verbose,
+                                extra_columns_values={ 'ACQUISITION_SITE': metatables.get_uid( table_name='ACQUISITION_SITES', item_name=self.intake_form.acquisition_site ),
+                                                      'GROUP': metatables.get_uid( table_name='GROUPS', item_name=self.intake_form.group ) }
+                                )
 
-    #     # self._derive_acquisition_site_info() # to-do: should warn the user that any mined info is inconsistent with their input
-    #     self._df = self.df.sort_values( by='NEW_FN', inplace=False )
+        # Zip the mp4 and dicom data to separate folders
+        zipped_data, home_dir = {}, self.tmp_source_data_dir
+        num_dicom = 0
+        with tempfile.TemporaryDirectory( dir=home_dir ) as dcm_temp_dir:
+            for idx in range( len( self.df ) ): # Iterate through each row in the DataFrame, writing each to a temp directory before we zip it up and delete the unzipped folder.
+                if self.df.loc[idx, 'IS_VALID']:
+                    file_obj_rep = self.df.loc[idx, 'OBJECT']
+                    assert isinstance( file_obj_rep, SourceDicomDeIdentified ), f"Object representation of file at index {idx} is {type( file_obj_rep )}, which is not a valid SourceDicomDeIdentified object."
+                    dcmwrite( os.path.join( dcm_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) ), file_obj_rep.metadata )          # type: ignore
+                    tmp = { 'SUBJECT': metatables.get_uid( table_name='SUBJECTS', item_name=self.intake_form.uid ), 'INSTANCE_NUM': self.df.loc[idx, 'NEW_FN'] }
+                    metatables.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, item_uid=file_obj_rep.uid, # type: ignore
+                                            extra_columns_values = tmp, verbose=verbose
+                                            )
+                    num_dicom += 1
+                
+            # Zip these temporary directories into a slightly-less-temporary directory.
+            dcm_zip_path = os.path.join( home_dir, "dicom_files.zip" )
+            dcm_zip_full_path = shutil.make_archive( dcm_zip_path[:-4], 'zip', dcm_temp_dir )
+            zipped_data[dcm_zip_full_path] = { 'CONTENT': 'IMAGE', 'FORMAT': 'DICOM', 'TAG': 'INTRA_OP' }
 
-    # # def _derive_acquisition_site_info( self ): # Retrieve source institution info across all dicom files and tell user if their input is inconsistent, if given
-    # #     potential_sources = set( source for sublist in self.df[self.df['IS_VALID']]['DICOM'].apply( lambda x: x.acquisition_site ) for source in sublist )
-    # #     if len( potential_sources ) > 0:
-    # #         pass # self._validate_derived_acquisition_sites( potential_sources ) # need to evaluate the derived info against the user input
-    # #     self._acquisition_site = self.acquisition_site.upper()
-
-    # def _validate_past_upload_data_input( self, past_upload_data: Opt[pd.DataFrame] = None ):
-    #     if self._past_upload_data is None:          self._past_upload_data = pd.DataFrame() # to-do: this should be a dataframe with a specific structure
-        
-
-    # def _check_session_validity( self ): # Invalid only when empty or all shots are invalid -- to-do: may also want to check that instance num and time are monotonically increasing
-    #     # valid_rows = self.df[ self.df['IS_VALID'] ].copy()
-    #     # assert self.label, 'Cannot check duplicate without a rfsession label.'
-    #     self._is_valid = self.df['IS_VALID'].any() and not self.metatables.item_exists( table_name='SUBJECTS', item_name=self.uid )
-        
-
-    # def _derive_experiment_datetime( self ):
-    #     assert self.df['DATE'].nunique() == 1, f'Dicom metadata produced either all-nans or different dates across the files for this performance -- should only be one:\n{self._df["DATE"]}'
-    #     assert self.df['SERIES_TIME'].nunique() == 1, f'Dicom metadata produced different SERIES_TIME values across the files for this performance -- should only be one:\n{self._df["SERIES_TIME"]}'
-    #     self._datetime = USCentralDateTime( self.df.at[0,'DATE'] + ' ' + self.df.at[0, 'SERIES_TIME'] )
-    
-
-    # def _derive_experiment_uid( self ):
-    #     '''Original dicom data should have the same Series Instance UID for all dicom files. The Instance number is the file name.'''
-    #     series_instance_uids = []
-    #     for _, row in self.df.iterrows():
-    #         if row['IS_VALID']:
-    #             series_instance_uids.append( row['DICOM'].uid_info['Series Instance UID'] )
-    #     series_instance_uids = pd.Series( series_instance_uids )
-    #     if series_instance_uids.nunique() == 1: # Use the uid that was found within the metadata
-    #         self._uid = series_instance_uids.at[0]
-    #     else:                                   # Either multiple uid's were found in the metadata, or none were found. In either case, generate a new one to guarantee uniqueness.
-    #         self._assign_experiment_uid()
-    #         self._deal_with_inconsistent_series_instance_uid()
-    
-
-    # def _deal_with_inconsistent_series_instance_uid( self ): # overwrite inconsisten series instance uid information in the metadata.
-    #     for idx, row in self.df.iterrows():
-    #         if row['IS_VALID']: # Copy the value for 'SeriesInstanceUID' to a new private tag; add new private tags detailing this change
-    #             description = "Original (but inconsistent) SeriesInstanceUID on upload to XNAT"
-    #             self._df.at[idx,'DICOM'].metadata.add_new( ( 0x0019, 0x1001 ), 'LO', description )
-    #             self._df.at[idx,'DICOM'].metadata.add_new( ( 0x0019, 0x1002 ), 'LO', row['DICOM'].metadata.SeriesInstanceUID )
-    #             self._df.at[idx,'DICOM'].metadata.add_new( ( 0x0019, 0x1003 ), 'LO', ['Added by: ' + self.login.validated_username] )
-    #             self._df.at[idx,'DICOM'].metadata.add_new( ( 0x0019, 0x1004 ), 'DA', datetime.today().strftime( '%Y%m%d' ) )
-    #             self._df.at[idx,'DICOM'].metadata.SeriesInstanceUID = self.uid
-
-
-    # def __str__( self ) -> str:
-    #     select_cols = ['FN','NEW_FN', 'IS_VALID', 'INSTANCE_TIME']
-    #     df = self.df[select_cols].copy()
-    #     if self.is_valid:
-    #         return f' -- {self.__class__.__name__} --\nUID:\t{self.uid}\nAcquisition Site:\t{self.acquisition_site}\nGroup:\t\t\t{self.group}\nDate-Time:\t\t{self.datetime}\nValid:\t{self.is_valid}\n{df.head()}...{df.tail()}'
-    #     else:
-    #         return f' -- {self.__class__.__name__} --\nUID:\t{None}\nAcquisition Site:\t{self.acquisition_site}\nGroup:\t\t\t{self.group}\nDate-Time:\t\t{None}\nValid:\t{self.is_valid}\n{df.head()}...{df.tail()}'
-
-
-    # def write( self, zip_dest: Opt[Path] = None, verbose: Opt[bool] = False ) -> Tuple[dict, MetaTables]::
-    #     assert self.is_valid, f"Session is invalid; could be for several reasons. try evaluating whether all of the image hash_strings already exist in the matatable."
-    #     if zip_dest is None: zip_dest = self.login.tmp_data_dir
-    #     assert os.path.isdir( zip_dest ), f'Destination for zipped folder must be an existing directory; you entered: {zip_dest}'
-        
-    #     # Method also adds the subject and image info to the metatables at the same time so we can ensure no duplicates reach 'publish_to_xnat()'
-    #     write_d = os.path.join( zip_dest, self.uid )
-    #     subject_info = { 'ACQUISITION_SITE': self.metatables.get_uid( table_name='ACQUISITION_SITES', item_name=self.acquisition_site ),
-    #                     'GROUP': self.metatables.get_uid( table_name='GROUPS', item_name=self.group ) }
-    #     self.metatables.add_new_item( table_name='SUBJECTS', item_name=self.uid, item_uid=, extra_columns_values=subject_info, verbose=verbose ) # type: ignore
-    #     with tempfile.TemporaryDirectory() as tmp_dir:
-    #         for _, row in self.df.iterrows():
-    #             if row['IS_VALID']:
-    #                 dcmwrite( os.path.join( tmp_dir, row['NEW_FN'] ), row['DICOM'].metadata )
-    #                 img_info = { 'SUBJECT': self.metatables.get_uid( table_name='SUBJECTS', item_name=self.uid ), 'INSTANCE_NUM': row['NEW_FN'] }
-    #                 self.metatables.add_new_item( table_name='IMAGE_HASHES', item_name=row['DICOM'].image.hash_str, extra_columns_values=img_info, verbose=verbose ) # type: ignore
-    #         shutil.make_archive( write_d, 'zip', tmp_dir )
-        
-    #     if verbose is True:
-    #         num_valid = self.df['IS_VALID'].sum()
-    #         print( f'\t...Zipped folder of ({num_valid}/{len( self.df )}) dicom files successfully written to: {write_d}.zip' )
-    #     return Path( write_d + '.zip' )
-
+        if verbose:     print( f'\t...Zipped folder(s) of {num_dicom} dicom files successfully written to:\n\t\t{dcm_zip_full_path}' )
+        return zipped_data, metatables
 
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -522,10 +528,22 @@ class SourceESVSession( ExperimentData ):
 
 
     def write( self, metatables: MetaTables, verbose: Opt[bool] = False ) -> Tuple[dict, MetaTables]:
-        ''' Method adds the subject and image info to the metatables at the same time so we can ensure no duplicates reach 'publish_to_xnat() '''
+        """
+        Writes the SourceESVSession to a zipped folder in a temporary local directory, which can then be pushed to XNAT.
+        Inputs:
+        - metatables (MetaTables): metatables object containing the user's validated metatables configuration.
+        - verbose (bool): flag indicating whether to print intermediate steps to the console.
+
+        Outputs:
+        - zipped_data (dict): dictionary containing the path to the zipped folder of source data.
+        - metatables (MetaTables): metatables object containing the user's validated metatables configuration.
+
+        Example Usage:
+        esv_sess.write( metatables=MetaTables, verbose=True )
+        """
         assert self.is_valid, f"Session is invalid; could be for several reasons. try evaluating whether all of the image hash_strings already exist in the matatable."
 
-        # Add the subject to the metatables
+        # (Try to) Add the subject to the metatables
         metatables.add_new_item( table_name='SUBJECTS', item_name=self.intake_form.uid, item_uid=self.intake_form.uid, verbose=verbose,
                                 extra_columns_values={ 'ACQUISITION_SITE': metatables.get_uid( table_name='ACQUISITION_SITES', item_name=self.intake_form.acquisition_site ),
                                                       'GROUP': metatables.get_uid( table_name='GROUPS', item_name=self.intake_form.group ) }
@@ -539,6 +557,7 @@ class SourceESVSession( ExperimentData ):
             for idx in range( len( self.df ) ): # Iterate through each row in the DataFrame, writing each to a temp directory before we zip it up and delete the unzipped folder.
                 if self.df.loc[idx, 'IS_VALID']:
                     file_obj_rep = self.df.loc[idx, 'OBJECT']
+                    assert isinstance( file_obj_rep, (ArthroDiagnosticImage, ArthroVideo) ), f"Object representation of file at index {idx} is {type( file_obj_rep )}, which is neither an ArthroDiagnosticImage nor an ArthroVideo object."
                     if isinstance( file_obj_rep, ArthroDiagnosticImage ):
                         dcmwrite( os.path.join( dcm_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) ), file_obj_rep.metadata )          # type: ignore
                         tmp = { 'SUBJECT': metatables.get_uid( table_name='SUBJECTS', item_name=self.intake_form.uid ), 'INSTANCE_NUM': self.df.loc[idx, 'NEW_FN'] }
@@ -551,9 +570,6 @@ class SourceESVSession( ExperimentData ):
                         vid_ffn = os.path.join( self.intake_form.relevant_folder, str( self.df.loc[idx,'FN'] ) + '.mp4' )
                         shutil.copy( vid_ffn, os.path.join( mp4_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) + '.mp4' ) )
                         num_mp4 += 1
-
-                    else:
-                        raise ValueError( f"Object representation of file at index {idx} is {type( file_obj_rep )}, which is neither an ArthroDiagnosticImage nor an ArthroVideo object." )
                 
             # Zip these temporary directories into a slightly-less-temporary directory.
             mp4_zip_path = os.path.join( home_dir, "mp4_files.zip" )
@@ -563,9 +579,7 @@ class SourceESVSession( ExperimentData ):
             zipped_data[mp4_zip_full_path] = { 'CONTENT': 'VIDEO', 'FORMAT': 'MP4', 'TAG': 'INTRA_OP' }
             zipped_data[dcm_zip_full_path] = { 'CONTENT': 'IMAGE', 'FORMAT': 'DICOM', 'TAG': 'POST_OP' }
 
-        if verbose is True:
-            num_valid = int( self.df['IS_VALID'].sum() )
-            print( f'\t...Zipped folder(s) of {num_dicom} dicom and {num_mp4} mp4 files successfully written to:\n\t\t{dcm_zip_full_path}\n\t\t{mp4_zip_full_path}' )
+        if verbose: print( f'\t...Zipped folder(s) of {num_dicom} dicom and {num_mp4} mp4 files successfully written to:\n\t\t{dcm_zip_full_path}\n\t\t{mp4_zip_full_path}' )
         return zipped_data, metatables
     
 

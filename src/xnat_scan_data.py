@@ -281,8 +281,8 @@ class SourceDicomDeIdentified( ScanFile ):
         # UID info:
         self._derived_metadata['UID_INFO'] = {}
         for element in self.metadata.iterall():
-            if "UID" in element.name:
-                self._derived_metadata['UID_INFO'][element.name] = element.value.replace( '.', '_' ) # Must replace '.' with underscores because that is how theyre stored in xnat
+            if "UID" in element.name:       self._derived_metadata['UID_INFO'][element.name] = element.value.replace( '.', '_' ) # Must replace '.' with underscores because that is how theyre stored in xnat
+        
         # Convert the dict to a string for storage in the metadata
         self._derived_metadata['UID_INFO'] = str( self._derived_metadata['UID_INFO'] )
 
@@ -290,10 +290,8 @@ class SourceDicomDeIdentified( ScanFile ):
     def _person_names_callback( self, dcm_data, data_element ):
         if data_element.VR == "PN":                     data_element.value = self.redacted_string
 
-
     def _curves_callback( self, dcm_data, data_element ):
         if data_element.tag.group & 0xFF00 == 0x5000:   del dcm_data[data_element.tag]
-
 
     def _deidentify_dicom( self ): # remove all sensitive metadata info
         assert self._metadata is not None, f'BUG: cannot be calling the _deidentify_metadata method for {type(self).__name__} prior to defining it.'
@@ -304,6 +302,10 @@ class SourceDicomDeIdentified( ScanFile ):
             tag = (i, 0x3000)
             if tag in self.metadata:                    del self._metadata[tag]
     
+        # Redact AccessionNumber and StudyID fields
+        if hasattr( self._metadata, 'AccessionNumber' ):    self._metadata.AccessionNumber = 'REDACTED BY XNAT-INTERACT SCRIPT'
+        if hasattr( self._metadata, 'StudyID' ):            self._metadata.StudyID = 'REDACTED BY XNAT-INTERACT SCRIPT'
+
         # De-identify embedded pixel data
         # to-do: with a gpu we could use a more advanced approach like ocr and simply blur the text within the image.
     

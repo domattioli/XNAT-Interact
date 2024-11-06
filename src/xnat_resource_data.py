@@ -275,7 +275,7 @@ class ORDataIntakeForm( ResourceFile ):
         """
         ffn = os.path.join( parent_folder, self.filename_str )
         if verbose:     print( f'\n\t...Initializing OR Intake From from "{ffn}"...' )
-        with open( ffn, 'r', encoding='cp1252' ) as jf:     self._running_text_file = json.loads( jf.read() )
+        with open( ffn, 'r', encoding='utf-8' ) as jf:     self._running_text_file = json.loads( jf.read() ) # might need to read with encoding='cp1252'
 
         # Minimally Required information (if paper form was available when processed)
         self._uid = self.running_text_file['SUBJECT_UID'] # Overwrites generated uid in base class

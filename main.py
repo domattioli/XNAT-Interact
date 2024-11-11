@@ -150,7 +150,7 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
             intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, input_data=Path( form_pn ), verbose=verbose )
             while True:
                 print( f'\n\tPlease review the created intake form:\n{intake_form}' )
-                print( f'\n\tIs everything correct?\n\t\t-- Please enter "1" for Yes or "2" for No (re-create the intake form).' )
+                print( f'\n\t--- Is everything correct?\n\t\t-- Please enter "1" for Yes or "2" for No (re-create the intake form).' )
                 accept_form = ORDataIntakeForm.prompt_until_valid_answer_given( 'Accept Intake Form As-Is', acceptable_options=['1', '2'] )
                 if accept_form == '2':
                     print( f'\n\tRe-doing the form...' )
@@ -176,8 +176,9 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
     if intake_form.ortho_procedure_type.upper() == 'ARTHROSCOPY':
         source_data = SourceESVSession( intake_form=intake_form, metatables=metatables )
     elif intake_form.ortho_procedure_type.upper() == 'TRAUMA':
-        raise ValueError( f"\tThe provided procedure type is not yet supported. Please contact the Data Librarian for help." )
-        source_data = SourceRFSession( metatables=metatables, login=validated_login, verbose=verbose )
+        # raise ValueError( f"\tThe provided procedure type is not yet supported. Please contact the Data Librarian for help." )
+        # source_data = SourceRFSession( metatables=metatables, login=validated_login, verbose=verbose )
+        source_data = SourceRFSession( intake_form=intake_form, metatables=metatables )
     else:                       raise ValueError( f"\tThe provided procedure type is not yet supported. This is a bug that should be reported to Data Librarian." )
     
     # Publish data to xnat

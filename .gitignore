@@ -15,5 +15,8 @@
 # Dont ignore the templates though
 !/data/image_templates/*
 
-# Definitely ignore meta_tables.json -- only the librarian should be manging changes to this.
-/meta_tables.json
+# Ignore the 'For_Data_Librarian_Eyes_Only' subdirectory of the Docs folder
+/doc/For_Data_Librarian_Eyes_Only
+
+# Ignore the main.ipynb file (for now, as of 11/11/2024) bc it is currently for sandboxing. when i pass it off to the team I will include examples in this file and push it.
+/src/main.ipynb

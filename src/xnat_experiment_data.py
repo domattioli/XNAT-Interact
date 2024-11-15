@@ -225,6 +225,7 @@ class ExperimentData():
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for all radio fluoroscopic (source image) sessions.
+from src.xnat_experiment_data import ExperimentData
 class SourceRFSession( ExperimentData ):
     """
     A class representing the XNAT Experiment for Radio Fluoroscopic (RF) Source Images. Inherits from ExperimentData. Intended for structuring trauma cases with fluoroscopic image sequences.
@@ -254,6 +255,10 @@ class SourceRFSession( ExperimentData ):
     def __init__( self, intake_form: ORDataIntakeForm, metatables: MetaTables ):
         """
         Initialize the SourceRFSession object with the inputted ORDataIntakeForm object and the invoking class name.
+
+        Note on boolean columns in the dataframe:
+        - 'IS_VALID' (bool): flag indicating whether the file is in a (valid) dicom-readable format.
+        - 'IS_QUESTIONABLE' (bool): flag indicating whether the file is possibly a duplicate within-case, based on image hash strings.
     
         Populate a dataframe to represent all intraoperative images in the inputted folder. Check the validity of the session and mine metadata for the session.
          """
@@ -281,8 +286,10 @@ class SourceRFSession( ExperimentData ):
         hash_strs = set()
         for idx, row in self.df.iterrows():
             if row['IS_VALID']:
-                if row['OBJECT'].image.hash_str in hash_strs:   self._df.at[idx, 'IS_VALID'] = False
-                else:                                           hash_strs.add( row['OBJECT'].image.hash_str )
+                if row['OBJECT'].image.hash_str in hash_strs:   self._df.at[idx, 'IS_QUESTIONABLE'] = True
+                else:
+                    hash_strs.add( row['OBJECT'].image.hash_str )
+                    self._df.at[idx, 'IS_QUESTIONABLE'] = False
         
     def _check_session_validity( self, metatables: MetaTables ): # Invalid only when empty or all shots are invalid -- to-do: may also want to check that instance num and time are monotonically increasing
         self._is_valid = self.df['IS_VALID'].any() and not metatables.item_exists( table_name='SUBJECTS', item_name=self.intake_form.uid )
@@ -319,6 +326,8 @@ class SourceRFSession( ExperimentData ):
             if hasattr( dicom_obj, 'NumberOfStudyRelatedInstances' ):
                 dicom_obj.metadata.add_new((0x0019, 0x1005), 'IS', 'Old_NumberOfStudyRelatedInstances: ' + dicom_obj.NumberOfStudyRelatedInstances)
                 dicom_obj.NumberOfStudyRelatedInstances = num_valid_shots
+            if row['IS_QUESTIONABLE']: # If the shot is questionably a duplicate within-case, add a private tag to explain why.
+                dicom_obj.metadata.add_new( (0x0019, 0x1007), 'LT', 'This shot was flagged by the XNAT-Interact software as a potential duplicate (within-performance).' )
             
             # Walk through each key-value pair in the _derived_metadata dict and add_new to the DICOM object as a long length text tag.
             for key, value in dicom_obj._derived_metadata.items():
@@ -327,11 +336,9 @@ class SourceRFSession( ExperimentData ):
             # Create a private long length text tag to explain what this function did.
             dicom_obj.metadata.add_new( (0x0019, 0x1006), 'LT', f'Metadata de-identified & standardized by XNAT-Interact script on {dicom_obj._derived_metadata["DATETIME"]}.' )
 
-            # Save the modified DICOM object back to the DataFrame
+            # Save the modified DICOM object back to the DataFrame; Generate a new file name for each shot in the session given its instance number, then overwrite metadata to ensure consistency throughout all shots.
             self._df.at[idx, 'OBJECT'] = dicom_obj
-        
-            # Generate a new file name for each shot in the session given its instance number, then overwrite metadata to ensure consistency throughout all shots.
-            if row['IS_VALID']: self._df.at[idx, 'NEW_FN'] = dicom_obj.generate_source_image_file_name( str( dicom_obj.metadata.InstanceNumber ), self.intake_form.uid )
+            self._df.at[idx, 'NEW_FN'] = dicom_obj.generate_source_image_file_name( str( dicom_obj.metadata.InstanceNumber ), self.intake_form.uid )
 
         # self._derive_acquisition_site_info() # to-do: should warn the user that any mined info is inconsistent with their input
         self._df = self.df.sort_values( by='NEW_FN', inplace=False )
@@ -343,7 +350,7 @@ class SourceRFSession( ExperimentData ):
         return [f for f in all_ffns if f.suffix.lower() == '.dcm' or f.suffix == '']
 
     def _init_rf_session_dataframe( self ):
-        df_cols = { 'FN': 'str', 'EXT': 'str', 'NEW_FN': 'str', 'OBJECT': 'object', 'IS_VALID': 'bool',
+        df_cols = { 'FN': 'str', 'EXT': 'str', 'NEW_FN': 'str', 'OBJECT': 'object', 'IS_VALID': 'bool', 'IS_QUESTIONABLE': bool,
                     'DATE': 'str', 'SERIES_TIME': 'str', 'INSTANCE_TIME': 'str', 'INSTANCE_NUM': 'str' }
         self._df = pd.DataFrame( {col: pd.Series( dtype=dt ) for col, dt in df_cols.items()} )
 
@@ -356,14 +363,15 @@ class SourceRFSession( ExperimentData ):
     # ---------------------------------_populate_df Helper Methods---------------------------------
 
     def __str__( self ) -> str:
-        select_cols = ['NEW_FN', 'IS_VALID']
+        select_cols = ['NEW_FN', 'IS_VALID', 'IS_QUESTIONABLE']
         df, intake_form = self.df[select_cols].copy(), self.intake_form
-        num_valid, num_rows = df['IS_VALID'].sum(), len( df )
+        num_valid, num_questionable, num_rows = df['IS_VALID'].sum(), df['IS_QUESTIONABLE'].sum(), len( df )
         valid_str = f'{self.is_valid} ({num_valid}/{num_rows})'
+        questionable_str = f'{num_questionable}/{num_rows}'
         if self.is_valid:
-            return f' -- {self.__class__.__name__} --\nUID:\t{intake_form.uid}\nAcquisition Site:\t{intake_form.acquisition_site}\nGroup:\t\t\t{intake_form.group}\nDate-Time:\t\t{intake_form.datetime}\nValid:\t\t\t{valid_str}\n{df.head()}\n...\n{df.tail()}'
+            return f' -- {self.__class__.__name__} --\nUID:\t{intake_form.uid}\nAcquisition Site:\t{intake_form.acquisition_site}\nGroup:\t\t\t{intake_form.group}\nDate-Time:\t\t{intake_form.datetime}\nValid:\t\t\t{valid_str}\nQuestionable:\t\t{questionable_str}\n{df.head()}\n...\n{df.tail()}'
         else:
-            return f' -- {self.__class__.__name__} --\nUID:\t{None}\nAcquisition Site:\t{intake_form.acquisition_site}\nGroup:\t\t\t{intake_form.group}\nDate-Time:\t\t{None}\nValid:\t\t\t{valid_str}\n{df.head()}\n...\n{df.tail()}'
+            return f' -- {self.__class__.__name__} --\nUID:\t{None}\nAcquisition Site:\t{intake_form.acquisition_site}\nGroup:\t\t\t{intake_form.group}\nDate-Time:\t\t{None}\nValid:\t\t\t{valid_str}\nQuestionable:\t\t{questionable_str}\n{df.head()}\n...\n{df.tail()}'
 
     def write( self, metatables: MetaTables, verbose: Opt[bool] = False ) -> Tuple[dict, MetaTables]:
         """
@@ -392,7 +400,8 @@ class SourceRFSession( ExperimentData ):
         num_dicom = 0
         with tempfile.TemporaryDirectory( dir=home_dir ) as dcm_temp_dir:
             for idx in range( len( self.df ) ): # Iterate through each row in the DataFrame, writing each to a temp directory before we zip it up and delete the unzipped folder.
-                if self.df.loc[idx, 'IS_VALID']:
+                # if self.df.loc[idx, 'IS_VALID']:
+                
                     file_obj_rep = self.df.loc[idx, 'OBJECT']
                     assert isinstance( file_obj_rep, SourceDicomDeIdentified ), f"Object representation of file at index {idx} is {type( file_obj_rep )}, which is not a valid SourceDicomDeIdentified object."
                     dcmwrite( os.path.join( dcm_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) ), file_obj_rep.metadata )          # type: ignore

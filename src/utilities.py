@@ -336,8 +336,12 @@ class XNATConnection( UIDandMetaInfo ):
             self._failed_tests.append( 'Project Handle label does not match xnat_project_name' )
         project_users = [u.lower() for u in self.project_handle.users()]
         username = self.get_user.lower()                # type: ignore 
-        if username not in project_users or username != self.data_librarian.lower():    # this is a quirk specific to domattioli (i'm the only one who's username is not his hawkid. Might be a problem for others in the future is they somehow do what i did).
-            self._failed_tests.append( 'User is not added to project (XNAT-side)' )
+        print( f'project users: {project_users}' )
+        print( f'username: {username}' )
+        print( f'data librarian: {self.data_librarian.lower()}' )
+        if username not in project_users:
+            if username != self.data_librarian.lower(): # this is a quirk specific to domattioli (i'm the only one who's username is not his hawkid. Might be a problem for others in the future is they somehow do what i did).
+                self._failed_tests.append( 'User is not added to project (XNAT-side)' )
         if len( self._failed_tests ) == 0:              self._is_verified = True
         else:                                           self._is_verified = False
 
@@ -369,8 +373,8 @@ class XNATConnection( UIDandMetaInfo ):
     def __exit__( self, exc_type, exc_value, traceback ):   self.close()
 
     def __str__( self ) -> str:
-        if self.is_verified:    return (f"-- XNAT Connection --\n\tStatus:\t{'Open' if self.is_open else 'Closed'}\n\tUser:\t{self.get_user}\n\tIs Verified:\t{self.is_verified}\n\tProject:\t{self.project_handle}" )
-        else:                   return (f"-- XNAT Connection --\n\tStatus:\t{'Open' if self.is_open else 'Closed'}\n\tUser:\t{self.get_user}\n\tIs Verified:\t{self.is_verified}\n\tFailed Tests:\t{self.failed_tests}\n\tProject:\t{self.project_handle}" )
+        if self.is_verified:    return (f"-- XNAT Connection --\n\tStatus:\t{'Open' if self.is_open else 'Closed'}\n\tUser:\t{self.get_user}\n\tVerified:\t{self.is_verified}\n\tProject:\t{self.project_handle}" )
+        else:                   return (f"-- XNAT Connection --\n\tStatus:\t{'Open' if self.is_open else 'Closed'}\n\tUser:\t{self.get_user}\n\tVerified:\t{self.is_verified}\n\tFailed Tests:\t{self.failed_tests}\n\tProject:\t{self.project_handle}" )
         
     
 

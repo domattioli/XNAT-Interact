@@ -34,9 +34,18 @@ def update_repo():
     """
     if not is_repo_up_to_date():
         try:
+            # Stash any local changes
+            print('\n\t...stashing local changes...\n')
+            subprocess.run(['git', 'stash'], check=True)
+            
             # Pull all changes from the remote repository, including deletions
             print('\nt\t...updating repository...\n')
             subprocess.run(['git', 'pull', '--prune'], check=True)
+            
+            # Apply the stashed changes
+            print('\n\t...applying stashed changes...\n')
+            subprocess.run(['git', 'stash', 'pop'], check=True)
+            
             return f'\tSUCCESS\t--\tRepository updated successfully!'
         except subprocess.CalledProcessError as e:
             return f'\tFAILURE\t--\tFailed to update the repository.'
@@ -98,26 +107,25 @@ def test_virtual_env():
 
 def main():
     """
-    Main function to ensure XNAT-INTERACT installation is correct, up to date, and all requirements are satisfied.
+    Main function to ensure XNAT-Interact installation is correct, up to date, and all requirements are satisfied.
     """
-    print(f'\n\t...ensuring that XNAT-INTERACT installation is correct and up-to-date...\n')
+    print(f'\n\t...ensuring that XNAT-Interact installation is correct and up-to-date...\n')
     try:
         check_that_virtualenv_activated()
     except Exception as e:
         print(f'\tERROR\t-- You must activate your virtual environment before running this script.\n')
         sys.exit(1)
-    try:
+    try: # Call update_repo function if needed
+        update_message = update_repo()
+        print(update_message)
         test_virtual_env()
-        print(f'\tSUCCESS\t-- XNAT-INTERACT installation was successful!')
+        print(f'\tSUCCESS\t-- XNAT-Interact test and update was successful!')
     except Exception as e:
-        print(f'\tFAILURE\t-- Installation failed; double check install requirements are all installed to your venv.\n')
+        print(f'\tFAILURE\t-- XNAT-Interact test and update failed; double check install requirements are all installed to your venv.\n')
         print(e)
         sys.exit(1)
 
-    # Call update_repo function if needed
-    out_str = update_repo()
-    print(out_str)
-    print( f'\n\t...testing complete -- you may now proceed to "main.py" script...\n' )
+    print( f'\n\t...You may now proceed to "main.py" script...\n' )
     sys.exit(0)
     
 

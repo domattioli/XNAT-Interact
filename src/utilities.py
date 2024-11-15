@@ -231,10 +231,9 @@ class XNATLogin( UIDandMetaInfo ):
     def __init__( self, input_info: dict, verbose: Opt[bool] = False ):
         super().__init__()  # Call the __init__ method of the base class
         self._validated_username, self._validated_password = '', '', 
-        self._is_valid, self._user_role = False, ''
+        self._is_valid, self._user_role = False, '' # user_role will be implemented in the future -- pull it from the xnat server if possible (e.g. member, owner, collaborator).
         self._validate_login( input_info )
-        if verbose:
-            print( self )
+        if verbose:                             print( self )
 
     def _validate_login( self, input_info ): # If all checks pass, set _is_valid to True and deal login info
         assert len( input_info ) == 3, f"Provided login info dictionary must only have the following three key-value pairs: {self.required_login_keys}"
@@ -326,7 +325,11 @@ class XNATConnection( UIDandMetaInfo ):
     def _verify_login( self ):
         self._server = self._establish_connection()
         self._grab_project_handle() # If more tests in the future, separate as its own function.
-        self._is_verified = True
+        if self.project_handle is None:
+            self._is_verified = False
+        else:
+            if self.get_user in self.project_handle.users():    self._is_verified = True
+            else:                                               self._is_verified = False
 
 
     def _establish_connection( self ) -> Interface:     return Interface( server=self.xnat_project_url, user=self.get_user, password=self.get_password )
@@ -335,14 +338,12 @@ class XNATConnection( UIDandMetaInfo ):
     def _grab_project_handle( self ):
         self._project_query_str = '/project/' + self.xnat_project_name
         project_handle = self.server.select( self.project_query_str )
-        if project_handle.exists(): # type: ignore
-            self._project_handle = project_handle
+        if project_handle.exists():     self._project_handle = project_handle       # type: ignore
 
 
     def close( self ):
-        if hasattr( self, '_server' ):
+        if hasattr( self, '_server' ):  # Delete the local copy of the Metatables.
             self._server.disconnect()
-            # Delete the local copy of the Metatables.
             if os.path.exists( self.config_ffn ):      os.remove( self.config_ffn )
         self._open = False
         print( f"\n\t*Prior connection to XNAT server, '{self.uid}', has been closed -- local metatable data will be deleted!\n" )
@@ -407,7 +408,7 @@ class MetaTables( UIDandMetaInfo ):
     def __init__( self, login_info: XNATLogin, xnat_connection: XNATConnection, verbose: Opt[bool] = False ):
         assert login_info.is_valid, f"Provided login info must be validated before accessing metatables: {login_info}"
         assert xnat_connection.is_open, f"Provided xnat connection must be open before accessing metatables: {xnat_connection}"
-        assert xnat_connection.project_handle is not None and xnat_connection.project_handle == xnat_connection.xnat_project_name, f"XNAT Connection must be to the following project url: {xnat_connection.xnat_project_name}"
+        assert xnat_connection.project_handle is not None and xnat_connection.project_query_str == xnat_connection.xnat_project_name, f"XNAT Connection must be to the following project url: {xnat_connection.xnat_project_name}"
 
         super().__init__()  # Call the __init__ method of the base class to ensure that we inherit all those local variables
         self._login_info, self._xnat_connection = login_info, xnat_connection

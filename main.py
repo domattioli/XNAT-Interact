@@ -413,11 +413,22 @@ def header_footer_print( header_or_footer: str ):
         print( f'===' *50 + f'\n' )
 
 
+def ask_user_to_confirm_that_they_are_on_the_uiowa_network() -> bool:
+    """
+    Ask the user to confirm that they are on the UIowa network.
+
+    Returns:
+        bool: True if the user confirms they are on the UIowa network.
+    """
+    print( f'\n\tFirst confirm that you are currently on the UIowa network (VPN or in=person)\t--\tPlease enter "1" for Yes or "2" for No.' )
+    on_uiowa_network = ORDataIntakeForm.prompt_until_valid_answer_given( 'On UIowa Network?', acceptable_options=['1', '2'] )
+    return on_uiowa_network == '1'
 
 
 def main():
     header_footer_print( header_or_footer='header' )
     username, password, verbose = parse_args()
+    assert ask_user_to_confirm_that_they_are_on_the_uiowa_network(), 'You must be on the UIowa network to use this application.'
     validated_login, xnat_connection, metatables = try_login_and_connection( username=username, password=password, verbose=verbose )
     
     try:

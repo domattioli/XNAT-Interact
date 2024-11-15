@@ -213,13 +213,14 @@ class UIDandMetaInfo:
 class XNATLogin( UIDandMetaInfo ):
     '''XNATLogin( input_info = {'URL': '...', 'USERNAME': '...', 'PASSWORD': '...'} )
         A class for storing data that is necessary for logging into the XNAT RPACS server.
-        For provided login dictionary, ensure that:
+        For provided login dictionary, this class ensures that:
             1.  Provided server url is correct,
             2.  Provided keys are all correct.
                 - User-provided key strings are auto-capitalized, but the corresponding value strings are not*, except for the user-provided url.
                 - If your attempts to instantiate keep failing, try input all keys with all-caps characters.
-        Note: This class does not verify the login with the xnat server, it only validates it according to the above criteria.
-            -   For verifying login information, refer to XNATConnection, another class definion that inherits from XNATLogin.
+
+        Note: This class does not verify the login with the xnat server, it only validates that it is passable login-information according to the above criteria.
+            -   For verifying login information, refer to XNATConnection, another class definition.
 
         # Example Usage:
         test1 = XNATLogin( {'URL': 'https://rpacs.iibi.uiowa.edu/xnat/', 'USERNAME': 'iamacomputer', 'PASSWORD': 'hello_world'} )
@@ -256,7 +257,7 @@ class XNATLogin( UIDandMetaInfo ):
 
     def __str__( self ) -> str:
         if self.is_valid:                       return f"-- Validated XNATLogin --\n\tUser: {self.validated_username}\n\tServer: {self.xnat_project_url}\n"
-        return f"-- Invalid XNATLogin --\n\tUser: {self.validated_username}\n\tServer: {self.xnat_project_url}\n"
+        else:                                   return f"-- Invalid XNATLogin --\n\tUser: {self.validated_username}\n\tServer: {self.xnat_project_url}\n"
 
     # def doc( self ) -> str: return self.__doc__
 
@@ -298,9 +299,11 @@ class XNATConnection( UIDandMetaInfo ):
     def __init__( self, login_info: XNATLogin, stay_connected: bool = False, verbose: Opt[bool] = False ):
         assert login_info.is_valid, f"Provided login info must be validated before accessing xnat server: {login_info}"
         super().__init__()  # Call the __init__ method of the base clas
-        self._login_info, self._project_handle, self._is_verified, self._is_open = login_info, None, False, stay_connected
+        self._login_info, self._project_handle, self._is_verified, self._is_open, self._failed_tests = login_info, None, False, stay_connected, []
         self._verify_login()
-        if stay_connected is False:         self.server.disconnect()
+        if not stay_connected or not self.is_verified:
+            self.server.disconnect()
+            self._open = False
         if verbose:                         print( self )
 
 
@@ -320,16 +323,23 @@ class XNATConnection( UIDandMetaInfo ):
     def get_user( self )            -> Opt[str]:        return self.login_info.validated_username
     @property
     def get_password( self )        -> Opt[str]:        return self.login_info.validated_password
+    @property
+    def failed_tests( self )        -> typehintList[str]:   return self._failed_tests
 
 
     def _verify_login( self ):
         self._server = self._establish_connection()
         self._grab_project_handle() # If more tests in the future, separate as its own function.
-        if self.project_handle is None:
-            self._is_verified = False
-        else:
-            if self.get_user in self.project_handle.users():    self._is_verified = True
-            else:                                               self._is_verified = False
+        if self.project_handle is None:                 self._failed_tests.append( 'Project Handle is None' )
+        if self.get_user is None:                       self._failed_tests.append( 'User is None' )
+        if self.project_handle and self.project_handle.label() != self.xnat_project_name:
+            self._failed_tests.append( 'Project Handle label does not match xnat_project_name' )
+        project_users = [u.lower() for u in self.project_handle.users()]
+        username = self.get_user.lower()                # type: ignore 
+        if username not in project_users or username != self.data_librarian.lower():    # this is a quirk specific to domattioli (i'm the only one who's username is not his hawkid. Might be a problem for others in the future is they somehow do what i did).
+            self._failed_tests.append( 'User is not added to project (XNAT-side)' )
+        if len( self._failed_tests ) == 0:              self._is_verified = True
+        else:                                           self._is_verified = False
 
 
     def _establish_connection( self ) -> Interface:     return Interface( server=self.xnat_project_url, user=self.get_user, password=self.get_password )
@@ -338,20 +348,20 @@ class XNATConnection( UIDandMetaInfo ):
     def _grab_project_handle( self ):
         self._project_query_str = '/project/' + self.xnat_project_name
         project_handle = self.server.select( self.project_query_str )
-        if project_handle.exists():     self._project_handle = project_handle       # type: ignore
+        if project_handle.exists():                 self._project_handle = project_handle       # type: ignore
 
 
     def close( self ):
         if hasattr( self, '_server' ):  # Delete the local copy of the Metatables.
             self._server.disconnect()
-            if os.path.exists( self.config_ffn ):      os.remove( self.config_ffn )
+            if os.path.exists( self.config_ffn ):       os.remove( self.config_ffn )
         self._open = False
         print( f"\n\t*Prior connection to XNAT server, '{self.uid}', has been closed -- local metatable data will be deleted!\n" )
 
 
     def __del__( self ):
         self.close() # Close the server connection ***AND*** delete the metatables local data to enforce user to always pull it from the server first.
-        if os.path.exists( self.config_ffn ):      os.remove( self.config_ffn )
+        if os.path.exists( self.config_ffn ):           os.remove( self.config_ffn )
         XNATConnection._instance = None
 
     def __enter__( self ):                              return self
@@ -359,10 +369,9 @@ class XNATConnection( UIDandMetaInfo ):
     def __exit__( self, exc_type, exc_value, traceback ):   self.close()
 
     def __str__( self ) -> str:
-        return (f"-- XNAT Connection: {'Open' if self.is_open else 'Closed'} --\n"
-                f"\tSigned-in as:\t{self.get_user}\n"
-                # f"UID:\t\t{self.uid}\n"
-                f"\tProject:\t{self.project_handle}" )
+        if self.is_verified:    return (f"-- XNAT Connection --\n\tStatus:\t{'Open' if self.is_open else 'Closed'}\n\tUser:\t{self.get_user}\n\tIs Verified:\t{self.is_verified}\n\tProject:\t{self.project_handle}" )
+        else:                   return (f"-- XNAT Connection --\n\tStatus:\t{'Open' if self.is_open else 'Closed'}\n\tUser:\t{self.get_user}\n\tIs Verified:\t{self.is_verified}\n\tFailed Tests:\t{self.failed_tests}\n\tProject:\t{self.project_handle}" )
+        
     
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -406,10 +415,10 @@ class MetaTables( UIDandMetaInfo ):
     # mt.save()
     '''
     def __init__( self, login_info: XNATLogin, xnat_connection: XNATConnection, verbose: Opt[bool] = False ):
-        assert login_info.is_valid, f"Provided login info must be validated before accessing metatables: {login_info}"
-        assert xnat_connection.is_open, f"Provided xnat connection must be open before accessing metatables: {xnat_connection}"
-        assert xnat_connection.project_handle is not None and xnat_connection.project_query_str == xnat_connection.xnat_project_name, f"XNAT Connection must be to the following project url: {xnat_connection.xnat_project_name}"
-
+        assert login_info.is_valid, f"Provided login_info must be validated before accessing metatables: {login_info}"
+        assert xnat_connection.is_open, f"Provided xnat_connection must be open before accessing metatables: {xnat_connection}"
+        assert xnat_connection.is_verified, f'Provided xnat_connection must be verified before accessing metatables: {xnat_connection}'
+        
         super().__init__()  # Call the __init__ method of the base class to ensure that we inherit all those local variables
         self._login_info, self._xnat_connection = login_info, xnat_connection
         
@@ -431,7 +440,7 @@ class MetaTables( UIDandMetaInfo ):
     @property
     def metadata( self )            -> dict:            return self._metadata
     @property
-    def accessor_username( self )   -> str:             return self.login_info.validated_username.upper() 
+    def accessor_username( self )   -> str:             return self.login_info.validated_username
     @property
     def accessor_uid( self )        -> str:             return self.get_uid( 'REGISTERED_USERS', self.accessor_username )
 
@@ -593,7 +602,7 @@ class MetaTables( UIDandMetaInfo ):
     def _validate_login_for_important_functions( self, assert_librarian: Opt[bool]=False ) ->  None:
         assert self.login_info.is_valid, f"Provided login info must be validated before accessing config file: {self.login_info}"
         if hasattr( self, '_tables' ):      assert self.is_user_registered(), f'User {self.accessor_uid} must first be registed before saving config file.'
-        if assert_librarian:                assert self.accessor_username.upper() == self.data_librarian, f'Only user {self.data_librarian} can push config file to the xnat server.'
+        if assert_librarian:                assert self.accessor_username.upper() == self.data_librarian.upper(), f'Only user {self.data_librarian} can push config file to the xnat server.'
     
     
     def _custom_json_serializer( self, data, indent=4 ):
@@ -760,8 +769,8 @@ class MetaTables( UIDandMetaInfo ):
 
 
     def __str__( self ) -> str:
-        output = [f'\n-- MetaTables -- Accessed by: {self.accessor_username}']
-        output.append( f'   *Last Modified: {self.metadata["LAST_MODIFIED"]}')
+        output = [f'\n-- MetaTables --\n\tAccessed by: {self.accessor_username}']
+        output.append( f'\t*Last Modified: {self.metadata["LAST_MODIFIED"]}')
         table_info = pd.DataFrame(columns=['Table Name', '# Items', '# Columns'])
         for table_name, table_data in self.tables.items():
             new_row_df = pd.DataFrame([[table_name, len(table_data), len(table_data.columns)]], 

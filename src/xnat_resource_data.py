@@ -2,24 +2,19 @@ import os
 import sys
 from pathlib import Path, WindowsPath
 import shutil
-
 from typing import List, Dict, Any, Tuple, Optional as Opt, Union
-
 import re
 from datetime import datetime, date as dtdate, time as dttime
 from dateutil import parser
-
 import json
 from collections import OrderedDict
-
 import pandas as pd
 from pathlib import Path
+import pytz
+import string
 
 from src.utilities import UIDandMetaInfo, MetaTables, USCentralDateTime, XNATLogin, USCentralDateTime
 
-import pytz
-
-import string
 
 ordered_keys_of_intake_text_file = ['FORM_LAST_MODIFIED', 'OPERATION_DATE', 'SUBJECT_UID', 'FILER_HAWKID', 'FORM_AVAILABLE_FOR_PERFORMANCE', 'SCAN_QUALITY',
                                     'SURGICAL_PROCEDURE_INFO', 'SKILLS_ASSESSMENT_INFO', 'STORAGE_DEVICE_INFO', 'INFO_DERIVED_FROM_ORIGINAL_FILE_METADATA']

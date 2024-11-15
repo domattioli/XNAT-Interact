@@ -1,10 +1,10 @@
 import subprocess
 import sys
 import os
-import typing
+from typing import Optional
 
 
-def is_repo_up_to_date():
+def is_repo_up_to_date() -> bool:
     """
     Check if the local Git repository is up to date with the remote repository.
 
@@ -25,7 +25,7 @@ def is_repo_up_to_date():
         return False
 
 
-def update_repo():
+def update_repo() -> str:
     """
     Update the local Git repository if it is not up to date.
 
@@ -49,12 +49,11 @@ def update_repo():
             return f'\tSUCCESS\t--\tRepository updated successfully!'
         except subprocess.CalledProcessError as e:
             return f'\tFAILURE\t--\tFailed to update the repository.'
-    else:
-        return f'\tINFO\t--\tRepository is already up to date.'
+    else:   return f'\tINFO\t--\tRepository is already up to date.'
 
 
 
-def check_that_virtualenv_activated():
+def check_that_virtualenv_activated() -> bool:
     """
     Check if a virtual environment is activated.
 
@@ -65,7 +64,7 @@ def check_that_virtualenv_activated():
     else:                           return False
     
 
-def test_virtual_env():
+def test_virtual_env() -> bool:
     """
     Test if all required Python libraries are available in the virtual environment.
 
@@ -97,6 +96,7 @@ def test_virtual_env():
     import pwinput
     import sys
     import tabulate
+    from matplotlib import pyplot as plt
 
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
     from utilities import MetaTables, USCentralDateTime, XNATLogin, XNATConnection, ImageHash
@@ -105,7 +105,7 @@ def test_virtual_env():
     from xnat_resource_data import ORDataIntakeForm
     return True
 
-def main():
+def main() -> None:
     """
     Main function to ensure XNAT-Interact installation is correct, up to date, and all requirements are satisfied.
     """

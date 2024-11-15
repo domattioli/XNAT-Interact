@@ -1,18 +1,10 @@
 import os
-import glob
-import requests
 from typing import Optional as Opt, Tuple, Union
-
 import numpy as np
 import pandas as pd
-
 from datetime import datetime
-
 from pydicom.dataset import FileDataset as pydicomFileDataset
 from pydicom import Dataset, Sequence, dcmread, dcmwrite
-
-import pyxnat
-
 from pathlib import Path, PurePosixPath
 import shutil
 import tempfile

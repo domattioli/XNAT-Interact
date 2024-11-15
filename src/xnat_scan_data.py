@@ -1,21 +1,14 @@
 import os
 from typing import Optional as Opt, Tuple, Union
 import cv2
-import base64
-import requests
-
 import numpy as np
 import pandas as pd
-
 from datetime import datetime
-
 from pydicom.dataset import FileDataset as pydicomFileDataset, FileMetaDataset as pydicomFileMetaDataset
 from pydicom.uid import UID as dcmUID, ExplicitVRLittleEndian, ImplicitVRLittleEndian
 from pydicom import Dataset, Sequence, dcmread, dcmwrite
 # from pydicom.uid import is_valid_uid as dcm_is_valid_uid # no function exists -- chatgpt is wrong
-
 from pathlib import Path
-
 
 from src.utilities import UIDandMetaInfo, MetaTables, USCentralDateTime, ImageHash
 from src.xnat_resource_data import ORDataIntakeForm

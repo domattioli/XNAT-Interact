@@ -407,7 +407,7 @@ class MetaTables( UIDandMetaInfo ):
     def __init__( self, login_info: XNATLogin, xnat_connection: XNATConnection, verbose: Opt[bool] = False ):
         assert login_info.is_valid, f"Provided login info must be validated before accessing metatables: {login_info}"
         assert xnat_connection.is_open, f"Provided xnat connection must be open before accessing metatables: {xnat_connection}"
-        assert xnat_connection.project_handle is not None and xnat_connection.project_handle == xnat_connection.xnat_project_name, f"Provided xnat connection must be to the correct project: {xnat_connection}"
+        assert xnat_connection.project_handle is not None and xnat_connection.project_handle == xnat_connection.xnat_project_name, f"XNAT Connection must be to the following project url: {xnat_connection.xnat_project_name}"
 
         super().__init__()  # Call the __init__ method of the base class to ensure that we inherit all those local variables
         self._login_info, self._xnat_connection = login_info, xnat_connection

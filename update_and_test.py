@@ -87,6 +87,7 @@ def test_virtual_env():
     import tempfile
     import pwinput
     import sys
+    import tabulate
 
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
     from utilities import MetaTables, USCentralDateTime, XNATLogin, XNATConnection, ImageHash

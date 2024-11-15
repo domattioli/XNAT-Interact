@@ -430,7 +430,7 @@ def main():
     username, password, verbose = parse_args()
     assert ask_user_to_confirm_that_they_are_on_the_uiowa_network(), 'You must be on the UIowa network to use this application.'
     validated_login, xnat_connection, metatables = try_login_and_connection( username=username, password=password, verbose=verbose )
-    
+    assert validated_login.is_valid, 'The login credentials provided are not valid, please confirm your username and password; if the error persists, contact the Data Librarian.\n{validated_login}'
     try:
         while True:
             choice = prompt_function( verbose=verbose )

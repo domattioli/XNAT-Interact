@@ -450,7 +450,7 @@ def main():
     except KeyboardInterrupt:
         print( f'\n\n...User cancelled task via Ctrl+C...' )
     except Exception as e:
-        print( f'\n...Task failed due to the following error:\n{e}' )
+        print( f'\n...Task failed due to the following error:\n\t{e}' )
         print( f'\n...Closing connection and exiting application...' )
     finally:
         xnat_connection.close()

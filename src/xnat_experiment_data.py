@@ -393,15 +393,15 @@ class SourceRFSession( ExperimentData ):
         with tempfile.TemporaryDirectory( dir=home_dir ) as dcm_temp_dir:
             for idx in range( len( self.df ) ): # Iterate through each row in the DataFrame, writing each to a temp directory before we zip it up and delete the unzipped folder.
                 # if self.df.loc[idx, 'IS_VALID']:
-                
-                    file_obj_rep = self.df.loc[idx, 'OBJECT']
-                    assert isinstance( file_obj_rep, SourceDicomDeIdentified ), f"Object representation of file at index {idx} is {type( file_obj_rep )}, which is not a valid SourceDicomDeIdentified object."
-                    dcmwrite( os.path.join( dcm_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) ), file_obj_rep.metadata )          # type: ignore
-                    tmp = { 'SUBJECT': metatables.get_uid( table_name='SUBJECTS', item_name=self.intake_form.uid ), 'INSTANCE_NUM': self.df.loc[idx, 'NEW_FN'] }
-                    metatables.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, item_uid=file_obj_rep.uid, # type: ignore
-                                            extra_columns_values = tmp, verbose=verbose
-                                            )
-                    num_dicom += 1
+                if verbose:     print( f'\t...Writing image from \'{self.df.loc[idx, "FN"]}\' ({idx+1}/{len(self.df)}) to temporary directory...')
+                file_obj_rep = self.df.loc[idx, 'OBJECT']
+                assert isinstance( file_obj_rep, SourceDicomDeIdentified ), f"Object representation of file at index {idx} is {type( file_obj_rep )}, which is not a valid SourceDicomDeIdentified object."
+                dcmwrite( os.path.join( dcm_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) ), file_obj_rep.metadata )          # type: ignore
+                tmp = { 'SUBJECT': metatables.get_uid( table_name='SUBJECTS', item_name=self.intake_form.uid ), 'INSTANCE_NUM': self.df.loc[idx, 'NEW_FN'] }
+                metatables.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, item_uid=file_obj_rep.uid, # type: ignore
+                                        extra_columns_values = tmp, verbose=verbose
+                                        )
+                num_dicom += 1
                 
             # Zip these temporary directories into a slightly-less-temporary directory.
             dcm_zip_path = os.path.join( home_dir, "dicom_files.zip" )
@@ -556,21 +556,22 @@ class SourceESVSession( ExperimentData ):
         with tempfile.TemporaryDirectory( dir=home_dir ) as mp4_temp_dir, \
             tempfile.TemporaryDirectory( dir=home_dir ) as dcm_temp_dir:
             for idx in range( len( self.df ) ): # Iterate through each row in the DataFrame, writing each to a temp directory before we zip it up and delete the unzipped folder.
-                if self.df.loc[idx, 'IS_VALID']:
-                    file_obj_rep = self.df.loc[idx, 'OBJECT']
-                    assert isinstance( file_obj_rep, (ArthroDiagnosticImage, ArthroVideo) ), f"Object representation of file at index {idx} is {type( file_obj_rep )}, which is neither an ArthroDiagnosticImage nor an ArthroVideo object."
-                    if isinstance( file_obj_rep, ArthroDiagnosticImage ):
-                        dcmwrite( os.path.join( dcm_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) ), file_obj_rep.metadata )          # type: ignore
-                        tmp = { 'SUBJECT': metatables.get_uid( table_name='SUBJECTS', item_name=self.intake_form.uid ), 'INSTANCE_NUM': self.df.loc[idx, 'NEW_FN'] }
-                        metatables.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, item_uid=file_obj_rep.uid, # type: ignore
-                                                extra_columns_values = tmp, verbose=verbose
-                                                )
-                        num_dicom += 1
-                
-                    elif isinstance( file_obj_rep, ArthroVideo ): # Don't need to add this to metatables because the diagnostic images (frames from the video) should suffice.
-                        vid_ffn = os.path.join( self.intake_form.relevant_folder, str( self.df.loc[idx,'FN'] ) + '.mp4' )
-                        shutil.copy( vid_ffn, os.path.join( mp4_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) + '.mp4' ) )
-                        num_mp4 += 1
+                # if self.df.loc[idx, 'IS_VALID']:
+                file_obj_rep = self.df.loc[idx, 'OBJECT'] # removing this if statement because thats what we do in rfsession since we changed the isvalid-isdicom data
+                if verbose:     print( f'\t...Writing image from \'{self.df.loc[idx, "FN"]}\' ({idx+1}/{len(self.df)}) to temporary directory...')
+                assert isinstance( file_obj_rep, (ArthroDiagnosticImage, ArthroVideo) ), f"Object representation of file at index {idx} is {type( file_obj_rep )}, which is neither an ArthroDiagnosticImage nor an ArthroVideo object."
+                if isinstance( file_obj_rep, ArthroDiagnosticImage ):
+                    dcmwrite( os.path.join( dcm_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) ), file_obj_rep.metadata )          # type: ignore
+                    tmp = { 'SUBJECT': metatables.get_uid( table_name='SUBJECTS', item_name=self.intake_form.uid ), 'INSTANCE_NUM': self.df.loc[idx, 'NEW_FN'] }
+                    metatables.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, item_uid=file_obj_rep.uid, # type: ignore
+                                            extra_columns_values = tmp, verbose=verbose
+                                            )
+                    num_dicom += 1
+            
+                elif isinstance( file_obj_rep, ArthroVideo ): # Don't need to add this to metatables because the diagnostic images (frames from the video) should suffice.
+                    vid_ffn = os.path.join( self.intake_form.relevant_folder, str( self.df.loc[idx,'FN'] ) + '.mp4' )
+                    shutil.copy( vid_ffn, os.path.join( mp4_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) + '.mp4' ) )
+                    num_mp4 += 1
                 
             # Zip these temporary directories into a slightly-less-temporary directory.
             mp4_zip_path = os.path.join( home_dir, "mp4_files.zip" )

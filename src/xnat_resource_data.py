@@ -132,7 +132,8 @@ class ORDataIntakeForm( ResourceFile ):
         self._init_all_fields( metatables=metatables )
         
         # Either read in the inputted text file and distribute that data, or prompt the user for the data.
-        if verbose:     print( f'\n...Processing OR Data Intake Form...' )
+        assert not isinstance( input_data, str ), f"You provided input_data as a string; retry with 'input_data = Path( input_data )'"
+        if verbose:                             print( f'\n...Processing OR Data Intake Form...' )
         if isinstance( input_data, pd.Series ): self._read_from_series( data_row=input_data, metatables=metatables, verbose=verbose )
         elif isinstance( input_data, Path ):    self._read_from_file( parent_folder=input_data, verbose=verbose )
         else:                                   # User must define intake form from a set of prompts.

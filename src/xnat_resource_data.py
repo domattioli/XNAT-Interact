@@ -269,6 +269,7 @@ class ORDataIntakeForm( ResourceFile ):
             verbose (Optional[bool], optional): Whether to enable verbose output. Defaults to False.
         """
         ffn = os.path.join( parent_folder, self.filename_str )
+        assert os.path.exists( ffn ), f'File "{ffn}" does not exist; check your provided path and try again.'
         if verbose:     print( f'\n\t...Initializing OR Intake From from "{ffn}"...' )
         with open( ffn, 'r', encoding='utf-8' ) as jf:     self._running_text_file = json.loads( jf.read() ) # might need to read with encoding='cp1252'
 

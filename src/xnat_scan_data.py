@@ -1,7 +1,6 @@
 import os
 from typing import Optional as Opt, Tuple, Union
 import cv2
-import numpy as np
 import pandas as pd
 from datetime import datetime
 from pydicom.dataset import FileDataset as pydicomFileDataset, FileMetaDataset as pydicomFileMetaDataset
@@ -10,7 +9,7 @@ from pydicom import Dataset, Sequence, dcmread, dcmwrite
 # from pydicom.uid import is_valid_uid as dcm_is_valid_uid # no function exists -- chatgpt is wrong
 from pathlib import Path
 
-from src.utilities import UIDandMetaInfo, MetaTables, USCentralDateTime, ImageHash
+from src.utilities import UIDandMetaInfo, ConfigTables, USCentralDateTime, ImageHash
 from src.xnat_resource_data import ORDataIntakeForm
 
 
@@ -115,35 +114,35 @@ class ArthroDiagnosticImage( ScanFile ):
     None are intended for direct use by the user beyond the __init__ method.
 
     Example usage:
-    ArthroDiagnosticImage( img_ffn=Path( r'...\\...\\examplefoldername' ), still_num='1', parent_uid='1_2_840_10008', metatables=..., intake_form=... )
+    ArthroDiagnosticImage( img_ffn=Path( r'...\\...\\examplefoldername' ), still_num='1', parent_uid='1_2_840_10008', config=..., intake_form=... )
     '''
-    def __init__( self, img_ffn: Path, still_num: str, parent_uid: str, metatables: MetaTables, intake_form: ORDataIntakeForm ):
+    def __init__( self, img_ffn: Path, still_num: str, parent_uid: str, config: ConfigTables, intake_form: ORDataIntakeForm ) -> None:
         super().__init__( intake_form=intake_form, ffn=img_ffn )  # Call the __init__ method of the base class
         self._datetime, self._still_num = USCentralDateTime(), still_num
         self._validate_input()
-        self._read_image( metatables=metatables )
+        self._read_image( config=config )
         self._validate_image() 
         self._create_dicom_representation( parent_uid=parent_uid )
 
 
-    def _validate_input( self ):
+    def _validate_input( self ) -> None:
         assert self.is_jpg( self.ffn ), f'Inputted file must be a jpg file: {self.ffn}'
         assert self.still_num.isdigit(), f'Inputted still number must be a string of digits: {self.still_num}'
 
 
-    def _read_image( self, metatables: MetaTables ):
-        self._image = ImageHash( reference_table=metatables, img=cv2.imread( self.ffn_str ) )
+    def _read_image( self, config: ConfigTables ) -> None:
+        self._image = ImageHash( reference_table=config, img=cv2.imread( self.ffn_str ) )
 
 
-    def _validate_image( self ): # valid if the image has not yet been seen and if it does not match the template image.
+    def _validate_image( self ) -> None: # valid if the image has not yet been seen and if it does not match the template image.
         assert not isinstance( self.image, cv2.VideoCapture ), f'BUG: cannot be calling the is_similar_to_template_image method for {type(self).__name__} with a video file.'
         self._is_valid = not self.image.in_img_hash_metatable and not self.is_similar_to_template_image()
 
 
-    def _create_dicom_representation( self, parent_uid: str ):
+    def _create_dicom_representation( self, parent_uid: str ) -> None:
         file_meta = pydicomFileMetaDataset()
         file_meta.MediaStorageSOPClassUID = dcmUID( '1.2.840.10008.5.1.4.1.1.77.1.1.1' ) # Video Endoscopic Image IOD
-        file_meta.MediaStorageSOPInstanceUID = dcmUID( self.generate_uid().replace( '_', '.' ) ) #to-do: need to create a uid in metatables for this media storage data type
+        file_meta.MediaStorageSOPInstanceUID = dcmUID( self.generate_uid().replace( '_', '.' ) ) #to-do: need to create a uid in config for this media storage data type
         file_meta.ImplementationClassUID = dcmUID( parent_uid.replace( '_', '.' ) )
         file_meta.TransferSyntaxUID = ImplicitVRLittleEndian # Implicit VR Little Endian
         
@@ -175,7 +174,6 @@ class ArthroDiagnosticImage( ScanFile ):
     def still_num( self ) -> str:   return self._still_num
 
 
-
 #--------------------------------------------------------------------------------------------------------------------------
 class ArthroVideo( ScanFile ):
     '''
@@ -188,22 +186,22 @@ class ArthroVideo( ScanFile ):
     None are intended for direct use by the user beyond the __init__ method.
 
     Example usage:
-    ArthroVideo( vid_ffn=Path( r'...\\...\\examplefoldername' ), metatables=..., intake_form=... )
+    ArthroVideo( vid_ffn=Path( r'...\\...\\examplefoldername' ), config=..., intake_form=... )
     '''
-    def __init__( self, vid_ffn: Path, metatables: MetaTables, intake_form: ORDataIntakeForm ):
+    def __init__( self, vid_ffn: Path, config: ConfigTables, intake_form: ORDataIntakeForm ) -> None:
         super().__init__( intake_form=intake_form, ffn=vid_ffn )  # Call the __init__ method of the base class
         self._validate_input()
         self._read_video()
         self._validate_image()
         
 
-    def _validate_input( self ):    assert self.is_mp4( self.ffn ), f'Inputted file must be a mp4 file: {self.ffn_str}'
+    def _validate_input( self ) -> None:    assert self.is_mp4( self.ffn ), f'Inputted file must be a mp4 file: {self.ffn_str}'
 
 
-    def _read_video( self ):        self._image = cv2.VideoCapture( self.ffn_str )
+    def _read_video( self ) -> None:        self._image = cv2.VideoCapture( self.ffn_str )
 
 
-    def _validate_image( self ):
+    def _validate_image( self ) -> None:
         assert not isinstance( self.image, ImageHash ), f'Inputted file must be a video file: {self.ffn_str}'
         self._is_valid = self.image.isOpened()
 
@@ -221,27 +219,27 @@ class SourceDicomDeIdentified( ScanFile ):
     None are intended for direct use by the user beyond the __init__ method.
 
     # Example usage:
-    SourceDicomDeIdentified( dcm_ffn=Path( r'...\\...\\exampledcmfilename' ), metatables=..., intake_form=... )
+    SourceDicomDeIdentified( dcm_ffn=Path( r'...\\...\\exampledcmfilename' ), config=..., intake_form=... )
     '''
-    def __init__( self, dcm_ffn: Path, metatables: MetaTables, intake_form: ORDataIntakeForm ):
+    def __init__( self, dcm_ffn: Path, config: ConfigTables, intake_form: ORDataIntakeForm ) -> None:
         super().__init__( intake_form=intake_form, ffn=dcm_ffn )  # Call the __init__ method of the base class
         assert self.is_dicom( self.ffn ), f'Inputted file must be a dicom file: {self.ffn}'
         self._datetime = USCentralDateTime()
-        self._read_image( metatables=metatables )
+        self._read_image( config=config )
         self._parse_for_derived_metadata()
         self._deidentify_dicom()
         self._validate_image() # deleted local method and made it inherited. seems like it should always be the same validation criteria
     
 
-    def _read_image( self, metatables: MetaTables ):
+    def _read_image( self, config: ConfigTables ) -> None:
         self._metadata = dcmread( self.ffn )
-        self._image = ImageHash( reference_table=metatables, img=self.metadata.pixel_array )
+        self._image = ImageHash( reference_table=config, img=self.metadata.pixel_array )
 
-    def _validate_image( self ): # valid if the image has not yet been seen and if it does not match the template image.
+    def _validate_image( self ) -> None: # valid if the image has not yet been seen and if it does not match the template image.
         assert isinstance( self.image, ImageHash ), f'BUG: cannot be validate because the object.image data is not in ImageHash format.'
         self._is_valid = not self.image.in_img_hash_metatable and not self.is_similar_to_template_image()
 
-    def _parse_for_derived_metadata( self ):
+    def _parse_for_derived_metadata( self ) -> None:
         # Look for acquisition site info in the metadata:
         acq_site_str = ''
         if 'InstitutionName' in self.metadata:
@@ -280,13 +278,14 @@ class SourceDicomDeIdentified( ScanFile ):
         self._derived_metadata['UID_INFO'] = str( self._derived_metadata['UID_INFO'] )
 
 
-    def _person_names_callback( self, dcm_data, data_element ):
+    def _person_names_callback( self, dcm_data, data_element ) -> None:
         if data_element.VR == "PN":                     data_element.value = self.redacted_string
 
-    def _curves_callback( self, dcm_data, data_element ):
+    def _curves_callback( self, dcm_data, data_element ) -> None:
         if data_element.tag.group & 0xFF00 == 0x5000:   del dcm_data[data_element.tag]
 
-    def _deidentify_dicom( self ): # remove all sensitive metadata info
+    def _deidentify_dicom( self ) -> None:
+         # remove all sensitive metadata info
         assert self._metadata is not None, f'BUG: cannot be calling the _deidentify_metadata method for {type(self).__name__} prior to defining it.'
         self._metadata.walk( self._person_names_callback )
         self._metadata.walk( self._curves_callback )
@@ -296,8 +295,8 @@ class SourceDicomDeIdentified( ScanFile ):
             if tag in self.metadata:                    del self._metadata[tag]
     
         # Redact AccessionNumber and StudyID fields
-        if hasattr( self._metadata, 'AccessionNumber' ):    self._metadata.AccessionNumber = 'REDACTED 4 XNAT'
-        if hasattr( self._metadata, 'StudyID' ):            self._metadata.StudyID = 'REDACTED 4 XNAT'
+        if hasattr(self._metadata, 'AccessionNumber'):  self._metadata.AccessionNumber = 'REDACTED 4 XNAT'
+        if hasattr( self._metadata, 'StudyID' ):        self._metadata.StudyID = 'REDACTED 4 XNAT'
 
         # De-identify embedded pixel data
         # to-do: with a gpu we could use a more advanced approach like ocr and simply blur the text within the image.
@@ -318,7 +317,7 @@ class MTurkSemanticSegmentation( ScanFile ):
     # Example usage:
     tbd
     '''
-    # def __init__( self, assignment: pd.Series, metatables: MetaTables, intake_form: ORDataIntakeForm ): #to-do: allow for different input types eg batch file data or pulled-from-xnat data
+    # def __init__( self, assignment: pd.Series, config: ConfigTables, intake_form: ORDataIntakeForm ): #to-do: allow for different input types eg batch file data or pulled-from-xnat data
     #     super().__init__( intake_form=intake_form, assignment )  # to:do -- cant pass assignment to super().__init__ because it expects a Path object. need to rethink the baseclass.
     #     self._validate_input( assignment )
     #     self._read_image()
@@ -338,13 +337,13 @@ class MTurkSemanticSegmentation( ScanFile ):
     #     img_s3_url = assignment.loc[0,'Input.image_url']
     #     assert self.is_s3_url( img_s3_url ), f'Input.image_url column of inputted data series (row) must be an s3 url: {img_s3_url}'
     #     self._ffn = self.metadata['Input.image_url']
-    #     self._bw, self._acquisition_site = self.image.dummy_image(), 'AMAZON_MECHANICAL_TURK' #to-do: this is copy-pasted from the MetaTables, need to figure out how to query it.
+    #     self._bw, self._acquisition_site = self.image.dummy_image(), 'AMAZON_MECHANICAL_TURK' #to-do: this is copy-pasted from the ConfigTables, need to figure out how to query it.
 
     # def _read_image( self ):
     #     response = requests.get( self.ffn_str, stream=True )
     #     response.raw.decode_content = True
     #     arr = np.asarray( bytearray( response.raw.read() ), dtype=np.uint8 )
-    #     self._image = ImageHash( reference_table=self.metatables, img=cv2.imdecode( arr, cv2.IMREAD_GRAYSCALE ) ) # img = Image.open( response.raw )
+    #     self._image = ImageHash( reference_table=self.config, img=cv2.imdecode( arr, cv2.IMREAD_GRAYSCALE ) ) # img = Image.open( response.raw )
     
     # def _extract_target_object_info( self ):
     #     pass

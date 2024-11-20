@@ -9,19 +9,15 @@ from dateutil import parser
 import pytz
 import hashlib
 import tempfile
-
 from pyxnat import Interface
 from pyxnat.core.resources import Project as pyxnatProject
-
 from typing import Optional as Opt, Union, Tuple, List as typehintList, Dict as typehintDict, AnyStr as typehintAnyStr
-
 from pydicom.uid import UID as pydicom_UID, generate_uid as generate_pydicomUID
-
 import matplotlib.pyplot as plt
 
 
 # Define list for allowable imports from this module -- do not want to import _local_variables. As more classes are added you will need to update this list.
-__all__ = ['UIDandMetaInfo', 'XNATLogin', 'MetaTables', 'XNATConnection', 'USCentralDateTime', 'ImageHash']
+__all__ = ['UIDandMetaInfo', 'XNATLogin', 'ConfigTables', 'XNATConnection', 'USCentralDateTime', 'ImageHash']
 
 
 
@@ -256,8 +252,8 @@ class XNATLogin( UIDandMetaInfo ):
 
 
     def __str__( self ) -> str:
-        if self.is_valid:                       return f"-- Validated XNATLogin --\n\tUser: {self.validated_username}\n\tServer: {self.xnat_project_url}\n"
-        else:                                   return f"-- Invalid XNATLogin --\n\tUser: {self.validated_username}\n\tServer: {self.xnat_project_url}\n"
+        if self.is_valid:                       return f"-- Validated XNATLogin --\n\tUsername:\t{self.validated_username}\n\tServer:\t\t{self.xnat_project_url}\n"
+        else:                                   return f"-- Invalid XNATLogin --\n\tUsername:\t{self.validated_username}\n\tServer:\t\t{self.xnat_project_url}\n"
 
     # def doc( self ) -> str: return self.__doc__
 
@@ -270,6 +266,7 @@ class XNATConnection( UIDandMetaInfo ):
     - login_info: An instance of XNATLogin class containing the login information for the XNAT server.
     - stay_connected: A boolean indicating whether to stay connected to the server after verifying the login. Default is False.
     - verbose: A boolean indicating whether to print connection details. Default is False.
+
     Attributes:
     - login_info: An instance of XNATLogin class containing the login information for the XNAT server.
     - server: An Interface object representing the XNAT server connection.
@@ -352,15 +349,15 @@ class XNATConnection( UIDandMetaInfo ):
 
 
     def close( self ):
-        if hasattr( self, '_server' ):  # Delete the local copy of the Metatables.
+        if hasattr( self, '_server' ):  # Delete the local copy of the ConfigTables.
             self._server.disconnect()
             if os.path.exists( self.config_ffn ):       os.remove( self.config_ffn )
         self._open = False
-        print( f"\n\t*Prior connection to XNAT server, '{self.uid}', has been closed -- local metatable data will be deleted!\n" )
+        print( f"\n\t*Prior connection to XNAT server, '{self.uid}', has been closed -- local config data will be deleted!\n" )
 
 
     def __del__( self ):
-        self.close() # Close the server connection ***AND*** delete the metatables local data to enforce user to always pull it from the server first.
+        self.close() # Close the server connection ***AND*** delete the config local data to enforce user to always pull it from the server first.
         if os.path.exists( self.config_ffn ):           os.remove( self.config_ffn )
         XNATConnection._instance = None
 
@@ -371,14 +368,14 @@ class XNATConnection( UIDandMetaInfo ):
     def __str__( self ) -> str:
         project_users = self.project_handle.users() if self.project_handle else 'None'
         data_librarian = self.data_librarian.lower()
-        if self.is_verified:    return (f"-- XNAT Connection --\n\tStatus:\t{'Open' if self.is_open else 'Closed'}\n\tUser:\t{self.get_user}\n\tVerified:\t{self.is_verified}\n\tProject:\t{self.project_handle}\n\tLibrarian:\t{data_librarian}\n\tApproved Users:{project_users}" )
-        else:                   return (f"-- XNAT Connection --\n\tStatus:\t{'Open' if self.is_open else 'Closed'}\n\tUser:\t{self.get_user}\n\tVerified:\t{self.is_verified}\n\tFailed Tests:\t{self.failed_tests}\n\tProject:\t{self.project_handle}\n\tLibrarian:\t{data_librarian}\n\tApproved Users:\t{project_users}" )
+        if self.is_verified:    return (f"-- XNAT Connection --\n\tStatus:\t\t{'Open' if self.is_open else 'Closed'}\n\tUsername:\t{self.get_user}\n\tVerified:\t{self.is_verified}\n\tProject:\t{self.project_handle}\n\tLibrarian:\t{data_librarian}\n\tApproved Users:\t{project_users}" )
+        else:                   return (f"-- XNAT Connection --\n\tStatus:\t\t{'Open' if self.is_open else 'Closed'}\n\tUsername:\t{self.get_user}\n\tVerified:\t{self.is_verified}\n\tFailed Tests:\t{self.failed_tests}\n\tProject:\t{self.project_handle}\n\tLibrarian:\t{data_librarian}\n\tApproved Users:\t{project_users}" )
         
     
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for cataloging all seen data and user info.
-class MetaTables( UIDandMetaInfo ):
+class ConfigTables( UIDandMetaInfo ):
     '''
     Class for accessing and updating meta information for subjects and experiments. Think of it as a psuedo-relational database.
         Note: all inputted new tables and items are automatically capitalized on the backend to ensure no duplicates.
@@ -417,9 +414,9 @@ class MetaTables( UIDandMetaInfo ):
     # mt.save()
     '''
     def __init__( self, login_info: XNATLogin, xnat_connection: XNATConnection, verbose: Opt[bool] = False ):
-        assert login_info.is_valid, f"Provided login_info must be validated before accessing metatables: {login_info}"
-        assert xnat_connection.is_open, f"Provided xnat_connection must be open before accessing metatables: {xnat_connection}"
-        assert xnat_connection.is_verified, f'Provided xnat_connection must be verified before accessing metatables: {xnat_connection}'
+        assert login_info.is_valid, f"Provided login_info must be validated before accessing ConfigTables: {login_info}"
+        assert xnat_connection.is_open, f"Provided xnat_connection must be open before accessing ConfigTables: {xnat_connection}"
+        assert xnat_connection.is_verified, f'Provided xnat_connection must be verified before accessing ConfigTables: {xnat_connection}'
         
         super().__init__()  # Call the __init__ method of the base class to ensure that we inherit all those local variables
         self._login_info, self._xnat_connection = login_info, xnat_connection
@@ -428,7 +425,7 @@ class MetaTables( UIDandMetaInfo ):
             self.pull_from_xnat( verbose=False )
         except: # This should only ever happen one time -- when the XNAT database is first created.
             self._instantiate_json_file()
-            self._initialize_metatables()
+            self._initialize_tables()
             self.push_to_xnat( verbose=False )
         if verbose:                         print( self )
             
@@ -448,7 +445,7 @@ class MetaTables( UIDandMetaInfo ):
 
 
     #==========================================================PRIVATE METHODS==========================================================
-    def _reinitialize_metatables_with_extra_columns( self ) -> None:
+    def _reinitialize_tables_with_extra_columns( self ) -> None:
         # iterate through each table in self._tables and ensure that all columns denoted in self.metadata['TABLE_EXTRA_COLUMNS'] are present.
         for table_name, table in self._tables.items():
             # Ensure default meta table columns are present
@@ -477,7 +474,7 @@ class MetaTables( UIDandMetaInfo ):
                             'TABLE_EXTRA_COLUMNS': {} }
             
 
-    def _initialize_metatables( self ) -> None:
+    def _initialize_tables( self ) -> None:
         self.add_new_table( 'AcquisitioN_sites' )
         self.add_new_item( 'acquisitIon_sites', 'UNIVERSITY_OF_IOWA_HOSPITALS_AND_CLINICS' )
         self.add_new_item( 'acqUisition_sites', 'UNIVERSITY_OF_HOUSTON' )
@@ -575,7 +572,7 @@ class MetaTables( UIDandMetaInfo ):
 
 
     def _load( self, local_meta_tables_ffn: Opt[Path], verbose: Opt[bool] = False ) -> None:
-        assert self.login_info.is_valid, f"Provided login info must be validated before loading metatables: {self.login_info}"
+        assert self.login_info.is_valid, f"Provided login info must be validated before loading ConfigTables: {self.login_info}"
         if local_meta_tables_ffn is None:   load_ffn = self.config_ffn
         else:
             assert os.path.isfile( local_meta_tables_ffn ), f"Provided file path must be a valid file: {local_meta_tables_ffn}"
@@ -628,9 +625,9 @@ class MetaTables( UIDandMetaInfo ):
             assert write_ffn.suffix == '.json', f"Provided write file path must have a '.json' extension: {write_ffn}"
             write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( write_ffn )
         self._load( write_ffn, verbose )
-        if verbose:                     print( f'\t...Metatables successfully populated from XNAT data.\n' )
+        if verbose:                     print( f'\t...ConfigTables successfully populated from XNAT data.\n' )
         
-        self._reinitialize_metatables_with_extra_columns()
+        self._reinitialize_tables_with_extra_columns()
         return write_ffn
 
 
@@ -648,7 +645,7 @@ class MetaTables( UIDandMetaInfo ):
         self.ensure_primary_keys_validity()
         self.save( verbose )
         self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
-        if verbose is True:             print( f'\t...Metatables (config.json) successfully updated on XNAT!\n' )
+        if verbose is True:             print( f'\t...ConfigTables (config.json) successfully updated on XNAT!\n' )
 
 
     def save( self, verbose: Opt[bool] = False ) -> None: # Convert all tables to JSON; Write the data to the file
@@ -659,7 +656,7 @@ class MetaTables( UIDandMetaInfo ):
         # json_str = json.dumps( data, indent=2, separators=( ',', ':' ) )
         json_str = self._custom_json_serializer( data )
         with open( self.config_ffn, 'w' ) as f:         f.write( json_str )
-        if verbose:                     print( f'\tSUCCESS! --- saved metatables to: {self.config_ffn}\n' )
+        if verbose:                     print( f'\tSUCCESS! --- saved ConfigTables to: {self.config_ffn}\n' )
 
 
     def is_user_registered( self, user_name: Opt[str] = None ) -> bool:
@@ -771,8 +768,8 @@ class MetaTables( UIDandMetaInfo ):
 
 
     def __str__( self ) -> str:
-        output = [f'\n-- MetaTables --\n\tAccessed by: {self.accessor_username}']
-        output.append( f'\t*Last Modified: {self.metadata["LAST_MODIFIED"]}')
+        output = [f'\n-- ConfigTables --\n\tAccessed by:\t{self.accessor_username}']
+        output.append( f'\t*Last Modified:\t{self.metadata["LAST_MODIFIED"]}')
         table_info = pd.DataFrame(columns=['Table Name', '# Items', '# Columns'])
         for table_name, table_data in self.tables.items():
             new_row_df = pd.DataFrame([[table_name, len(table_data), len(table_data.columns)]], 
@@ -824,7 +821,7 @@ class USCentralDateTime():
 #--------------------------------------------------------------------------------------------------------------------------
 # Class for representing images as unique hashes.
 class ImageHash( UIDandMetaInfo ):
-    def __init__( self, reference_table: Opt[MetaTables]=None, img: Opt[np.ndarray] = None ):
+    def __init__( self, reference_table: Opt[ConfigTables]=None, img: Opt[np.ndarray] = None ):
         '''ImageHash()
         A class for creating a unique hash for an image. A list of seen-hashes will allow us to prevent duplicate images in the db.
             - Cataloging of the hashes is done elsewhere.
@@ -854,12 +851,12 @@ class ImageHash( UIDandMetaInfo ):
         super().__init__()  # Call the __init__ method of the base class
         self._validate_input( img )
         self._processed_img, self._gray_img, self._hash_str  = self.dummy_image(), self.dummy_image(), ''
-        self._meta_tables, self._in_img_hash_metatable = reference_table, False
+        self._ConfigTables, self._in_img_hash_metatable = reference_table, False
         self._convert_to_grayscale()
         self._normalize_and_convert_to_uint8()
         self._resize_image()
         self._compute_hash_str()
-        if self.metatables is not None and isinstance( self.metatables, MetaTables ):
+        if self.ConfigTables is not None and isinstance( self.ConfigTables, ConfigTables ):
             self._check_img_hash_metatable()
     
 
@@ -886,7 +883,7 @@ class ImageHash( UIDandMetaInfo ):
     @property
     def hash_str( self )                -> str:                             return self._hash_str
     @property
-    def metatables( self )              -> Opt[Union[MetaTables, list]]:    return self._meta_tables
+    def ConfigTables( self )            -> Opt[Union[ConfigTables, list]]:  return self._ConfigTables
     @property
     def in_img_hash_metatable( self )   -> bool:                            return self._in_img_hash_metatable
     
@@ -921,16 +918,14 @@ class ImageHash( UIDandMetaInfo ):
         assert self.hash_str is not None and len( self.hash_str ) == 64, f'Hash string must be 64 characters long.'
     
 
-    def _check_img_hash_metatable( self ): # check if it exists in the metatables
+    def _check_img_hash_metatable( self ): # check if it exists in the config data
         assert self.processed_img.shape == self.required_img_size_for_hashing, f'Processed image must be of size {self.required_img_size_for_hashing} (is currently size {self.processed_img.shape}).'
-        if isinstance( self.metatables, MetaTables ):
-            self._in_img_hash_metatable = self.metatables.item_exists( table_name='IMAGE_HASHES', item_name=self.hash_str )
-        else:
-            self._in_img_hash_metatable = False
+        if isinstance( self.ConfigTables, ConfigTables ):   self._in_img_hash_metatable = self.ConfigTables.item_exists( table_name='IMAGE_HASHES', item_name=self.hash_str )
+        else:                                               self._in_img_hash_metatable = False
     
 
     def __str__( self ) -> str:
-        return f"-- ImageHash --\n\nShape:\t{self.processed_img.shape}\nDType:\t{self.processed_img.dtype}\t(min: {np.min(self.processed_img)}, max: {np.max(self.processed_img)})\nHash:\t{self.hash_str}\tIn metatables:\t{self.in_img_hash_metatable}"
+        return f"-- ImageHash --\n\nShape:\t{self.processed_img.shape}\nDType:\t{self.processed_img.dtype}\t(min: {np.min(self.processed_img)}, max: {np.max(self.processed_img)})\nHash:\t{self.hash_str}\tIn ConfigTables:\t{self.in_img_hash_metatable}"
 
 
     def plot( self ):

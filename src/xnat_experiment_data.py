@@ -9,7 +9,7 @@ from pathlib import Path, PurePosixPath
 import shutil
 import tempfile
 
-from src.utilities import MetaTables, USCentralDateTime, XNATLogin, XNATConnection
+from src.utilities import ConfigTables, USCentralDateTime, XNATLogin, XNATConnection
 from src.xnat_scan_data import *
 from src.xnat_resource_data import *
 
@@ -38,7 +38,7 @@ class ExperimentData():
 
     publish_to_xnat(): Publishes the experiment session to XNAT, including all associated scans and resources.
     write(): Writes the experiment session to a zipped folder in a temporary local directory, which can then be pushed to XNAT.
-    write_publish_catalog_subroutine(): Writes the experiment session to a zipped folder and then publishes it to XNAT, including metatables.
+    write_publish_catalog_subroutine(): Writes the experiment session to a zipped folder and then publishes it to XNAT, including revised config file data.
 
     Example Usage:
     None -- this is a base class and should not be instantiated directly.
@@ -78,8 +78,8 @@ class ExperimentData():
     def scan_type_label( self )         -> str:                     return self._scan_type_label
 
     
-    def _populate_df( self, metatables: MetaTables ):               raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
-    def _check_session_validity( self, metatables: MetaTables ):    raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
+    def _populate_df( self, config: ConfigTables ):                 raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
+    def _check_session_validity( self, config: ConfigTables ):      raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
 
 
     #--------------------------------------------XNAT-Publishing helpers and methods----------------------------------------------------------
@@ -110,7 +110,7 @@ class ExperimentData():
         return subj_inst, exp_inst, scan_inst
 
 
-    def write( self, metatables: MetaTables, zip_dest: Opt[Path] = None, verbose: Opt[bool] = False )   -> Tuple[dict, MetaTables]: raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
+    def write( self, config: ConfigTables, zip_dest: Opt[Path] = None, verbose: Opt[bool] = False ) -> Tuple[dict, ConfigTables]:   raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
     
 
     def publish_to_xnat( self, xnat_connection: XNATConnection, validated_login: XNATLogin, zipped_data: dict, delete_zip: Opt[bool] = True, verbose: Opt[bool] = False ) -> None:
@@ -150,9 +150,9 @@ class ExperimentData():
             print( f'\t...Successfully deleted zip file:\n' + '\n'.join(f'\t\t{key}' for key in zipped_data.keys()) + '\n')
 
 
-    def write_publish_catalog_subroutine( self, metatables: MetaTables, xnat_connection: XNATConnection, validated_login: XNATLogin, verbose: Opt[bool] = False, delete_zip: Opt[bool] = True ) -> MetaTables:
+    def write_publish_catalog_subroutine( self, config: ConfigTables, xnat_connection: XNATConnection, validated_login: XNATLogin, verbose: Opt[bool] = False, delete_zip: Opt[bool] = True ) -> ConfigTables:
         try:
-            zipped_data, metatables = self.write( metatables=metatables, verbose=verbose )
+            zipped_data, config = self.write( config=config, verbose=verbose )
         except Exception as e:
             if verbose: print( f'\n!!! Failed to write zipped file; exiting without publishing to XNAT.\n\tError given:\n\t{e}' )
             raise
@@ -166,7 +166,7 @@ class ExperimentData():
         try:
             try:
                 self.publish_to_xnat( xnat_connection=xnat_connection, validated_login=validated_login, zipped_data=zipped_data, verbose=verbose, delete_zip=delete_zip )
-                status_text = f'\t...Successfully published {self.schema_prefix_str} session to XNAT!\nAttempting to push metatables to XNAT...'
+                status_text = f'\t...Successfully published {self.schema_prefix_str} session to XNAT!\nAttempting to push config data to XNAT...'
             except Exception as e:
                 status_text = f'\t!!! Failed to publish {self.schema_prefix_str} session to XNAT!\nChecking if subject was successfully pushed to xnat...'
                 if subj_inst.exists(): # type: ignore
@@ -174,11 +174,11 @@ class ExperimentData():
                     subj_inst.delete() # type: ignore
                     status_text += f'\n\t...Subject deleted.'
                     print( f'\n\t!!!Do not try to upload this case again without contacting the data librarian!!!')
-                return metatables
+                return config
 
-            # If successful, try to push the metatables config to xnat
+            # If successful, try to push the config data to xnat
             try: 
-                metatables.push_to_xnat( verbose=verbose )
+                config.push_to_xnat( verbose=verbose )
                 status_text = f'\t...Successfully pushed config file to XNAT!'
             except Exception as e:
                 status_text = f'\t!!! Failed to push config file to XNAT!\nChecking if subject was successfully pushed to xnat...'
@@ -187,17 +187,17 @@ class ExperimentData():
                     subj_inst.delete() # type: ignore
                     status_text += f'\n\t...Subject deleted.'
         except:
-            self._write_error_log_file( metatables=metatables, validated_login=validated_login, status_text=status_text, error_message=e )
+            self._write_error_log_file( config=config, validated_login=validated_login, status_text=status_text, error_message=e )
             raise
 
-        # Delete local copy of the metatables
-        if verbose:     print( f'\t...Deleting local copy of metatables...' )
-        if os.path.exists( metatables.config_ffn ): os.remove( metatables.config_ffn )
-        else: print(f'---------- error deleting metatables config file; no file found at:----------\n\t\t{metatables.config_ffn}')
-        return metatables
+        # Delete local copy of the config data
+        if verbose:     print( f'\t...Deleting local copy of config data...' )
+        if os.path.exists( config.config_ffn ): os.remove( config.config_ffn )
+        else: print(f'---------- error deleting config data file; no file found at:----------\n\t\t{config.config_ffn}')
+        return config
     
-    def _write_error_log_file( self, metatables: MetaTables, validated_login: XNATLogin, status_text: str, error_message: Exception ) -> str:
-        # Initialize a text that will eventually be written to a file, beginning with the date, time, user's hawkid, , whether the subject exists on xnat, whether the metatables were updates, and the error message
+    def _write_error_log_file( self, config: ConfigTables, validated_login: XNATLogin, status_text: str, error_message: Exception ) -> str:
+        # Initialize a text that will eventually be written to a file, beginning with the date, time, user's hawkid, , whether the subject exists on xnat, whether the config were updates, and the error message
         text = f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n'
         text += f'User: {validated_login.validated_username}\n'
         text += f'Attempted Session Creation Type: {self.schema_prefix_str}\n'
@@ -209,7 +209,7 @@ class ExperimentData():
         # Write the text to a file in the user's downloads folder
         failed_ffn = Path.home() / Path( 'Downloads' ) / Path( f'FAILED_{self.schema_prefix_str}_SESSION_CREATION_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.txt' )
         with open( failed_ffn, 'w' ) as f: f.write( text )
-        print( f'\t--- Log file detailing the failed {self.schema_prefix_str} session creation has been written to:\n\t{failed_ffn}\n\n\tPlease notify the Data Librarian ({metatables.data_librarian}).' )
+        print( f'\t--- Log file detailing the failed {self.schema_prefix_str} session creation has been written to:\n\t{failed_ffn}\n\n\tPlease notify the Data Librarian ({config.data_librarian}).' )
         return text
 
     
@@ -227,7 +227,7 @@ class SourceRFSession( ExperimentData ):
     - intake_form (ORDataIntakeForm): digitized json-formatted form detailing the surgical data to be uploaded to XNAT.
     - login (XNATLogin): login object containing the user's validated username and password.
     - xnat_connection (XNATConnection): connection object containing the user's validated xnat server and project name.
-    - metatables (MetaTables): metatables object containing the user's validated metatables configuration.
+    - config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
 
     Attributes:
     intake_form (ORDataIntakeForm): digitized json-formatted form detailing the surgical data to be uploaded to XNAT. This is also uploaded.
@@ -242,9 +242,9 @@ class SourceRFSession( ExperimentData ):
     - See docstring for ExperimentData for other methods.
 
     Example Usage:
-    SourceRFSession( dcm_dir=Path('path/to/dcm_dir'), intake_form=ORDataIntakeForm, login=XNATLogin, xnat_connection=XNATConnection, metatables=MetaTables )
+    SourceRFSession( dcm_dir=Path('path/to/dcm_dir'), intake_form=ORDataIntakeForm, login=XNATLogin, xnat_connection=XNATConnection, config=ConfigTables )
     """
-    def __init__( self, intake_form: ORDataIntakeForm, metatables: MetaTables ):
+    def __init__( self, intake_form: ORDataIntakeForm, config: ConfigTables ):
         """
         Initialize the SourceRFSession object with the inputted ORDataIntakeForm object and the invoking class name.
 
@@ -255,11 +255,11 @@ class SourceRFSession( ExperimentData ):
         Populate a dataframe to represent all intraoperative images in the inputted folder. Check the validity of the session and mine metadata for the session.
          """
         super().__init__( intake_form=intake_form, invoking_class='SourceRFSession' ) # Call the __init__ method of the base class
-        self._populate_df( metatables=metatables )
-        self._check_session_validity( metatables=metatables )
+        self._populate_df( config=config )
+        self._check_session_validity( config=config )
         if self.is_valid:   self._mine_session_metadata() # necessary for publishing to xnat.
 
-    def _populate_df( self, metatables: MetaTables ):
+    def _populate_df( self, config: ConfigTables ):
         self._init_rf_session_dataframe()
         all_ffns = self._all_dicom_ffns()
         self._df = self._df.reindex( np.arange( len( all_ffns ) ) )
@@ -268,7 +268,7 @@ class SourceRFSession( ExperimentData ):
             if ext != '.dcm':
                 self._df.loc[idx, ['FN', 'EXT', 'IS_VALID']] = [fn, ext, False]
                 continue
-            deid_dcm = SourceDicomDeIdentified( dcm_ffn=ffn, metatables=metatables, intake_form=self.intake_form )
+            deid_dcm = SourceDicomDeIdentified( dcm_ffn=ffn, config=config, intake_form=self.intake_form )
             self._df.loc[idx, ['FN', 'EXT', 'OBJECT', 'IS_VALID']] = [fn, ext, deid_dcm, deid_dcm.is_valid]
             # if deid_dcm.is_valid:
             #     dt_data = self._query_dicom_series_time_info( deid_dcm )
@@ -283,8 +283,8 @@ class SourceRFSession( ExperimentData ):
                     hash_strs.add( row['OBJECT'].image.hash_str )
                     self._df.at[idx, 'IS_QUESTIONABLE'] = False
         
-    def _check_session_validity( self, metatables: MetaTables ): # Invalid only when empty or all shots are invalid -- to-do: may also want to check that instance num and time are monotonically increasing
-        self._is_valid = self.df['IS_VALID'].any() and not metatables.item_exists( table_name='SUBJECTS', item_name=self.intake_form.uid )
+    def _check_session_validity( self, config: ConfigTables ): # Invalid only when empty or all shots are invalid -- to-do: may also want to check that instance num and time are monotonically increasing
+        self._is_valid = self.df['IS_VALID'].any() and not config.item_exists( table_name='SUBJECTS', item_name=self.intake_form.uid )
         
     def _mine_session_metadata( self ):
         assert self.df.empty is False, 'Dataframe of dicom files is empty.'
@@ -365,26 +365,26 @@ class SourceRFSession( ExperimentData ):
         else:
             return f' -- {self.__class__.__name__} --\nUID:\t{None}\nAcquisition Site:\t{intake_form.acquisition_site}\nGroup:\t\t\t{intake_form.group}\nDate-Time:\t\t{None}\nValid:\t\t\t{valid_str}\nQuestionable:\t\t{questionable_str}\n{df.head()}\n...\n{df.tail()}'
 
-    def write( self, metatables: MetaTables, verbose: Opt[bool] = False ) -> Tuple[dict, MetaTables]:
+    def write( self, config: ConfigTables, verbose: Opt[bool] = False ) -> Tuple[dict, ConfigTables]:
         """
         Writes the SourceRFSession to a zipped folder in a temporary local directory, which can then be pushed to XNAT.
         Inputs:
-        - metatables (MetaTables): metatables object containing the user's validated metatables configuration.
+        - config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
         - verbose (bool): flag indicating whether to print intermediate steps to the console.
 
         Outputs:
         - zipped_data (dict): dictionary containing the path to the zipped folder of source data.
-        - metatables (MetaTables): metatables object containing the user's validated metatables configuration.
+        - config (ConfigTables): Updated ConfigTables object with new data.
 
         Example Usage:
-        rf_sess.write( metatables=MetaTables, verbose=True )
+        rf_sess.write( config=ConfigTables, verbose=True )
         """
         assert self.is_valid, f"Session is invalid; could be for several reasons. try evaluating whether all of the image hash_strings already exist in the matatable."
         
-        # (Try to) Add the subject to the metatables
-        metatables.add_new_item( table_name='SUBJECTS', item_name=self.intake_form.uid, item_uid=self.intake_form.uid, verbose=verbose,
-                                extra_columns_values={ 'ACQUISITION_SITE': metatables.get_uid( table_name='ACQUISITION_SITES', item_name=self.intake_form.acquisition_site ),
-                                                      'GROUP': metatables.get_uid( table_name='GROUPS', item_name=self.intake_form.group ) }
+        # (Try to) Add the subject to the config
+        config.add_new_item( table_name='SUBJECTS', item_name=self.intake_form.uid, item_uid=self.intake_form.uid, verbose=verbose,
+                                extra_columns_values={ 'ACQUISITION_SITE': config.get_uid( table_name='ACQUISITION_SITES', item_name=self.intake_form.acquisition_site ),
+                                                      'GROUP': config.get_uid( table_name='GROUPS', item_name=self.intake_form.group ) }
                                 )
 
         # Zip the mp4 and dicom data to separate folders
@@ -397,8 +397,8 @@ class SourceRFSession( ExperimentData ):
                 file_obj_rep = self.df.loc[idx, 'OBJECT']
                 assert isinstance( file_obj_rep, SourceDicomDeIdentified ), f"Object representation of file at index {idx} is {type( file_obj_rep )}, which is not a valid SourceDicomDeIdentified object."
                 dcmwrite( os.path.join( dcm_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) ), file_obj_rep.metadata )          # type: ignore
-                tmp = { 'SUBJECT': metatables.get_uid( table_name='SUBJECTS', item_name=self.intake_form.uid ), 'INSTANCE_NUM': self.df.loc[idx, 'NEW_FN'] }
-                metatables.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, item_uid=file_obj_rep.uid, # type: ignore
+                tmp = { 'SUBJECT': config.get_uid( table_name='SUBJECTS', item_name=self.intake_form.uid ), 'INSTANCE_NUM': self.df.loc[idx, 'NEW_FN'] }
+                config.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, item_uid=file_obj_rep.uid, # type: ignore
                                         extra_columns_values = tmp, verbose=verbose
                                         )
                 num_dicom += 1
@@ -409,7 +409,7 @@ class SourceRFSession( ExperimentData ):
             zipped_data[dcm_zip_full_path] = { 'CONTENT': 'IMAGE', 'FORMAT': 'DICOM', 'TAG': 'INTRA_OP' }
 
         if verbose:     print( f'\t...Zipped folder(s) of {num_dicom} dicom files successfully written to:\n\t\t{dcm_zip_full_path}' )
-        return zipped_data, metatables
+        return zipped_data, config
 
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -420,7 +420,7 @@ class SourceESVSession( ExperimentData ):
 
     Inputs:
     - intake_form (ORDataIntakeForm): digitized json-formatted form detailing the surgical data to be uploaded to XNAT. This is also uploaded with the source data.
-    - metatables (MetaTables): metatables object containing the user's validated metatables configuration.
+    - config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
 
     Attributes:
     intake_form (ORDataIntakeForm): digitized json-formatted form detailing the surgical data to be uploaded to XNAT. This is also uploaded.
@@ -435,16 +435,16 @@ class SourceESVSession( ExperimentData ):
     - See docstring for ExperimentData for other methods.
 
     Example Usage:
-    SourceESVSession( intake_form=ORDataIntakeForm, metatables=MetaTables )
+    SourceESVSession( intake_form=ORDataIntakeForm, config=ConfigTables )
     """
-    def __init__( self, intake_form: ORDataIntakeForm, metatables: MetaTables ) -> None:
+    def __init__( self, intake_form: ORDataIntakeForm, config: ConfigTables ) -> None:
         """
         Initializes the SourceESVSession object.
         Populate a dataframe to represent all post-op images and intraoperative videos in the inputted folder. Check the validity of the session and mine metadata for the session.
         """
         super().__init__( intake_form=intake_form, invoking_class='SourceESVSession' ) # Call the __init__ method of the base class
-        self._populate_df( metatables=metatables )
-        self._check_session_validity( metatables=metatables )
+        self._populate_df( config=config )
+        self._check_session_validity( config=config )
         if self.is_valid:   self._mine_session_metadata() # necessary for publishing to xnat.
 
 
@@ -476,11 +476,11 @@ class SourceESVSession( ExperimentData ):
                     raise ValueError( f"Unrecognized object type: {type( self.df.loc[idx, 'OBJECT'] )}." )
 
 
-    def _populate_df( self, metatables: MetaTables ):
+    def _populate_df( self, config: ConfigTables ):
         # Read in mp4 data
         mp4_ffn = list( self.intake_form.relevant_folder.rglob("*.[mM][pP]4") )
         assert len( mp4_ffn ) > 0, f"There should be at least one (1) mp4 file in the directory; found {len( mp4_ffn )} mp4 files."
-        self._mp4 = [ArthroVideo( vid_ffn=ffn, metatables=metatables, intake_form=self.intake_form ) for ffn in mp4_ffn]
+        self._mp4 = [ArthroVideo( vid_ffn=ffn, config=config, intake_form=self.intake_form ) for ffn in mp4_ffn]
         if isinstance( self.mp4, list ): # Check that all mp4 files are valid
             for vid in self.mp4: assert vid.is_valid, f"Could not open video file: {vid.ffn}"
 
@@ -509,7 +509,7 @@ class SourceESVSession( ExperimentData ):
                 mp4_idx += 1
             elif ext.lower() in ['.jpg', '.jpeg']:
                 instance_num = str( idx+1 )
-                diag_img_obj = ArthroDiagnosticImage( img_ffn=ffn, metatables=metatables, intake_form=self.intake_form, still_num=instance_num, parent_uid=self.intake_form.uid ) 
+                diag_img_obj = ArthroDiagnosticImage( img_ffn=ffn, config=config, intake_form=self.intake_form, still_num=instance_num, parent_uid=self.intake_form.uid ) 
                 self._df.loc[idx, ['FN', 'OBJECT', 'IS_VALID', 'TYPE']] = [fn, diag_img_obj, diag_img_obj.is_valid, 'JPG']
             else:
                 raise ValueError( f"Unrecognized file extension: {ext}.\n\tFile: {ffn}" )
@@ -524,30 +524,30 @@ class SourceESVSession( ExperimentData ):
                     hash_strs.add( row['OBJECT'].image.hash_str )
         
         
-    def _check_session_validity( self, metatables: MetaTables ): # Invalid only when empty or all shots are invalid -- to-do: may also want to check that instance num and time are monotonically increasing
-        self._is_valid = True if self.df['IS_VALID'].any() and not metatables.item_exists( table_name='SUBJECTS', item_name=self.intake_form.uid ) else False
+    def _check_session_validity( self, config: ConfigTables ): # Invalid only when empty or all shots are invalid -- to-do: may also want to check that instance num and time are monotonically increasing
+        self._is_valid = True if self.df['IS_VALID'].any() and not config.item_exists( table_name='SUBJECTS', item_name=self.intake_form.uid ) else False
 
 
-    def write( self, metatables: MetaTables, verbose: Opt[bool] = False ) -> Tuple[dict, MetaTables]:
+    def write( self, config: ConfigTables, verbose: Opt[bool] = False ) -> Tuple[dict, ConfigTables]:
         """
         Writes the SourceESVSession to a zipped folder in a temporary local directory, which can then be pushed to XNAT.
         Inputs:
-        - metatables (MetaTables): metatables object containing the user's validated metatables configuration.
+        - config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
         - verbose (bool): flag indicating whether to print intermediate steps to the console.
 
         Outputs:
         - zipped_data (dict): dictionary containing the path to the zipped folder of source data.
-        - metatables (MetaTables): metatables object containing the user's validated metatables configuration.
+        - config (ConfigTables): Updated ConfigTables object with new data.
 
         Example Usage:
-        esv_sess.write( metatables=MetaTables, verbose=True )
+        esv_sess.write( config=ConfigTables, verbose=True )
         """
         assert self.is_valid, f"Session is invalid; could be for several reasons. try evaluating whether all of the image hash_strings already exist in the matatable."
 
-        # (Try to) Add the subject to the metatables
-        metatables.add_new_item( table_name='SUBJECTS', item_name=self.intake_form.uid, item_uid=self.intake_form.uid, verbose=verbose,
-                                extra_columns_values={ 'ACQUISITION_SITE': metatables.get_uid( table_name='ACQUISITION_SITES', item_name=self.intake_form.acquisition_site ),
-                                                      'GROUP': metatables.get_uid( table_name='GROUPS', item_name=self.intake_form.group ) }
+        # (Try to) Add the subject to the config
+        config.add_new_item( table_name='SUBJECTS', item_name=self.intake_form.uid, item_uid=self.intake_form.uid, verbose=verbose,
+                                extra_columns_values={ 'ACQUISITION_SITE': config.get_uid( table_name='ACQUISITION_SITES', item_name=self.intake_form.acquisition_site ),
+                                                      'GROUP': config.get_uid( table_name='GROUPS', item_name=self.intake_form.group ) }
                                 )
 
         # Zip the mp4 and dicom data to separate folders
@@ -562,13 +562,13 @@ class SourceESVSession( ExperimentData ):
                 assert isinstance( file_obj_rep, (ArthroDiagnosticImage, ArthroVideo) ), f"Object representation of file at index {idx} is {type( file_obj_rep )}, which is neither an ArthroDiagnosticImage nor an ArthroVideo object."
                 if isinstance( file_obj_rep, ArthroDiagnosticImage ):
                     dcmwrite( os.path.join( dcm_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) ), file_obj_rep.metadata )          # type: ignore
-                    tmp = { 'SUBJECT': metatables.get_uid( table_name='SUBJECTS', item_name=self.intake_form.uid ), 'INSTANCE_NUM': self.df.loc[idx, 'NEW_FN'] }
-                    metatables.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, item_uid=file_obj_rep.uid, # type: ignore
+                    tmp = { 'SUBJECT': config.get_uid( table_name='SUBJECTS', item_name=self.intake_form.uid ), 'INSTANCE_NUM': self.df.loc[idx, 'NEW_FN'] }
+                    config.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, item_uid=file_obj_rep.uid, # type: ignore
                                             extra_columns_values = tmp, verbose=verbose
                                             )
                     num_dicom += 1
             
-                elif isinstance( file_obj_rep, ArthroVideo ): # Don't need to add this to metatables because the diagnostic images (frames from the video) should suffice.
+                elif isinstance( file_obj_rep, ArthroVideo ): # Don't need to add this to config because the diagnostic images (frames from the video) should suffice.
                     vid_ffn = os.path.join( self.intake_form.relevant_folder, str( self.df.loc[idx,'FN'] ) + '.mp4' )
                     shutil.copy( vid_ffn, os.path.join( mp4_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) + '.mp4' ) )
                     num_mp4 += 1
@@ -582,7 +582,7 @@ class SourceESVSession( ExperimentData ):
             zipped_data[dcm_zip_full_path] = { 'CONTENT': 'IMAGE', 'FORMAT': 'DICOM', 'TAG': 'POST_OP' }
 
         if verbose: print( f'\t...Zipped folder(s) of {num_dicom} dicom and {num_mp4} mp4 files successfully written to:\n\t\t{dcm_zip_full_path}\n\t\t{mp4_zip_full_path}' )
-        return zipped_data, metatables
+        return zipped_data, config
     
 
     def __str__( self ):

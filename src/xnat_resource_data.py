@@ -13,7 +13,7 @@ from pathlib import Path
 import pytz
 import string
 
-from src.utilities import UIDandMetaInfo, MetaTables, USCentralDateTime, XNATLogin, USCentralDateTime
+from src.utilities import UIDandMetaInfo, ConfigTables, USCentralDateTime, XNATLogin, USCentralDateTime
 
 
 ordered_keys_of_intake_text_file = ['FORM_LAST_MODIFIED', 'OPERATION_DATE', 'SUBJECT_UID', 'FILER_HAWKID', 'FORM_AVAILABLE_FOR_PERFORMANCE', 'SCAN_QUALITY',
@@ -28,7 +28,7 @@ class ResourceFile( UIDandMetaInfo ):
     Represents a resource file at any level within the XNAT project, such as project, subject, experiment, or scan.
 
     Attributes:
-        metatables (MetaTables): MetaTables object for managing table data.
+        config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
         login (XNATLogin): Validated login object for XNAT.
     
     Methods:
@@ -38,18 +38,18 @@ class ResourceFile( UIDandMetaInfo ):
     Example Usage:
     None -- abstract class intended to be subclassed.
     """
-    def __init__( self, metatables: MetaTables, login: XNATLogin ):
+    def __init__( self, config: ConfigTables, login: XNATLogin ):
         """
-        Initialize the ResourceFile with given metatables and login credentials.
+        Initialize the ResourceFile with given config data and login credentials.
 
         Args:
-            metatables (MetaTables): MetaTables object for managing table data.
+            config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
             login (XNATLogin): Validated login object for XNAT.
         
         Raises:
             AssertionError: If the user is not registered in the system.
         """
-        assert metatables.is_user_registered( login.validated_username ), f'User with HAWKID {login.validated_username} is not registered in the system!'
+        assert config.is_user_registered( login.validated_username ), f'User with HAWKID {login.validated_username} is not registered in the system!'
         super().__init__() # Call the __init__ method of the base class to create a uid for this instance
         
 
@@ -59,20 +59,20 @@ class ResourceFile( UIDandMetaInfo ):
     def __str__( self )             -> str:         return '-----'*5 + f'\nOR Data Intake Form\n' + '-----'*5 + '\n\n'
 
 
-    def _construct_dict_of_ortho_procedure_names( self, metatables: MetaTables ) -> Dict[str, str]:
+    def _construct_dict_of_ortho_procedure_names( self, config: ConfigTables ) -> Dict[str, str]:
         """
-        Create a dictionary of all orthopedic procedure names from the metatables.
+        Create a dictionary of all orthopedic procedure names from the config data.
         
         Procedures are categorized into arthroscopy and trauma items.
 
         Args:
-            metatables (MetaTables): MetaTables object containing data about available procedures.
+            config (ConfigTables): ConfigTables object containing data about available procedures.
 
         Returns:
             Dict[str, str]: Dictionary mapping keys to procedure names.
         """
         # Separate items into arthroscopy and trauma items
-        items = metatables.list_of_all_items_in_table( table_name='Groups' )
+        items = config.list_of_all_items_in_table( table_name='Groups' )
         arthroscopy_items = [item for item in items if 'arthroscopy' in item.lower()]
         trauma_items = [item for item in items if 'arthroscopy' not in item.lower()] # Note: "not" in is used here
 
@@ -98,7 +98,7 @@ class ORDataIntakeForm( ResourceFile ):
     The OR Data Intake Form is filled out immediately after a surgical procedure and is used to populate the XNAT database.
     
     Attributes:
-        metatables (MetaTables): MetaTables object for managing table data.
+        config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
         login (XNATLogin): Validated login object for XNAT.
         input_data (Union[None, Path, pd.Series]): Input data for the intake form.
         verbose (Optional[bool]): Whether to enable verbose output.
@@ -111,51 +111,51 @@ class ORDataIntakeForm( ResourceFile ):
     push_to_xnat(): Push the intake form to XNAT.
 
     Example Usage:
-    ORDataIntakeForm( metatables=..., login=., input_data=..., verbose=True, write_tmp_file=True )
+    ORDataIntakeForm( config=..., login=., input_data=..., verbose=True, write_tmp_file=True )
     """
 
     
-    def __init__( self, metatables: MetaTables, login: XNATLogin, input_data: Union[None, Path, pd.Series]=None, verbose: Opt[bool]=False, write_file: Opt[bool]=True ):
+    def __init__( self, config: ConfigTables, login: XNATLogin, input_data: Union[None, Path, pd.Series]=None, verbose: Opt[bool]=False, write_file: Opt[bool]=True ):
         """
-        Initialize the ORDataIntakeForm with given metatables, login credentials, and input data.
+        Initialize the ORDataIntakeForm with given config data, login credentials, and input data.
 
         Args:
-            metatables (MetaTables): MetaTables object for managing table data.
+            config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
             login (XNATLogin): Validated login object for XNAT.
             input_data (Union[None, Path, pd.Series], optional): Input data for the intake form. Defaults to None.
             verbose (Optional[bool], optional): Whether to enable verbose output. Defaults to False.
             write_file (Optional[bool], optional): Whether to write a digital (.json) file. Defaults to True.
         """
-        super().__init__( metatables=metatables, login=login ) # Call the __init__ method of the base class -- bug:? goes all the way to our utility class and generates a uid.
-        # assert not isin
+        super().__init__( config=config, login=login ) # Call the __init__ method of the base class -- bug:? goes all the way to our utility class and generates a uid.
+        
         # Init dict (and future json-formatted text file) with required keys.
-        self._init_all_fields( metatables=metatables )
+        self._init_all_fields( config=config )
         
         # Either read in the inputted text file and distribute that data, or prompt the user for the data.
         assert not isinstance( input_data, str ), f"You provided input_data as a string; retry with 'input_data = Path( input_data )'"
         if verbose:                             print( f'\n...Processing OR Data Intake Form...' )
-        if isinstance( input_data, pd.Series ): self._read_from_series( data_row=input_data, metatables=metatables, verbose=verbose )
+        if isinstance( input_data, pd.Series ): self._read_from_series( data_row=input_data, config=config, verbose=verbose )
         elif isinstance( input_data, Path ):    self._read_from_file( parent_folder=input_data, verbose=verbose )
         else:                                   # User must define intake form from a set of prompts.
-            self._prompt_user_for_filer_name_and_operation_date( metatables=metatables )
+            self._prompt_user_for_filer_name_and_operation_date( config=config )
             self._prompt_user_for_scan_quality()
-            self._prompt_user_for_surgical_procedure_info( metatables=metatables )
-            self._prompt_user_for_skills_assessment_info( metatables=metatables )
+            self._prompt_user_for_surgical_procedure_info( config=config )
+            self._prompt_user_for_skills_assessment_info( config=config )
             self._prompt_user_for_storage_device_info()
 
         # Need to identify the save-to location for the json file; if successfully read from file, use that, else, use the generated uid.
-        self._saved_ffn = metatables.tmp_data_dir / Path( self.uid ) / self.filename
+        self._saved_ffn = config.tmp_data_dir / Path( self.uid ) / self.filename
         if not os.path.exists( self.saved_ffn.parent ):     os.makedirs( self.saved_ffn.parent )
         if write_file:                          self.construct_digital_file( verbose=verbose )
 
 
-    def _read_from_series( self, data_row: pd.Series, metatables: MetaTables, verbose: Opt[bool]=False ) -> None:
+    def _read_from_series( self, data_row: pd.Series, config: ConfigTables, verbose: Opt[bool]=False ) -> None:
         """
         Read data from a Pandas Series and populate the intake form fields.
 
         Args:
             data_row (pd.Series): The data row from which to populate the fields.
-            metatables (MetaTables): MetaTables object for managing table data.
+            config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
             verbose (Optional[bool], optional): Whether to enable verbose output. Defaults to False.
         """
         # Define the expected columns
@@ -184,7 +184,7 @@ class ORDataIntakeForm( ResourceFile ):
         self._form_available = False
         issues = {}
         self._filer_name = data_row['Filer\nHawkID']
-        if self.filer_name not in metatables.list_of_all_items_in_table( table_name='REGISTERED_USERS' ):           issues[f'Filer\nHawkID'] = f'Filer name "{self.filer_name}" not registered w/ the database.'
+        if self.filer_name not in config.list_of_all_items_in_table( table_name='REGISTERED_USERS' ):               issues[f'Filer\nHawkID'] = f'Filer name "{self.filer_name}" not registered w/ the database.'
         
         self._operation_date = data_row['Operation\nDate']
         if not self.operation_date:                                                                                 issues[f'Operation\nDate'] = f'Operation Date is missing and required.'
@@ -195,10 +195,10 @@ class ORDataIntakeForm( ResourceFile ):
         if self.scan_quality not in ['usable', 'unusable', 'questionable', '']:                                     issues[f'Quality'] = f'Quality "{self.scan_quality}" is not one of the expected values.'
 
         self._institution_name = data_row['Institution\nName']
-        if self.institution_name not in metatables.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ):    issues[f'Institution\nName'] = f'Institution name "{self.institution_name}"is not registered w/ the database.'
+        if self.institution_name not in config.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ):        issues[f'Institution\nName'] = f'Institution name "{self.institution_name}"is not registered w/ the database.'
         
         self._ortho_procedure_name = data_row['Procedure\nName'.upper()]
-        if self.ortho_procedure_name not in metatables.list_of_all_items_in_table( table_name='Groups' ):
+        if self.ortho_procedure_name not in config.list_of_all_items_in_table( table_name='Groups' ):
             issues[f'Procedure\nName'] = f'Procedure name "{self.ortho_procedure_name}"is not registered w/ the database.'
             issues[f'Procedure\nType'] = f'Procedure type cannot reliably be discerned because the inputted procedure name is not registed w the database and we currently dont ask the user to explicitly declare it.'
  
@@ -216,14 +216,14 @@ class ORDataIntakeForm( ResourceFile ):
         self._OR_location = data_row['OR Room\nName/\nLocation']
 
         self._supervising_surgeon_hawk_id = data_row['Supervising\nSurgeon\nHawkID'].upper()
-        if self.supervising_surgeon_hawk_id not in metatables.list_of_all_items_in_table( table_name='Surgeons' ):  issues[f'Supervising\nSurgeon\nHawkID'] = f'Supervising Surgeon HawkID "{self.supervising_surgeon_hawk_id}" is not registered w/ the database.'
+        if self.supervising_surgeon_hawk_id not in config.list_of_all_items_in_table( table_name='Surgeons' ):      issues[f'Supervising\nSurgeon\nHawkID'] = f'Supervising Surgeon HawkID "{self.supervising_surgeon_hawk_id}" is not registered w/ the database.'
 
         self._supervising_surgeon_presence = data_row['Supervising\nSurgeon\nPresence'].upper()
         if self.supervising_surgeon_presence not in ['PRESENT', 'RETROSPECTIVE_REVIEW', 'OTHER-SEE_ADDITIONAL_COMMENTS']:
             issues[f'Supervising\nSurgeon\nPresence'] = f'Supervising Surgeon Presence "{self.supervising_surgeon_presence}" is not one of the expected values.'
 
         self._performing_surgeon_hawk_id = data_row['Performing\nSurgeon\nHawkID'].upper()
-        if self.performing_surgeon_hawk_id not in metatables.list_of_all_items_in_table( table_name='Surgeons' ):   issues[f'Performing\nSurgeon\nHawkID'] = f'Performing Surgeon HawkID "{self.performing_surgeon_hawk_id}" is not registered w/ the database.'
+        if self.performing_surgeon_hawk_id not in config.list_of_all_items_in_table( table_name='Surgeons' ):       issues[f'Performing\nSurgeon\nHawkID'] = f'Performing Surgeon HawkID "{self.performing_surgeon_hawk_id}" is not registered w/ the database.'
 
         self._performer_year_in_residency = data_row['Performing\nSurgeon\n# Years\nExperience']
         if not isinstance( self.performer_year_in_residency, int ) or self.performer_year_in_residency <= 0:        issues[f'Performing\nSurgeon\n# Years\nExperience'] = f'Performing Surgeon Years in Residency "{self.performer_year_in_residency}" is not a valid value -- must be a positive integer.'
@@ -241,7 +241,7 @@ class ORDataIntakeForm( ResourceFile ):
         matches = re.findall( key_value_pattern, performer_tasks_string )
         surgeon_task_dict = {key: value for key, value in matches}
         for key in surgeon_task_dict.keys():
-            if key not in metatables.list_of_all_items_in_table(table_name='Surgeons'):                             issues[f'Performer\nHawkID-Task'] = f'HawkID "{key}" in Performer HawkID-Task is not registered w/ the database.'
+            if key not in config.list_of_all_items_in_table(table_name='Surgeons'):                                 issues[f'Performer\nHawkID-Task'] = f'HawkID "{key}" in Performer HawkID-Task is not registered w/ the database.'
         if len(surgeon_task_dict) != num_surgeons:                                                                  issues[f'Performer\nHawkID-Task'] = f'The number of HawkIDs in Performer HawkID-Task does not match the number of Participating Performing Surgeons "{num_surgeons}".'
         self._performance_enumerated_task_performer = surgeon_task_dict
 
@@ -270,8 +270,9 @@ class ORDataIntakeForm( ResourceFile ):
         """
         ffn = os.path.join( parent_folder, self.filename_str )
         assert os.path.exists( ffn ), f'File "{ffn}" does not exist; check your provided path and try again.'
-        if verbose:     print( f'\n\t...Initializing OR Intake From from "{ffn}"...' )
-        with open( ffn, 'r', encoding='utf-8' ) as jf:     self._running_text_file = json.loads( jf.read() ) # might need to read with encoding='cp1252'
+        if verbose:         print( f"\n\t...Initializing Digital OR Intake Form from '{ffn}'..." )
+        with open( ffn, 'r', encoding='utf-8' ) as jf:
+            self._running_text_file = json.loads( jf.read() ) # might need to read with encoding='cp1252'
 
         # Minimally Required information (if paper form was available when processed)
         self._uid = self.running_text_file['SUBJECT_UID'] # Overwrites generated uid in base class
@@ -310,7 +311,7 @@ class ORDataIntakeForm( ResourceFile ):
             if verbose:     print( f'\t--- Only minimally required fields were found in the inputted form.' )
 
 
-    def _init_all_fields( self, metatables: MetaTables ) -> None:
+    def _init_all_fields( self, config: ConfigTables ) -> None:
         # Required inputs -- user must at the very least acknowledge that they do not have the information
         self._filer_name, self._operation_date, self._form_available = '', '', False
         self._institution_name, self._ortho_procedure_type, self._ortho_procedure_name, self._epic_start_time = '', '', '', ''
@@ -325,7 +326,7 @@ class ORDataIntakeForm( ResourceFile ):
         self._assessment_title, self._assessor_hawk_id, self._assessment_details = None, None, None
 
         # Create a dict to represent all imported ortho procedure names
-        acceptable_ortho_procedure_names = self._construct_dict_of_ortho_procedure_names( metatables=metatables )
+        acceptable_ortho_procedure_names = self._construct_dict_of_ortho_procedure_names( config=config )
         self._running_text_file = OrderedDict( ( k, acceptable_ortho_procedure_names[k]) for k in ordered_keys_of_intake_text_file if k in acceptable_ortho_procedure_names )
         self._running_text_file['FORM_LAST_MODIFIED'] = datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
 
@@ -340,15 +341,15 @@ class ORDataIntakeForm( ResourceFile ):
         raise InvalidInputError( f'Failed to provide a valid entry for {selection_name} after {max_num_attempts} attempts.' )
     
 
-    def _prompt_user_for_filer_name_and_operation_date( self, metatables: MetaTables ) -> None:
-        acceptable_registered_users_options_encoded = {str(i+1): reg_user for i, reg_user in enumerate( metatables.list_of_all_items_in_table( table_name='REGISTERED_USERS' ) )}
+    def _prompt_user_for_filer_name_and_operation_date( self, config: ConfigTables ) -> None:
+        acceptable_registered_users_options_encoded = {str(i+1): reg_user for i, reg_user in enumerate( config.list_of_all_items_in_table( table_name='REGISTERED_USERS' ) )}
         options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_registered_users_options_encoded.items()] )
         print( f'\t(1/34)\tWhat is your HAWKID (the Form Filer)?{indent_str}Please select from the following registered users:\n{options_str}' )
         filer_hawkid_key = self.prompt_until_valid_answer_given( 'Institution Name', acceptable_options=list( acceptable_registered_users_options_encoded ) )
         self._filer_name = acceptable_registered_users_options_encoded[filer_hawkid_key].upper()
 
         print( f'\n\t(2/34)\tDo you have a *PAPER* Intake Form available filled-out for this procedure?{indent_str}Please enter "1" for Yes or "2" for No' )
-        form_available = self.prompt_until_valid_answer_given( 'Form Availability', acceptable_options=['1', '2'] ) # to-do: Automate acceptable_options based on the type of input expected bc we may change the metatables values for this and then these prompts wont reflect those changes.
+        form_available = self.prompt_until_valid_answer_given( 'Form Availability', acceptable_options=['1', '2'] ) # to-do: Automate acceptable_options based on the type of input expected bc we may change the config values for this and then these prompts wont reflect those changes.
 
         num_attempts, max_num_attempts = 0, 2
         while True and num_attempts < max_num_attempts:
@@ -403,12 +404,12 @@ class ORDataIntakeForm( ResourceFile ):
         self._running_text_file['SCAN_QUALITY'] = self.scan_quality # type: ignore -- not sure why this is giving a type error. runs fine in spite of it.
 
 
-    def _prompt_user_for_surgical_procedure_info( self, metatables: MetaTables ): # Make sure fields that might be stored in the metatables are all completely capitalized
+    def _prompt_user_for_surgical_procedure_info( self, config: ConfigTables ): # Make sure fields that might be stored in the config are all completely capitalized
         print( f'\n--- Surgical Procedure Information ---' )
         local_dict = {}
 
         #Encode the options for acceptable institions as a list of integer strings
-        acceptable_institution_options_encoded = {str(i+1): institution for i, institution in enumerate( metatables.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ) )}
+        acceptable_institution_options_encoded = {str(i+1): institution for i, institution in enumerate( config.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ) )}
         options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_institution_options_encoded.items()] )
         print( f'\t(5/34)\tAt which institution did this performance occur?{indent_str}Please select from the following options:\n{options_str}' )
         institution_name_key = self.prompt_until_valid_answer_given( 'Institution Name', acceptable_options=list( acceptable_institution_options_encoded ) )
@@ -422,7 +423,7 @@ class ORDataIntakeForm( ResourceFile ):
         local_dict['PROCEDURE_TYPE'] = self.ortho_procedure_type
 
         # Given the ortho procedure type, select the keys from the acceptable_ortho_procedure_names dictionary that begin with the ortho_procedure_type
-        acceptable_ortho_procedure_names = self._construct_dict_of_ortho_procedure_names( metatables=metatables )
+        acceptable_ortho_procedure_names = self._construct_dict_of_ortho_procedure_names( config=config )
         acceptable_ortho_procedure_name_options_encoded = {key: value for key, value in acceptable_ortho_procedure_names.items() if key.startswith( ortho_procedure_type )}
         options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_ortho_procedure_name_options_encoded.items()] )
         print( f'\n\t(7/34)\tWhat is the name of Ortho Procedure?{indent_str}Please select from the following options:\n{options_str}' )
@@ -488,14 +489,14 @@ class ORDataIntakeForm( ResourceFile ):
         known_supervising_hawkid = self.prompt_until_valid_answer_given( 'Known Supervising Surgeon HawkID', acceptable_options=['1', '2'] )
         if known_supervising_hawkid == '1':
             # create an encoding of the acceptable options for the supervising surgeon
-            acceptable_supervising_surgeon_options_encoded = {str(i+1): surgeon for i, surgeon in enumerate( metatables.list_of_all_items_in_table( table_name='Surgeons' ) )}
+            acceptable_supervising_surgeon_options_encoded = {str(i+1): surgeon for i, surgeon in enumerate( config.list_of_all_items_in_table( table_name='Surgeons' ) )}
             options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_supervising_surgeon_options_encoded.items()] )
 
             print( f'\n\t(13b/34) Supervising Surgeon HawkID{indent_str}Please select from the following list:\n{options_str}')
             supervising_surgeon_hawk_id = self.prompt_until_valid_answer_given( 'Supervising Surgeon\'s HAWKID', acceptable_options = list( acceptable_supervising_surgeon_options_encoded ) )
             supervising_surgeon_hawk_id = acceptable_supervising_surgeon_options_encoded[supervising_surgeon_hawk_id]
         else:   supervising_surgeon_hawk_id = 'Unknown'.upper()
-        self._supervising_surgeon_hawk_id = metatables.get_uid( 'Surgeons', supervising_surgeon_hawk_id )
+        self._supervising_surgeon_hawk_id = config.get_uid( 'Surgeons', supervising_surgeon_hawk_id )
 
         print( f'\n\t(14a/34) Do you know the Supervising Surgeon\'s Presence?{indent_str}Please enter "1" for Yes or "2" for No.' )
         known_supervising_surgeon_presence = self.prompt_until_valid_answer_given( 'Known Supervising Surgeon Presence', acceptable_options=['1', '2'] )
@@ -513,7 +514,7 @@ class ORDataIntakeForm( ResourceFile ):
         known_performer_hawk_id = self.prompt_until_valid_answer_given( 'Known Performing Surgeon HawkID', acceptable_options=['1', '2'] )
         if known_performer_hawk_id == '1':
             # create an encoding of the acceptable options for the performing surgeon
-            acceptable_performing_surgeon_options_encoded = {str(i+1): surgeon for i, surgeon in enumerate( metatables.list_of_all_items_in_table( table_name='Surgeons' ) )}
+            acceptable_performing_surgeon_options_encoded = {str(i+1): surgeon for i, surgeon in enumerate( config.list_of_all_items_in_table( table_name='Surgeons' ) )}
             options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_performing_surgeon_options_encoded.items()] )
             
             print( f'\n\t(15b/34) Performing Surgeon HawkID{indent_str}Please select the from the following list:\n{options_str}' )
@@ -532,13 +533,13 @@ class ORDataIntakeForm( ResourceFile ):
         if known_number_of_similar_logged_cases == '1':
             self._performer_num_of_similar_logged_cases     = self._prompt_user_for_integer_input( '\n\t(17b/34) Performing Surgeon\'s # of Similar Cases Logged (if none, enter "0").', acceptable_range=( 0, 500 ) )
         else: self._performer_num_of_similar_logged_cases   = None
-        self._performing_surgeon_hawk_id, self._performer_year_in_residency = metatables.get_uid( 'Surgeons', performing_surgeon_hawk_id ), performer_year_in_residency
+        self._performing_surgeon_hawk_id, self._performer_year_in_residency = config.get_uid( 'Surgeons', performing_surgeon_hawk_id ), performer_year_in_residency
         local_dict['PERFORMING_SURGEON_UID'], local_dict['PERFORMER_YEAR_IN_RESIDENCY/EXPERIENCE'], local_dict['PERFORMER_NUM_OF_SIMILAR_LOGGED_CASES'] = self.performing_surgeon_hawk_id, self.performer_year_in_residency, self.performer_num_of_similar_logged_cases
 
         print( f'\n\t(18/34) Was the Performing Surgeon Assisted?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown.' )
         performer_was_assisted = self.prompt_until_valid_answer_given( 'Performing Surgeon Assistance', acceptable_options=['1', '2', '3'] )
         if performer_was_assisted == '1':
-            self._performer_was_assisted,   dict_performance_enumerated_tasks       = True, self._prompt_user_for_n_surgical_tasks_and_hawkids( metatables=metatables ) # Prompt 19
+            self._performer_was_assisted,   dict_performance_enumerated_tasks       = True, self._prompt_user_for_n_surgical_tasks_and_hawkids( config=config ) # Prompt 19
             for key, value in dict_performance_enumerated_tasks.items():    # If any of the values in the dict are empty, replace them with None
                 if len( value ) == 0:       dict_performance_enumerated_tasks[key]  = None
             self._performance_enumerated_task_performer = dict_performance_enumerated_tasks
@@ -589,13 +590,13 @@ class ORDataIntakeForm( ResourceFile ):
             except ValueError: print( f'\t--- Invalid entry! Please enter an integer between {acceptable_range[0]} and {acceptable_range[1]}.' )
         raise ValueError( f'Failed to provide a valid integer input after {num_attempts} attempts.' )
 
-    def _prompt_user_for_n_surgical_tasks_and_hawkids( self, metatables: MetaTables, max_num_attempts: int=3 ) -> dict:
+    def _prompt_user_for_n_surgical_tasks_and_hawkids( self, config: ConfigTables, max_num_attempts: int=3 ) -> dict:
         # Extract answer from user for the number of participating surgeons
         print( f'\n\t(19a/34) How many surgeons participated in the procedure (residents, supervisors, everyone)?{indent_str}Please enter an integer (must be non-zero and positive).' )
         num_tasks = self._prompt_user_for_integer_input( '\n\t(19a/34) # of Participating Surgeons', acceptable_range=( 1, 1000 ), max_num_attempts=max_num_attempts )
 
         # Extract the HAWKIDs for each of the participating surgeons and prompt the user with an unstructured opportunity to detail the tasks that they performed.
-        acceptable_performing_surgeon_options_encoded = {str(i+1): surgeon for i, surgeon in enumerate( metatables.list_of_all_items_in_table( table_name='Surgeons' ) )}
+        acceptable_performing_surgeon_options_encoded = {str(i+1): surgeon for i, surgeon in enumerate( config.list_of_all_items_in_table( table_name='Surgeons' ) )}
         options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_performing_surgeon_options_encoded.items()] )
         print( f'\n\t(19b/34) To denote each of the participating surgeons, please select from the following list of HawkIDs:\n{options_str}\n')
         task_performers = {}
@@ -605,11 +606,11 @@ class ORDataIntakeForm( ResourceFile ):
             elif i == 2:    hawkid_encoding = input( f'\t\t3rd Surgeon: ' )
             else:           hawkid_encoding = input( f'\t\t{i+1}th Surgeon: ' )
             hawkid = acceptable_performing_surgeon_options_encoded[hawkid_encoding]
-            task_performers[metatables.get_uid( table_name='SURGEONS', item_name=hawkid )] = input( f"\t\t\tPlease detail the task(s) performed by '{hawkid_encoding}'', i.e., {hawkid.upper()}: " ).replace( '"', "'" )
+            task_performers[config.get_uid( table_name='SURGEONS', item_name=hawkid )] = input( f"\t\t\tPlease detail the task(s) performed by '{hawkid_encoding}'', i.e., {hawkid.upper()}: " ).replace( '"', "'" )
         return task_performers
 
 
-    def _prompt_user_for_skills_assessment_info( self, metatables: MetaTables ):
+    def _prompt_user_for_skills_assessment_info( self, config: ConfigTables ):
         print( f'\n\n--- Skills Assessment Information ---' )
     
         print( f'\t(26a/34) Was a Skills Assessment requested for this procedure?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown.')
@@ -621,7 +622,7 @@ class ORDataIntakeForm( ResourceFile ):
             assessor_known = self.prompt_until_valid_answer_given( 'Assessor HAWKID', acceptable_options=['1', '2'] )
             if assessor_known == '1':
                 # create an encoding of the acceptable options for the assessor
-                acceptable_assessor_options_encoded = {str(i+1): surgeon for i, surgeon in enumerate( metatables.list_of_all_items_in_table( table_name='Surgeons' ) )}
+                acceptable_assessor_options_encoded = {str(i+1): surgeon for i, surgeon in enumerate( config.list_of_all_items_in_table( table_name='Surgeons' ) )}
                 options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_assessor_options_encoded.items()] )
                 print( f'\n\t(27b/34) Assessing Surgeon\'s HawkID{indent_str}Please select the from the following list:\n{options_str}' )
                 assessor_hawkid = self.prompt_until_valid_answer_given( 'Performing Surgeon\'s HAWKID', acceptable_options=list( acceptable_assessor_options_encoded ) )

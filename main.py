@@ -1,28 +1,21 @@
 from typing import Optional as Opt, Tuple, Union, List
-
 import sys
 import os
 from pathlib import Path
-
 import pwinput
 import argparse 
-
+import pandas as pd
+from tabulate import tabulate
+import datetime
 import xml.etree.ElementTree as ET
-
 from pyxnat import Interface
 from pyxnat.core.jsonutil import JsonTable
 
-from src.utilities import MetaTables, USCentralDateTime, XNATLogin, XNATConnection, ImageHash
+from src.utilities import ConfigTables, USCentralDateTime, XNATLogin, XNATConnection, ImageHash
 from src.xnat_experiment_data import *
 from src.xnat_scan_data import *
 from src.xnat_resource_data import ORDataIntakeForm
 
-import pandas as pd
-from tabulate import tabulate
-
-import datetime
-
-import string
 
 def parse_args() -> Tuple[str, str, bool]:
     """
@@ -74,7 +67,7 @@ def prompt_login( username: Opt[str]=None, password: Opt[str]=None ) -> Tuple[st
     return username, password
 
 
-def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, verbose: Opt[bool]=True ) -> Tuple[XNATLogin, XNATConnection, MetaTables]:
+def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, verbose: Opt[bool]=True ) -> Tuple[XNATLogin, XNATConnection, ConfigTables]:
     """
     Attempt to login and connect to the XNAT server.
 
@@ -84,13 +77,14 @@ def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, 
         verbose (Optional[bool]): Whether to enable verbose output.
 
     Returns:
-        Tuple[XNATLogin, XNATConnection, MetaTables]: Validated login, XNAT connection, and metatables.
+        Tuple[XNATLogin, XNATConnection, ConfigTables]: Validated login, XNAT connection, and config.
 
     Raises:
         ValueError: If the login credentials do not lead to a successful connection.
     """
     if username is not None and password is not None:
-        if verbose: print( f"\n...logging in and trying to connect to the server as '{username}' with password {'*' * len( password )} ...\n" )
+        if verbose:
+            print( f"\n...logging in and trying to connect to the server as '{username}' with password {'*' * len( password )} ...\n" )
         validated_login = XNATLogin( { 'Username': username, 'Password': password, 'Url': 'https://rpacs.iibi.uiowa.edu/xnat/' }, verbose=verbose )
         xnat_connection = XNATConnection( login_info=validated_login, stay_connected=True, verbose=verbose )
     else:
@@ -101,11 +95,11 @@ def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, 
         xnat_connection = XNATConnection( login_info=validated_login, stay_connected=True, verbose=verbose )
 
     if xnat_connection.is_verified and xnat_connection.is_open:
-        metatables = MetaTables( validated_login, xnat_connection, verbose=False ) # don't want to see all this info every time because there is so much and it is really only intended for the librarian to debug with
+        config = ConfigTables( validated_login, xnat_connection, verbose=False ) # don't want to see all this info every time because there is so much and it is really only intended for the librarian to debug with
         if verbose: print( f'\n-- A connection was successfully established!\n' )
     else:
         raise ValueError( f"\tThe provided login credentials did not lead to a successful connection. Please try again, or contact the Data Librarian for help." )
-    return validated_login, xnat_connection, metatables
+    return validated_login, xnat_connection, config
 
 
 def prompt_source_and_group() -> Tuple[str, str]:
@@ -118,18 +112,18 @@ def prompt_source_and_group() -> Tuple[str, str]:
     return input( "Acquisition Site: " ), input( "Surgical Procedure: " )
     
 
-def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables, verbose: Opt[bool]=False ) -> MetaTables:
+def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection, config: ConfigTables, verbose: Opt[bool]=False ) -> ConfigTables:
     """
     Begin the data intake process to upload new source data to XNAT.
 
     Args:
         validated_login (XNATLogin): Validated login object.
         xnat_connection (XNATConnection): Established XNAT connection.
-        metatables (MetaTables): MetaTables object for managing table data.
+        config (ConfigTables): Psuedo database tables for cross-referencing and managing server data
         verbose (Optional[bool]): Whether to enable verbose output.
 
     Returns:
-        MetaTables: Updated MetaTables after data upload.
+        ConfigTables: Updated ConfigTables after data upload.
 
     Raises:
         ValueError: If the procedure type is not supported or if the intake form creation fails.
@@ -147,14 +141,14 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
             print( f"\t\tThe provided path either (1) does not exist or (2) does not contain a 'RECONSTRUCTED_OR_DATA_INTAKE_FORM' in it. Please try again." )
             form_pn = input( f"\n\tPlease enter the full path to the *parent folder* of the intake form:\t" )
         try:
-            intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, input_data=Path( form_pn ), verbose=verbose )
+            intake_form = ORDataIntakeForm( config=config, login=validated_login, input_data=Path( form_pn ), verbose=verbose )
             while True:
                 print( f'\n\tPlease review the created intake form:\n{intake_form}' )
                 print( f'\n\t--- Is everything correct?\n\t\t-- Please enter "1" for Yes or "2" for No (re-create the intake form).' )
                 accept_form = ORDataIntakeForm.prompt_until_valid_answer_given( 'Accept Intake Form As-Is', acceptable_options=['1', '2'] )
                 if accept_form == '2':
                     print( f'\n\tRe-doing the form...' )
-                    intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose ) #to-do: causes an error and the above try block fails.
+                    intake_form = ORDataIntakeForm( config=config, login=validated_login, verbose=verbose ) #to-do: causes an error and the above try block fails.
                 else:            break
         except KeyboardInterrupt:
             print( f'\n\n...User cancelled task via Ctrl+C...' )
@@ -162,7 +156,7 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
         except:                 raise ValueError( f"\t\tThe provided path did not lead to a successful intake form. Please try again, or contact the Data Librarian for help." )
     else: # Prompt user to create a new intake form; then print it to confirm
         while True:
-            intake_form = ORDataIntakeForm( metatables=metatables, login=validated_login, verbose=verbose )
+            intake_form = ORDataIntakeForm( config=config, login=validated_login, verbose=verbose )
             print( f'\n\tPlease review the created intake form:\n{intake_form}' )
             print( f'\n\tIs everything correct?\n\t\t-- Please enter "1" for Yes or "2" for No (re-create the intake form).' )
             accept_form = ORDataIntakeForm.prompt_until_valid_answer_given( 'Accept Intake Form As-Is', acceptable_options=['1', '2'] )
@@ -174,17 +168,16 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
     
     # Depending on the procedure type, create the appropriate source data object.
     if intake_form.ortho_procedure_type.upper() == 'ARTHROSCOPY':
-        source_data = SourceESVSession( intake_form=intake_form, metatables=metatables )
+        source_data = SourceESVSession( intake_form=intake_form, config=config )
     elif intake_form.ortho_procedure_type.upper() == 'TRAUMA':
         # raise ValueError( f"\tThe provided procedure type is not yet supported. Please contact the Data Librarian for help." )
-        # source_data = SourceRFSession( metatables=metatables, login=validated_login, verbose=verbose )
-        source_data = SourceRFSession( intake_form=intake_form, metatables=metatables )
+        source_data = SourceRFSession( intake_form=intake_form, config=config )
     else:                       raise ValueError( f"\tThe provided procedure type is not yet supported. This is a bug that should be reported to Data Librarian." )
     
     # Publish data to xnat
-    metatables = source_data.write_publish_catalog_subroutine( metatables=metatables, xnat_connection=xnat_connection, validated_login=validated_login, verbose=verbose, delete_zip=False )
+    config = source_data.write_publish_catalog_subroutine( config=config, xnat_connection=xnat_connection, validated_login=validated_login, verbose=verbose, delete_zip=False )
     if verbose: print( f'\n-----Concluding Upload Process-----\n' )
-    return metatables
+    return config
 
 
 # ---- Functions for querying and downloading data ----
@@ -232,7 +225,7 @@ def print_preview_of_xnat_data( pd_table: pd.DataFrame) -> None:
     print( f'{"---"*50}\n' )
 
 
-def download_queried_data( validated_login: XNATLogin, xnat_connection: XNATConnection, metatables: MetaTables, verbose: Opt[bool]=False ) -> None:
+def download_queried_data( validated_login: XNATLogin, xnat_connection: XNATConnection, config: ConfigTables, verbose: Opt[bool]=False ) -> None:
     # for the given project, prompt the user which subjects they want to query, then of those subjects, which of their data they want to download, then download it.
     print( f'\n-----Beginning data download process-----\n' )
 
@@ -336,9 +329,9 @@ def download_queried_data( validated_login: XNATLogin, xnat_connection: XNATConn
             #     elif ortho_procedure_type == '4':   ortho_procedure_type = 'Derived'.upper(); raise ValueError( f"\tThe provided procedure type is not yet supported. Please contact the Data Librarian for help." )
             #     elif ortho_procedure_type == '5':   ortho_procedure_type = 'All'.upper(); raise ValueError( f"\tThe provided procedure type is not yet supported. Please contact the Data Librarian for help." )
 
-            #     # acceptable_ortho_procedure_names = ORDataIntakeForm._construct_dict_of_ortho_procedure_names( metatables=metatabl es )
+            #     # acceptable_ortho_procedure_names = ORDataIntakeForm._construct_dict_of_ortho_procedure_names( config=metatabl es )
             #     # Separate items into arthroscopy and trauma items
-            #     items = metatables.list_of_all_items_in_table( table_name='Groups' )
+            #     items = config.list_of_all_items_in_table( table_name='Groups' )
             #     arthroscopy_items = [item for item in items if 'arthroscopy' in item.lower()]
             #     trauma_items = [item for item in items if 'arthroscopy' not in item.lower()]
 
@@ -366,7 +359,7 @@ def download_queried_data( validated_login: XNATLogin, xnat_connection: XNATConn
             print( f'\t...')
         
             # Get all subject instances w their labels and corresponding experiment labels.
-            proj_inst = xnat.select.project( metatables.xnat_project_name )
+            proj_inst = xnat.select.project( config.xnat_project_name )
             subj_labels = []
             for s in proj_inst.subjects().get():
                 subject_xml = proj_inst.subject(s).get().decode('utf-8')
@@ -429,15 +422,15 @@ def main():
     header_footer_print( header_or_footer='header' )
     username, password, verbose = parse_args()
     assert ask_user_to_confirm_that_they_are_on_the_uiowa_network(), 'You must be on the UIowa network to use this application.'
-    validated_login, xnat_connection, metatables = try_login_and_connection( username=username, password=password, verbose=verbose )
+    validated_login, xnat_connection, config = try_login_and_connection( username=username, password=password, verbose=verbose )
     assert validated_login.is_valid, 'The login credentials provided are not valid, please confirm your username and password; if the error persists, contact the Data Librarian.\n{validated_login}'
     try:
         while True:
             choice = prompt_function( verbose=verbose )
             if choice == '1':
-                metatables = upload_new_case( validated_login=validated_login, xnat_connection=xnat_connection, metatables=metatables, verbose=verbose )
+                config = upload_new_case( validated_login=validated_login, xnat_connection=xnat_connection, config=config, verbose=verbose )
             elif choice == '3':
-                download_queried_data( validated_login=validated_login, xnat_connection=xnat_connection, metatables=metatables, verbose=verbose ) 
+                download_queried_data( validated_login=validated_login, xnat_connection=xnat_connection, config=config, verbose=verbose ) 
             # # elif choice == 2:
             # #     function3()
             # else:

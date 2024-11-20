@@ -99,7 +99,7 @@ def test_virtual_env() -> bool:
     from matplotlib import pyplot as plt
 
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
-    from src.utilities import MetaTables, USCentralDateTime, XNATLogin, XNATConnection, ImageHash
+    from src.utilities import ConfigTables, USCentralDateTime, XNATLogin, XNATConnection, ImageHash
     from src.xnat_experiment_data import SourceRFSession, SourceESVSession
     from src.xnat_scan_data import SourceDicomDeIdentified, MTurkSemanticSegmentation, ArthroDiagnosticImage, ArthroVideo
     from src.xnat_resource_data import ORDataIntakeForm

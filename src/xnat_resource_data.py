@@ -115,7 +115,7 @@ class ORDataIntakeForm( ResourceFile ):
     """
 
     
-    def __init__( self, metatables: MetaTables, login: XNATLogin, input_data: Union[None, Path, pd.Series]=None, verbose: Opt[bool]=False, write_tmp_file: Opt[bool]=True ):
+    def __init__( self, metatables: MetaTables, login: XNATLogin, input_data: Union[None, Path, pd.Series]=None, verbose: Opt[bool]=False, write_file: Opt[bool]=True ):
         """
         Initialize the ORDataIntakeForm with given metatables, login credentials, and input data.
 
@@ -124,10 +124,10 @@ class ORDataIntakeForm( ResourceFile ):
             login (XNATLogin): Validated login object for XNAT.
             input_data (Union[None, Path, pd.Series], optional): Input data for the intake form. Defaults to None.
             verbose (Optional[bool], optional): Whether to enable verbose output. Defaults to False.
-            write_tmp_file (Optional[bool], optional): Whether to write a temporary file. Defaults to True.
+            write_file (Optional[bool], optional): Whether to write a digital (.json) file. Defaults to True.
         """
         super().__init__( metatables=metatables, login=login ) # Call the __init__ method of the base class -- bug:? goes all the way to our utility class and generates a uid.
-
+        # assert not isin
         # Init dict (and future json-formatted text file) with required keys.
         self._init_all_fields( metatables=metatables )
         
@@ -145,8 +145,7 @@ class ORDataIntakeForm( ResourceFile ):
         # Need to identify the save-to location for the json file; if successfully read from file, use that, else, use the generated uid.
         self._saved_ffn = metatables.tmp_data_dir / Path( self.uid ) / self.filename
         if not os.path.exists( self.saved_ffn.parent ):     os.makedirs( self.saved_ffn.parent )
-        if write_tmp_file:                                  self.construct_digital_file( verbose=verbose )
-        # self._create_text_file_reconstruction( verbose=verbose ) # commenting out bc we want it saved to a temp folder corresponding to this subject
+        if write_file:                          self.construct_digital_file( verbose=verbose )
 
 
     def _read_from_series( self, data_row: pd.Series, metatables: MetaTables, verbose: Opt[bool]=False ) -> None:
@@ -675,7 +674,11 @@ class ORDataIntakeForm( ResourceFile ):
             if verbose:     print( f'\t-- SUCCESS -- OR Data Intake Form saved to:\t{self.saved_ffn}\n' )
         
         # Copy the file to the inputted parent folder of the data.
+        # if the file exists already, save it with a different name
         dest_ffn = self.relevant_folder / self.filename
+        if os.path.exists( dest_ffn ):
+            if verbose:     print( f'\t-- WARNING -- File already exists in the destination folder. Saving with a different name (appending "-copy").' )
+            dest_ffn = self.relevant_folder / f'{self.filename.stem}-copy{self.filename.suffix}'
         shutil.copy( self.saved_ffn, dest_ffn )
 
 

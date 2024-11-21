@@ -110,7 +110,7 @@ class ExperimentData():
         return subj_inst, exp_inst, scan_inst
 
 
-    def write( self, config: ConfigTables, zip_dest: Opt[Path] = None, verbose: Opt[bool] = False ) -> Tuple[dict, ConfigTables]:   raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
+    def write( self, config: ConfigTables, zip_dest: Opt[Path] = None, verbose: Opt[bool]=True ) -> Tuple[dict, ConfigTables]:   raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
     
 
     def publish_to_xnat( self, xnat_connection: XNATConnection, validated_login: XNATLogin, zipped_data: dict, delete_zip: Opt[bool] = True, verbose: Opt[bool] = False ) -> None:
@@ -230,9 +230,15 @@ class SourceRFSession( ExperimentData ):
     - config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
 
     Attributes:
-    intake_form (ORDataIntakeForm): digitized json-formatted form detailing the surgical data to be uploaded to XNAT. This is also uploaded.
-    tmp_source_data_dir (Path): local tmp directory in which all source data is temporarily stored before being pushed to XNAT.
     df (pd.DataFrame): dataframe containing all relevant data for the experiment session, e.g., a fluorosequence of 15 images will have 15 rows in df.
+    - Columns in the dataframe:
+        - 'FN' (str): file name of the dicom file.
+        - 'EXT' (str): file extension of the dicom file.
+        - 'NEW_FN' (str): new file name of the dicom file after metadata standardization.
+        - 'OBJECT' (object): SourceDicomDeIdentified object representing the dicom file.
+        - 'IS_VALID' (bool): flag indicating whether the file is in a (valid) dicom-readable format and *does not already exist in the image hash table (i.e., on XNAT)*.
+        - 'IS_QUESTIONABLE' (bool): flag indicating whether the file is possibly a duplicate within-case, based on image hash strings.
+    
     is_valid (bool): flag indicating whether the experiment session is valid and can be pushed to XNAT.
     schema_prefix_str (str): string prefix for the schema type of the experiment session, e.g., 'rf' for radio fluoroscopic data.
     scan_type_label (str): string label for the type of scan data, e.g., 'DICOM' for radio fluoroscopic data.
@@ -365,12 +371,12 @@ class SourceRFSession( ExperimentData ):
         else:
             return f' -- {self.__class__.__name__} --\nUID:\t{None}\nAcquisition Site:\t{intake_form.acquisition_site}\nGroup:\t\t\t{intake_form.group}\nDate-Time:\t\t{None}\nValid:\t\t\t{valid_str}\nQuestionable:\t\t{questionable_str}\n{df.head()}\n...\n{df.tail()}'
 
-    def write( self, config: ConfigTables, verbose: Opt[bool] = False ) -> Tuple[dict, ConfigTables]:
+    def write( self, config: ConfigTables, verbose: Opt[bool]=True ) -> Tuple[dict, ConfigTables]:
         """
         Writes the SourceRFSession to a zipped folder in a temporary local directory, which can then be pushed to XNAT.
         Inputs:
         - config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
-        - verbose (bool): flag indicating whether to print intermediate steps to the console.
+        - verbose (bool): flag indicating whether to print intermediate steps to the console. Default=True
 
         Outputs:
         - zipped_data (dict): dictionary containing the path to the zipped folder of source data.
@@ -382,33 +388,41 @@ class SourceRFSession( ExperimentData ):
         assert self.is_valid, f"Session is invalid; could be for several reasons. try evaluating whether all of the image hash_strings already exist in the matatable."
         
         # (Try to) Add the subject to the config
-        config.add_new_item( table_name='SUBJECTS', item_name=self.intake_form.uid, item_uid=self.intake_form.uid, verbose=verbose,
-                                extra_columns_values={ 'ACQUISITION_SITE': config.get_uid( table_name='ACQUISITION_SITES', item_name=self.intake_form.acquisition_site ),
-                                                      'GROUP': config.get_uid( table_name='GROUPS', item_name=self.intake_form.group ) }
-                                )
+        if verbose:     print( f'\t...Validating subject uniqueness...' )
+        success, msg = config.add_new_item( table_name='SUBJECTS', item_name=self.intake_form.uid, item_uid=self.intake_form.uid, verbose=verbose,
+                                            extra_columns_values={ 'ACQUISITION_SITE': config.get_uid( table_name='ACQUISITION_SITES', item_name=self.intake_form.acquisition_site ),
+                                                                'GROUP': config.get_uid( table_name='GROUPS', item_name=self.intake_form.group ) }
+                                         )
+        if verbose:    print( ) # empty new line
+        assert success, f"According to the config data, subject has already been uploaded to XNAT; error given:\n\t{msg}"
+
+        # Lets fail this case if any of the images are already in the imagehash table
+        invalid_rows = self.df[self.df['IS_VALID'] == False]
+        assert invalid_rows.empty, f"Session contains invalid images; check the following problematic rows:\n{invalid_rows}"
 
         # Zip the mp4 and dicom data to separate folders
         zipped_data, home_dir = {}, self.tmp_source_data_dir
-        num_dicom = 0
+        num_dicom, num_successes = 0, 0
+        if verbose:    print( f'\t...Validating dicom files and writing to temporary directory for zipping...' )
         with tempfile.TemporaryDirectory( dir=home_dir ) as dcm_temp_dir:
             for idx in range( len( self.df ) ): # Iterate through each row in the DataFrame, writing each to a temp directory before we zip it up and delete the unzipped folder.
                 # if self.df.loc[idx, 'IS_VALID']:
-                if verbose:     print( f'\t...Writing image from \'{self.df.loc[idx, "FN"]}\' ({idx+1}/{len(self.df)}) to temporary directory...')
+                if verbose:     print( f'\t...Validating image from \'{self.df.loc[idx, "FN"]}\' ({idx+1}/{len(self.df)})...' )
                 file_obj_rep = self.df.loc[idx, 'OBJECT']
                 assert isinstance( file_obj_rep, SourceDicomDeIdentified ), f"Object representation of file at index {idx} is {type( file_obj_rep )}, which is not a valid SourceDicomDeIdentified object."
                 dcmwrite( os.path.join( dcm_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) ), file_obj_rep.metadata )          # type: ignore
                 tmp = { 'SUBJECT': config.get_uid( table_name='SUBJECTS', item_name=self.intake_form.uid ), 'INSTANCE_NUM': self.df.loc[idx, 'NEW_FN'] }
-                config.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, item_uid=file_obj_rep.uid, # type: ignore
-                                        extra_columns_values = tmp, verbose=verbose
-                                        )
+                success, msg = config.add_new_item( table_name='IMAGE_HASHES', item_name=file_obj_rep.image.hash_str, item_uid=file_obj_rep.uid, # type: ignore
+                                                    extra_columns_values = tmp, verbose=verbose
+                                                  )
                 num_dicom += 1
+                if success:     num_successes += 1
                 
             # Zip these temporary directories into a slightly-less-temporary directory.
             dcm_zip_path = os.path.join( home_dir, "dicom_files.zip" )
             dcm_zip_full_path = shutil.make_archive( dcm_zip_path[:-4], 'zip', dcm_temp_dir )
             zipped_data[dcm_zip_full_path] = { 'CONTENT': 'IMAGE', 'FORMAT': 'DICOM', 'TAG': 'INTRA_OP' }
-
-        if verbose:     print( f'\t...Zipped folder(s) of {num_dicom} dicom files successfully written to:\n\t\t{dcm_zip_full_path}' )
+        if verbose:     print( f'\n\tZipping complete! --- Zipped folder(s) of ({num_successes}/{num_dicom}) dicom files successfully written to:\n\t\t{dcm_zip_full_path}' )
         return zipped_data, config
 
 
@@ -528,12 +542,12 @@ class SourceESVSession( ExperimentData ):
         self._is_valid = True if self.df['IS_VALID'].any() and not config.item_exists( table_name='SUBJECTS', item_name=self.intake_form.uid ) else False
 
 
-    def write( self, config: ConfigTables, verbose: Opt[bool] = False ) -> Tuple[dict, ConfigTables]:
+    def write( self, config: ConfigTables, verbose: Opt[bool]=True ) -> Tuple[dict, ConfigTables]:
         """
         Writes the SourceESVSession to a zipped folder in a temporary local directory, which can then be pushed to XNAT.
         Inputs:
         - config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
-        - verbose (bool): flag indicating whether to print intermediate steps to the console.
+        - verbose (bool): flag indicating whether to print intermediate steps to the console. Default=True.
 
         Outputs:
         - zipped_data (dict): dictionary containing the path to the zipped folder of source data.
@@ -548,7 +562,7 @@ class SourceESVSession( ExperimentData ):
         config.add_new_item( table_name='SUBJECTS', item_name=self.intake_form.uid, item_uid=self.intake_form.uid, verbose=verbose,
                                 extra_columns_values={ 'ACQUISITION_SITE': config.get_uid( table_name='ACQUISITION_SITES', item_name=self.intake_form.acquisition_site ),
                                                       'GROUP': config.get_uid( table_name='GROUPS', item_name=self.intake_form.group ) }
-                                )
+                            )
 
         # Zip the mp4 and dicom data to separate folders
         zipped_data, home_dir = {}, self.tmp_source_data_dir
@@ -559,7 +573,7 @@ class SourceESVSession( ExperimentData ):
                 # if self.df.loc[idx, 'IS_VALID']:
                 file_obj_rep = self.df.loc[idx, 'OBJECT'] # removing this if statement because thats what we do in rfsession since we changed the isvalid-isdicom data
                 if verbose:     print( f'\t...Writing image from \'{self.df.loc[idx, "FN"]}\' ({idx+1}/{len(self.df)}) to temporary directory...')
-                assert isinstance( file_obj_rep, (ArthroDiagnosticImage, ArthroVideo) ), f"Object representation of file at index {idx} is {type( file_obj_rep )}, which is neither an ArthroDiagnosticImage nor an ArthroVideo object."
+                assert isinstance( file_obj_rep, ( ArthroDiagnosticImage, ArthroVideo ) ), f"Object representation of file at index {idx} is {type( file_obj_rep )}, which is neither an ArthroDiagnosticImage nor an ArthroVideo object."
                 if isinstance( file_obj_rep, ArthroDiagnosticImage ):
                     dcmwrite( os.path.join( dcm_temp_dir, str( self.df.loc[idx, 'NEW_FN'] ) ), file_obj_rep.metadata )          # type: ignore
                     tmp = { 'SUBJECT': config.get_uid( table_name='SUBJECTS', item_name=self.intake_form.uid ), 'INSTANCE_NUM': self.df.loc[idx, 'NEW_FN'] }

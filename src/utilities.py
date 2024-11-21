@@ -48,6 +48,7 @@ class _local_variables:
         acceptable_img_dtypes (list): A list of acceptable image data types.
         required_img_size_for_hashing (tuple): The required image size for hashing.
         mturk_batch_col_names (list): A list of MTurk batch column names.
+        required_mass_upload_columns (dict): A dictionary of required columns mass upload processing.
     """
     def __init__( self ):
         """
@@ -109,6 +110,34 @@ class _local_variables:
                                                 'RequesterFeedback', 'WorkTimeInSeconds', 'LifetimeApprovalRate',
                                                 'Last30DaysApprovalRate', 'Last7DaysApprovalRate', 'Input.image_url',
                                                 'Approve','Reject'],
+                        'required_mass_upload_columns' : {  "Filer HawkID": "Required; must be registered with this library",
+                                                            "Operation Date": "Required; EPIC Operation Date",
+                                                            "Quality": "Optional; [Unknown, Questionable, Unusuable, Usable]",
+                                                            "Institution Name": "Required; Source of the data, must be registered with this library",
+                                                            "Procedure Name": "Required; must be registered  with this library",
+                                                            "Epic Start Time": "Required; Official time on EPIC for the start time of the operation",
+                                                            "Epic End Time": "Optional",
+                                                            "Side of Patient Body": "Optional; [Unknown, Left, Right]",
+                                                            "OR Room Name/Location": "Optional",
+                                                            "Supervising Surgeon HawkID": "Optional",
+                                                            "Supervising Surgeon Presence": "Conditional; when HawkID is provided",
+                                                            "Performing Surgeon HawkID": "Required",
+                                                            "Performing Surgeon # Years Experience": "Optional; e.g., year in residency",
+                                                            "Performing Surgeon # Prior Cases": "Optional; number of prior similar cases logged",
+                                                            "# of Participating Performing Surgeons": "Optional",
+                                                            "Performer HawkID-Task": "Conditional; if # of participating surgeons is > 1",
+                                                            "Unusual Features": "Optional; Noted by observer",
+                                                            "Diagnostic Notes": "Optional; Noted by observer",
+                                                            "Additional Comments": "Optional; Noted by observer",
+                                                            "Skills Assessment Requested": "Required; [Y, N, Unknown]",
+                                                            "Assessor HawkID": "Required only if assessment requested",
+                                                            "Additional Assessment Details": "Conditional; only if assessment requested",
+                                                            "Name/Type of Storage Device": "Optional; eg., 'USB-A'",
+                                                            "Full Path to Data": "Required; local path of data used when uploading",
+                                                            "Was Radiology Contacted": "Optional; [Y, N, Unknown]",
+                                                            "Radiology Contact Date": "Optional",
+                                                            "Radiology Contact Time": "Optional"
+                                                        },
                         'redacted_string': redacted_string
                         }
         # local_vars.template_img_hash = ImageHash( local_vars.template_img_dir ).hashed_img

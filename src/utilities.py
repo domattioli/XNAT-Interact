@@ -200,8 +200,8 @@ class UIDandMetaInfo:
     def redacted_string( self )                 -> str:                 return self.local_variables.redacted_string
     @property
     def data_librarian( self )                  -> str:                 return self.local_variables.data_librarian
-
-
+    @property
+    def required_mass_upload_columns( self )    -> dict:                return self.local_variables.required_mass_upload_columns
     @property
     def now_datetime( self )                    -> str:                 return datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
     

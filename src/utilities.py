@@ -722,32 +722,33 @@ class ConfigTables( UIDandMetaInfo ):
         if verbose:                     print( f'\tSUCCESS! --- Added new "{table_name}" table.\n' )
 
 
-    def add_new_item( self, table_name: str, item_name: str, item_uid: Opt[str] = None, extra_columns_values: Opt[typehintDict[str, str]] = None, verbose: Opt[bool] = False ) -> None:
+    def add_new_item( self, table_name: str, item_name: str, item_uid: Opt[str] = None, extra_columns_values: Opt[typehintDict[str, str]] = None, verbose: Opt[bool] = False ) -> Tuple[bool, str]:
+        table_name, item_name = table_name.upper(), item_name.upper()
         assert self.is_user_registered(), f"User '{self.accessor_username}' must first be registed before adding new items."
-        table_name, item_name = table_name.upper(), item_name.upper(),
         assert self.table_exists( table_name ), f"Cannot add item '{item_name}' to table '{table_name}' because that table does not yet exist.\n\tTry creating the new table before adding '{item_name}' as a new item."
-        assert not self.item_exists( table_name, item_name ), f'Cannot add item "{item_name}" to Table "{table_name}" because it already exists.'
-        
-        # Ensure all provided extra column names exist in the table, considering case-insensitivity
-        if extra_columns_values:            extra_columns_values = {k.upper(): v for k, v in extra_columns_values.items()}
-        table_columns_upper = [col.upper() for col in self.tables[table_name].columns]
-        assert extra_columns_values is None or all( k in table_columns_upper for k in extra_columns_values.keys()), f"Provided extra column names '{extra_columns_values.keys()}' must exist in table '{table_name}'"
+        if self.item_exists( table_name, item_name ):
+            success, out_str = False, f'\tWARNING! --- Cannot add item "{item_name}" because it already exists in Table "{table_name}".'
+        else:   # Ensure all provided extra column names exist in the table, considering case-insensitivity
+            if extra_columns_values:    extra_columns_values = {k.upper(): v for k, v in extra_columns_values.items()}
+            table_columns_upper = [col.upper() for col in self.tables[table_name].columns]
+            assert extra_columns_values is None or all( k in table_columns_upper for k in extra_columns_values.keys()), f"Provided extra column names '{extra_columns_values.keys()}' must exist in table '{table_name}'"
 
-        if item_uid is None:
-            new_item_uid = self.generate_uid()
-        else:
-            assert self.is_valid_pydcom_uid( item_uid ), f"Provided uid '{item_uid}' is not a valid dicom UID."
-            new_item_uid = item_uid
-        if extra_columns_values: # convert keys to uppercase, make sure all inputted keys were defined when the table was added as new.
-            # Add the new row to the table, using the default columns and the extra columns
-            new_data = pd.DataFrame( [ [item_name, new_item_uid, self.now_datetime, self.accessor_uid] + list( extra_columns_values.values() ) ], columns=self.tables[table_name].columns)
-        else: # No inserted data for extra columns
-            new_data = pd.DataFrame( [ [item_name, new_item_uid, self.now_datetime, self.accessor_uid] ], columns=self.tables[table_name].columns )
+            # Create a uid for the item if one was not provided already.
+            if item_uid is None:        new_item_uid = self.generate_uid()
+            else:
+                assert self.is_valid_pydcom_uid( item_uid ), f"Provided uid '{item_uid}' is not a valid dicom UID."
+                new_item_uid = item_uid
 
-        self._tables[table_name] = pd.concat( [self.tables[table_name], new_data], ignore_index=True )
-        self._update_metadata()
-        if verbose:                     print( f'\tSUCCESS! --- Added "{item_name}" to table "{table_name}".\n' )
-
+            # Add the new row to the table, using the default columns and the extra columns if provided
+            if extra_columns_values:    new_data = pd.DataFrame( [ [item_name, new_item_uid, self.now_datetime, self.accessor_uid] + list( extra_columns_values.values() ) ], columns=self.tables[table_name].columns)
+            else:                       new_data = pd.DataFrame( [ [item_name, new_item_uid, self.now_datetime, self.accessor_uid] ], columns=self.tables[table_name].columns )
+            
+            self._tables[table_name] = pd.concat( [self.tables[table_name], new_data], ignore_index=True )
+            self._update_metadata()
+            success, out_str = True, f'\tSUCCESS! --- Added "{item_name}" to table "{table_name}".'
+        if verbose:                     print( out_str )
+        return success, out_str
+    
 
     def get_uid( self, table_name: str, item_name: str ) -> str:
         table_name, item_name = table_name.upper(), item_name.upper()

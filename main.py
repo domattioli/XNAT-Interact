@@ -27,7 +27,7 @@ def parse_args() -> Tuple[str, str, bool]:
     parser = argparse.ArgumentParser(description='XNAT Login and Connection')
     parser.add_argument('--username', type=str, default=None, help='XNAT username')
     parser.add_argument('--password', type=str, default=None, help='XNAT password')
-    parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
+    parser.add_argument('--verbose', action='store_true', default=True, help='Enable verbose output')
     args = parser.parse_args()
     if args.verbose:    print( f"~~Verbosity turned on~~\n" )
     else:               print( f"~~Verbosity turned off~~\n" )

@@ -306,9 +306,11 @@ class XNATConnection( UIDandMetaInfo ):
     - get_user: A string representing the validated username.
     - get_password: A string representing the validated password.
     
+    ***Troubleshooting/problems encountered:
+    1. Each time I changed my password on myUI, remotely accessing XNAT with the new password will not work until you login to the XNAT server through the web interface with your new login info!
 
     # Example usage:
-    my_login_info = {'URL': 'https://rpacs.iibi.uiowa.edu/xnat/', 'USERNAME': '...', 'PASSWORD': '...'}
+    my_login_info = {"URL": "https://rpacs.iibi.uiowa.edu/xnat/", "USERNAME": "...", "PASSWORD": "..."}
     my_login = XNATLogin( login_info )
     my_connection = XNATConnection( my_login, my ) 
     print( my_connection )
@@ -325,9 +327,9 @@ class XNATConnection( UIDandMetaInfo ):
     def __init__( self, login_info: XNATLogin, stay_connected: bool = False, verbose: Opt[bool] = False ):
         assert login_info.is_valid, f"Provided login info must be validated before accessing xnat server: {login_info}"
         super().__init__()  # Call the __init__ method of the base clas
-        self._login_info, self._project_handle, self._is_verified, self._is_open, self._failed_tests = login_info, None, False, stay_connected, []
+        self._login_info, self._project_handle, self._is_verified, self._is_open, self._failed_tests = login_info, None, False, stay_connected, {}
         self._verify_login()
-        if not stay_connected or not self.is_verified:
+        if self.is_verified and not stay_connected: # Disconnect from the project instance connection if we successfully connected.
             self.server.disconnect()
             self._open = False
         if verbose:                         print( self )
@@ -350,22 +352,43 @@ class XNATConnection( UIDandMetaInfo ):
     @property
     def get_password( self )        -> Opt[str]:        return self.login_info.validated_password
     @property
-    def failed_tests( self )        -> typehintList[str]:   return self._failed_tests
+    def failed_tests( self )        -> dict:            return self._failed_tests
 
 
     def _verify_login( self ):
+        '''Explanation of tests:
+            1.  Project Handle is None: If the project handle is None, the connection is invalid. Check project url, username, password, and registered users.
+            2.  Project Handle label does not match xnat_project_name: If the project handle label does not match the xnat project name, the connection is invalid.
+            3.  User is None: If the user is None, the connection is invalid.
+            4.  User is not added to project (XNAT-side): If the user is not added to the project on the XNAT side, the connection is invalid.
+        '''
         self._server = self._establish_connection()
         self._grab_project_handle() # If more tests in the future, separate as its own function.
-        if self.project_handle is None:                 self._failed_tests.append( 'Project Handle is None' )
-        if self.get_user is None:                       self._failed_tests.append( 'User is None' )
+        self._is_verified = False
+        if self.project_handle is None:
+            self._failed_tests['Project Handle is None'] = True
+            return
+        else:
+            self._failed_tests['Project Handle is None'] = False
         if self.project_handle and self.project_handle.label() != self.xnat_project_name:
-            self._failed_tests.append( 'Project Handle label does not match xnat_project_name' )
+            self._failed_tests['Project Handle label does not match xnat_project_name'] = True
+            return
+        else:
+            self._failed_tests['Project Handle label does not match xnat_project_name'] = False
+        if self.get_user is None:
+            self._failed_tests['User is None'] = True
+            return
+        else:
+            self._failed_tests['User is None'] = False
         username = self.get_user.lower()                # type: ignore 
+        self._failed_tests['User is not added to project (XNAT-side)'] = False
         if username not in [u.lower() for u in self.project_handle.users()]:
-            if username != self.data_librarian.lower(): # this is a quirk specific to domattioli (i'm the only one who's username is not his hawkid. Might be a problem for others in the future is they somehow do what i did).
-                self._failed_tests.append( 'User is not added to project (XNAT-side)' )
-        if len( self._failed_tests ) == 0:              self._is_verified = True
-        else:                                           self._is_verified = False
+            if username != self.data_librarian.lower(): # this is a quirk specific to domattioli (i'm the only one who's username is not his hawkid (idk how this happened). Might be a problem for others in the future is they somehow do what i did).
+                self._failed_tests['User is not added to project (XNAT-side)'] = True
+                return
+            
+        # if all tests pass, set is_verified to True
+        self._is_verified = True
 
 
     def _establish_connection( self ) -> Interface:     return Interface( server=self.xnat_project_url, user=self.get_user, password=self.get_password )
@@ -443,9 +466,9 @@ class ConfigTables( UIDandMetaInfo ):
     # mt.save()
     '''
     def __init__( self, login_info: XNATLogin, xnat_connection: XNATConnection, verbose: Opt[bool] = False ):
-        assert login_info.is_valid, f"Provided login_info must be validated before accessing ConfigTables: {login_info}"
-        assert xnat_connection.is_open, f"Provided xnat_connection must be open before accessing ConfigTables: {xnat_connection}"
-        assert xnat_connection.is_verified, f'Provided xnat_connection must be verified before accessing ConfigTables: {xnat_connection}'
+        assert login_info.is_valid, f"Cannot access CongifTables without valid login_info. You provided the following login information:\n{login_info}"
+        assert xnat_connection.is_open, f"Cannot access ConfigTables without an open connection to the XNAT server. Your xnat_connection data is:\n{xnat_connection}"
+        assert xnat_connection.is_verified, f"Cannot access ConfigTables without a verified connection to the XNAT server. Your xnat_connection data is:\n{xnat_connection}"
         
         super().__init__()  # Call the __init__ method of the base class to ensure that we inherit all those local variables
         self._login_info, self._xnat_connection = login_info, xnat_connection

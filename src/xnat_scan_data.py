@@ -102,7 +102,7 @@ class ScanFile( UIDandMetaInfo ):
 
 
 #--------------------------------------------------------------------------------------------------------------------------
-## Class(es) for arthro files files
+## Class(es) for arthro images files
 class ArthroDiagnosticImage( ScanFile ):
     '''
     Class representing the XNAT Scan for Arthroscopic Diagnostic Images. Inherits from ScanFile.
@@ -175,6 +175,7 @@ class ArthroDiagnosticImage( ScanFile ):
 
 
 #--------------------------------------------------------------------------------------------------------------------------
+## Class(es) for arthro videos
 class ArthroVideo( ScanFile ):
     '''
     Class representing the XNAT Scan for Arthroscopic Videos. Inherits from ScanFile.

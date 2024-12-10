@@ -48,11 +48,11 @@ def import_all_necessary_modules() -> None:
     import warnings
 
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
-    from src.utilities import ConfigTables, USCentralDateTime, XNATLogin, XNATConnection, ImageHash, UIDandMetaInfo, MassUploadRepresentation
-    from src.xnat_experiment_data import SourceRFSession, SourceESVSession
-    from src.xnat_scan_data import SourceDicomDeIdentified, MTurkSemanticSegmentation, ArthroDiagnosticImage, ArthroVideo
-    from src.xnat_resource_data import ORDataIntakeForm
-
+    
+    # from src.utilities import ConfigTables, USCentralDateTime, XNATLogin, XNATConnection, ImageHash, UIDandMetaInfo, MassUploadRepresentation
+    # from src.xnat_experiment_data import SourceRFSession, SourceESVSession
+    # from src.xnat_scan_data import SourceDicomDeIdentified, MTurkSemanticSegmentation, ArthroDiagnosticImage, ArthroVideo
+    # from src.xnat_resource_data import ORDataIntakeForm
 
 def main() -> None:
     """

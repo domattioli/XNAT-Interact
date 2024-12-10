@@ -258,7 +258,7 @@ class XNATLogin( UIDandMetaInfo ):
         print( test2 )
     '''
 
-    def __init__( self, input_info: dict, verbose: Opt[bool] = False ):
+    def __init__( self, input_info: dict, verbose: Opt[bool] = True ):
         super().__init__()  # Call the __init__ method of the base class
         self._validated_username, self._validated_password = '', '', 
         self._is_valid, self._user_role = False, '' # user_role will be implemented in the future -- pull it from the xnat server if possible (e.g. member, owner, collaborator).
@@ -328,7 +328,7 @@ class XNATConnection( UIDandMetaInfo ):
         cls._instance = super( XNATConnection, cls ).__new__( cls )
         return cls._instance
 
-    def __init__( self, login_info: XNATLogin, stay_connected: bool = False, verbose: Opt[bool] = False ):
+    def __init__( self, login_info: XNATLogin, stay_connected: bool = False, verbose: Opt[bool] = True ):
         assert login_info.is_valid, f"Provided login info must be validated before accessing xnat server: {login_info}"
         super().__init__()  # Call the __init__ method of the base clas
         self._login_info, self._project_handle, self._is_verified, self._is_open, self._failed_tests = login_info, None, False, stay_connected, {}
@@ -426,8 +426,7 @@ class XNATConnection( UIDandMetaInfo ):
         data_librarian = self.data_librarian.lower()
         if self.is_verified:    return (f"-- XNAT Connection --\n\tStatus:\t\t{'Open' if self.is_open else 'Closed'}\n\tUsername:\t{self.get_user}\n\tVerified:\t{self.is_verified}\n\tProject:\t{self.project_handle}\n\tLibrarian:\t{data_librarian}\n\tApproved Users:\t{project_users}" )
         else:                   return (f"-- XNAT Connection --\n\tStatus:\t\t{'Open' if self.is_open else 'Closed'}\n\tUsername:\t{self.get_user}\n\tVerified:\t{self.is_verified}\n\tFailed Tests:\t{self.failed_tests}\n\tProject:\t{self.project_handle}\n\tLibrarian:\t{data_librarian}\n\tApproved Users:\t{project_users}" )
-        
-    
+          
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for cataloging all seen data and user info.
@@ -469,7 +468,7 @@ class ConfigTables( UIDandMetaInfo ):
     mt.add_new_item( table_name='hello', item_name='world' )
     # mt.save()
     '''
-    def __init__( self, login_info: XNATLogin, xnat_connection: XNATConnection, verbose: Opt[bool] = False ):
+    def __init__( self, login_info: XNATLogin, xnat_connection: XNATConnection, verbose: Opt[bool] = True ):
         assert login_info.is_valid, f"Cannot access CongifTables without valid login_info. You provided the following login information:\n{login_info}"
         assert xnat_connection.is_open, f"Cannot access ConfigTables without an open connection to the XNAT server. Your xnat_connection data is:\n{xnat_connection}"
         assert xnat_connection.is_verified, f"Cannot access ConfigTables without a verified connection to the XNAT server. Your xnat_connection data is:\n{xnat_connection}"
@@ -478,11 +477,11 @@ class ConfigTables( UIDandMetaInfo ):
         self._login_info, self._xnat_connection = login_info, xnat_connection
         
         try: # Need to try to pull it from the xnat server if it exists, otherwise create it from scratch.
-            self.pull_from_xnat( verbose=False )
+            self.pull_from_xnat( verbose=verbose )
         except: # This should only ever happen one time -- when the XNAT database is first created.
             self._instantiate_json_file()
             self._initialize_tables()
-            self.push_to_xnat( verbose=False )
+            self.push_to_xnat( verbose=verbose )
         if verbose:                         print( self )
             
 
@@ -627,7 +626,7 @@ class ConfigTables( UIDandMetaInfo ):
         self.add_new_item( 'registered_users', 'ezwilliams' )
 
 
-    def _load( self, local_meta_tables_ffn: Opt[Path], verbose: Opt[bool] = False ) -> None:
+    def _load( self, local_meta_tables_ffn: Opt[Path], verbose: Opt[bool] = True ) -> None:
         assert self.login_info.is_valid, f"Provided login info must be validated before loading ConfigTables: {self.login_info}"
         if local_meta_tables_ffn is None:   load_ffn = self.config_ffn
         else:
@@ -674,7 +673,7 @@ class ConfigTables( UIDandMetaInfo ):
 
 
     #==========================================================PUBLIC METHODS==========================================================
-    def pull_from_xnat( self, write_ffn: Opt[Path]=None, verbose: Opt[bool] = False ) -> Opt[Path]:
+    def pull_from_xnat( self, write_ffn: Opt[Path]=None, verbose: Opt[bool] = True ) -> Opt[Path]:
         if write_ffn is None:   write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( self.config_ffn )
         else:
             assert isinstance( write_ffn, Path ), f"Provided write file path must be a valid Path object: {write_ffn}"
@@ -697,14 +696,14 @@ class ConfigTables( UIDandMetaInfo ):
         pass
 
 
-    def push_to_xnat( self, verbose: Opt[bool] = False ) -> None:
+    def push_to_xnat( self, verbose: Opt[bool] = True ) -> None:
         self.ensure_primary_keys_validity()
         self.save( verbose )
         self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
-        if verbose is True:             print( f'\t...ConfigTables (config.json) successfully updated on XNAT!\n' )
+        if verbose:                     print( f'\t...ConfigTables (config.json) successfully updated on XNAT!\n' )
 
 
-    def save( self, verbose: Opt[bool] = False ) -> None: # Convert all tables to JSON; Write the data to the file
+    def save( self, verbose: Opt[bool] = True ) -> None: # Convert all tables to JSON; Write the data to the file
         '''Only saves locally. To save to the server, all the 'catalog_new_data' method(s) in the experiment class(es) must be called.'''
         self._validate_login_for_important_functions( assert_librarian=False ) # To-do: is this necessary if the user musts create a valid xnat connection first (which should check the same thing)?
         tables_json = {name: df.to_dict( 'records' ) for name, df in self.tables.items()}
@@ -730,7 +729,7 @@ class ConfigTables( UIDandMetaInfo ):
         return user_name.upper() in self.tables['REGISTERED_USERS']['NAME'].values
 
 
-    def register_new_user( self, user_name: str, verbose: Opt[bool] = False ):
+    def register_new_user( self, user_name: str, verbose: Opt[bool] = True ):
         self._validate_login_for_important_functions( assert_librarian=True )   
         if not self.is_user_registered( user_name ):
             self.add_new_item( 'REGISTERED_USERS', user_name )
@@ -764,7 +763,7 @@ class ConfigTables( UIDandMetaInfo ):
         return not self.tables[table_name.upper()].empty and item_name.upper() in self.tables[table_name.upper()].values
 
 
-    def add_new_table( self, table_name: str, extra_column_names: Opt[typehintList[str]] = None, verbose: Opt[bool] = False ) -> None:
+    def add_new_table( self, table_name: str, extra_column_names: Opt[typehintList[str]] = None, verbose: Opt[bool] = True ) -> None:
         assert self.is_user_registered(), f"User '{self.accessor_username}' must first be registed before adding new items."
         table_name = table_name.upper()
         assert not self.table_exists( table_name ), f'Cannot add table "{table_name}" because it already exists.'
@@ -778,7 +777,7 @@ class ConfigTables( UIDandMetaInfo ):
         if verbose:                     print( f'\tSUCCESS! --- Added new "{table_name}" table.\n' )
 
 
-    def add_new_item( self, table_name: str, item_name: str, item_uid: Opt[str] = None, extra_columns_values: Opt[typehintDict[str, str]] = None, verbose: Opt[bool] = False ) -> Tuple[bool, str]:
+    def add_new_item( self, table_name: str, item_name: str, item_uid: Opt[str] = None, extra_columns_values: Opt[typehintDict[str, str]] = None, verbose: Opt[bool] = True ) -> Tuple[bool, str]:
         table_name, item_name = table_name.upper(), item_name.upper()
         assert self.is_user_registered(), f"User '{self.accessor_username}' must first be registed before adding new items."
         assert self.table_exists( table_name ), f"Cannot add item '{item_name}' to table '{table_name}' because that table does not yet exist.\n\tTry creating the new table before adding '{item_name}' as a new item."
@@ -999,14 +998,14 @@ class ImageHash( UIDandMetaInfo ):
 #--------------------------------------------------------------------------------------------------------------------------
 # Class for representing an imported batch upload spreadsheet.
 class MassUploadRepresentation( UIDandMetaInfo ):
-    def __init__( self, xls_ffn: Path, config: ConfigTables, verbose: bool = False ):
+    def __init__( self, xls_ffn: Path, config: ConfigTables, verbose: bool = True ):
         assert isinstance( xls_ffn, Path ), f"Inputted 'xls_ffn' must be a {type( Path() )} object; you provided a '{type( xls_ffn )}' object."
         assert xls_ffn.exists(), f"Inputted 'xls_ffn' path does not exist; you entered:\n\t'{xls_ffn}'"
         super().__init__()  # Call the __init__ method of the base class
         self._ffn, self._config = xls_ffn, config
         self._import_data_and_process_columns()
         self._process_mass_upload_data()
-        if verbose:                     print( self )
+        if verbose:                     self.print_rows( rows='all' )
     
     @property
     def ffn( self ) -> Path:                    return self._ffn
@@ -1063,9 +1062,9 @@ class MassUploadRepresentation( UIDandMetaInfo ):
                 self._warnings.at[idx, 'Operation Date'] = f"'Operation Date' ('{row['Operation Date']}') is before January 1, 2000; make sure this is intentional."
         if self._col_is_empty( row['Epic Start Time'] ):
             self._errors.at[idx, 'Epic Start Time'] = "'Epic Start Time' cannot be blank or empty."
-        if not self._col_is_empty( row['Institution Name'] ) or row['Institution Name'].lower() not in tag_info['institutions']:
+        if self._col_is_empty( row['Institution Name'] ) or row['Institution Name'].lower() not in tag_info['institutions']:
             self._errors.at[idx, 'Institution Name'] = f"'Institution Name' ('{row['Institution Name']}') not registered in the 'Acquisition_Sites' config table."
-        if not self._col_is_empty( row['Procedure Name'] ) or row['Procedure Name'].lower() not in tag_info['procedure_names']:
+        if self._col_is_empty( row['Procedure Name'] ) or row['Procedure Name'].lower() not in tag_info['procedure_names']:
             self._errors.at[idx, 'Procedure Name'] = f"'Procedure Name' ('{row['Procedure Name']}') not registered in the 'Groups' config table."
         if self._col_is_empty( row['Name/ Type of Storage Device'] ):
             self._errors.at[idx, 'Name/ Type of Storage Device'] = "'Name/ Type of Storage Device' cannot be blank."
@@ -1077,59 +1076,63 @@ class MassUploadRepresentation( UIDandMetaInfo ):
     def _check_conditional_columns( self, idx: Hashable, row: pd.Series, tag_info: dict ) -> None:
         if not self._col_is_empty( row['Epic End Time'] ) and row['Epic End Time'] != 'Unknown':
             if datetime.strptime( str( row['Epic End Time'] ), '%H:%M' ) < datetime.strptime( row['Epic Start Time'], '%H:%M' ): 
-                self._errors.at[idx, 'Epic End Time'] = f"'Epic End Time' '{str( row['Epic End Time'] )}' cannot be before provided 'Epic Start Time' '{ str( row['Epic Start Time'] )}'."
+                self._errors.at[idx, 'Epic End Time'] += f"'Epic End Time' '{str( row['Epic End Time'] )}' cannot be before provided 'Epic Start Time' '{ str( row['Epic Start Time'] )}'."
         if not self._col_is_empty( row['Supervising Surgeon HawkID'] ) and row['Epic End Time'] != 'Unknown' and self._col_is_empty( row['Supervising Surgeon Presence'] ):
-            self._warnings.at[idx, 'Supervising Surgeon Presence'] = f"'Supervising Surgeon Presence' is blank, converting to 'Unknown'."
+            self._warnings.at[idx, 'Supervising Surgeon Presence'] += f"'Supervising Surgeon Presence' is blank, converting to 'Unknown'."
         if self._col_is_empty( row['# of Participating Performing Surgeons'] ):
             self._df.at[idx, '# of Participating Performing Surgeons'] = 1
-            self._warnings.at[idx, '# of Participating Performing Surgeons'] = f"'# of Participating Performing Surgeons' is blank, converting to '1'."
+            self._warnings.at[idx, '# of Participating Performing Surgeons'] += f"'# of Participating Performing Surgeons' is blank, converting to '1'."
+        if not self._col_is_empty( row['Performing Surgeon HawkID'] ) and row['Performing Surgeon HawkID'] not in row['Performer HawkID-Task']:
+            self._errors.at[idx, 'Performer HawkID-Task'] += f"'Performing Surgeon HawkID' ('{row['Performing Surgeon HawkID']}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}'); double-check spelling."
+        if not self._col_is_empty( row['Supervising Surgeon HawkID'] ) and row['Supervising Surgeon HawkID'] not in row['Performer HawkID-Task']:
+            self._errors.at[idx, 'Performer HawkID-Task'] += f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID']}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}'); double-check spelling."
         if not self._col_is_empty( row['Performer HawkID-Task'] ) and row['Performer HawkID-Task'] != 'Unknown':
             n_perf_surgs = int( row['# of Participating Performing Surgeons'] )       #***************
             if n_perf_surgs == 1:
-                self._warnings.at[idx, 'Performer HawkID-Task'] = f"'when # of Participating Performing Surgeons' = 1, 'Performer HawkID-Task' can be blank; scanning and removing sensitive info regardless."
+                self._warnings.at[idx, 'Performer HawkID-Task'] += f"'when # of Participating Performing Surgeons' = 1, 'Performer HawkID-Task' can be blank; scanning and removing sensitive info regardless."
             self._df.at[idx,'Performer HawkID-Task'], issues = self.process_performer_hawk_id_task( in_str=row['Performer HawkID-Task'], num_performers=n_perf_surgs, hawk_ids=tag_info )
-            for iss in issues:      self._warnings.at[idx, 'Performer HawkID-Task'] = f"{self._warnings.at[idx, 'Performer HawkID-Task']}\n{iss}"
+            for iss in issues:      self._warnings.at[idx, 'Performer HawkID-Task'] += f"{self._warnings.at[idx, 'Performer HawkID-Task']}\n{iss}"
         if not self._col_is_empty( row['Skills Assessment Requested'] ) and row['Skills Assessment Requested'] != 'Unknown':
             if self._col_is_empty( row['Assessor HawkID'] ):            # Let the user state that they know an assessment was done but not who did it.
                 self._df.at[idx, 'Assessor HawkID'] = 'Unknown'
-                self._warnings.at[idx, 'Assessor HawkID'] = f"'Assessor HawkID' is blank, converting to 'Unknown'."
+                self._warnings.at[idx, 'Assessor HawkID'] += f"'Assessor HawkID' is blank, converting to 'Unknown'."
             elif row['Assessor HawkID'].lower() not in tag_info:
-                self._errors.at[idx, 'Assessor HawkID'] = f"'Assessor HawkID' ('{row['Assessor HawkID']}') not registered in the 'Registered_Users' config table."
-            if row['Skills Assessment Requested'].lower() != 'y':
-                self._errors.at[idx, 'Skills Assessment Requested'] = f"'Assessor HawkID' provided but 'Skills Assessment Requested' ('{row['Skills Assessment Requested']}') not set to 'Y'."
+                self._errors.at[idx, 'Assessor HawkID'] += f"'Assessor HawkID' ('{row['Assessor HawkID']}') not registered in the 'Registered_Users' config table."
+            if not self._col_is_empty( row['Assessor HawkID'] ) and row['Skills Assessment Requested'].lower() != 'y':
+                self._errors.at[idx, 'Skills Assessment Requested'] += f"'Assessor HawkID' provided but 'Skills Assessment Requested' ('{row['Skills Assessment Requested']}') not set to 'Y'."
             if not self._col_is_empty( row['Additional Assessment Details'] ):  self._issues_appending_helper( in_row=row, idx=idx, col_name='Additional Assessment Details', hawk_ids=tag_info )
         if not self._col_is_empty( row['Was Radiology Contacted'] ) and row['Was Radiology Contacted'] != 'Unknown':
             if self._col_is_empty( row['Radiology Contact Date'] ):
-                self._errors.at[idx, 'Radiology Contact Date'] = f"'Radiology Contact Date' cannot be blank when 'Was Radiology Contacted' is specified'."
+                self._errors.at[idx, 'Radiology Contact Date'] += f"'Radiology Contact Date' cannot be blank when 'Was Radiology Contacted' is specified'."
             else:   # ensure that the text provided corresponds to a date                                                                
                 try:        datetime.strptime( row['Radiology Contact Date'], '%Y-%m-%d' )
-                except:     self._errors.at[idx, 'Radiology Contact Date'] = f"'Radiology Contact Date' ('{row['Radiology Contact Date']}') is not a valid date format."
+                except:     self._errors.at[idx, 'Radiology Contact Date'] += f"'Radiology Contact Date' ('{row['Radiology Contact Date']}') is not a valid date format."
          
     def _check_optional_columns( self, idx: Hashable, row: pd.Series, tag_info: dict ) -> None:
         if self._col_is_empty( row['Quality'] ):                                                                                     
             self._df.at[idx, 'Quality'] = 'Unknown'
-            self._warnings.at[idx, 'Quality'] = f"'Quality' is blank, converting to 'Unknown'."
+            self._warnings.at[idx, 'Quality'] += f"'Quality' is blank, converting to 'Unknown'."
         if self._col_is_empty( row['Supervising Surgeon HawkID'] ):
             self._df.at[idx, 'Supervising Surgeon HawkID'] = 'Unknown'
-            self._warnings.at[idx, 'Supervising Surgeon HawkID'] = f"'Supervising Surgeon HawkID' is blank, converting to 'Unknown'."
+            self._warnings.at[idx, 'Supervising Surgeon HawkID'] += f"'Supervising Surgeon HawkID' is blank, converting to 'Unknown'."
         elif row['Supervising Surgeon HawkID'].lower() not in tag_info:
             self._df.at[idx, 'Supervising Surgeon HawkID'] = self.config.get_uid( table_name='Surgeons', item_name=row['Supervising Surgeon'] )
-            self._errors.at[idx, 'Supervising Surgeon HawkID'] = f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID']}') not registered in the 'Registered_Users' config table."
+            self._errors.at[idx, 'Supervising Surgeon HawkID'] += f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID']}') not registered in the 'Registered_Users' config table."
         if self._col_is_empty( row['Performing Surgeon HawkID'] ):
             self._df.at[idx, 'Performing Surgeon HawkID'] = 'Unknown'
-            self._warnings.at[idx, 'Performing Surgeon HawkID'] = f"'Performing Surgeon HawkID' is blank, converting to 'Unknown'."
+            self._warnings.at[idx, 'Performing Surgeon HawkID'] += f"'Performing Surgeon HawkID' is blank, converting to 'Unknown'."
         elif row['Performing Surgeon HawkID'].lower() not in tag_info: 
             self._df.at[idx, 'Performing Surgeon HawkID'] = self.config.get_uid( table_name='Surgeons', item_name=row['Performing Surgeon HawkID'] )
-            self._errors.at[idx, 'Performing Surgeon HawkID'] = f"'Performing Surgeon HawkID' ('{row['Performing Surgeon HawkID']}') not registered in the 'Registered_Users' config table."
+            self._errors.at[idx, 'Performing Surgeon HawkID'] += f"'Performing Surgeon HawkID' ('{row['Performing Surgeon HawkID']}') not registered in the 'Registered_Users' config table."
         if not self._col_is_empty( row['Unusual Features'] ):                   self._issues_appending_helper( in_row=row, idx=idx, col_name='Unusual Features', hawk_ids=tag_info )
         if not self._col_is_empty( row['Diagnostic Notes'] ):                   self._issues_appending_helper( in_row=row, idx=idx, col_name='Diagnostic Notes', hawk_ids=tag_info )
         if not self._col_is_empty( row['Additional Comments'] ):                self._issues_appending_helper( in_row=row, idx=idx, col_name='Additional Comments', hawk_ids=tag_info )
         if self._col_is_empty( row['Skills Assessment Requested'] ):                                                                 
             self._df.at[idx, 'Skills Assessment Requested'] = 'Unknown'
-            self._warnings.at[idx, 'Skills Assessment Requested'] = f"'Skills Assessment Requested' is blank, converting to 'Unknown'."
+            self._warnings.at[idx, 'Skills Assessment Requested'] += f"'Skills Assessment Requested' is blank, converting to 'Unknown'."
         if self._col_is_empty( row['Was Radiology Contacted'] ):                                                                     
             self._df.at[idx, 'Was Radiology Contacted'] = 'Unknown'
-            self._warnings.at[idx, 'Was Radiology Contacted'] = f"'Was Radiology Contacted' is blank, converting to 'Unknown'."
+            self._warnings.at[idx, 'Was Radiology Contacted'] += f"'Was Radiology Contacted' is blank, converting to 'Unknown'."
 
     def _revise_string( self, in_str: str ) -> str: # Revise a string to replace all instances of spaces before and after apostrophes.
         return re.sub( r'\'\s', '\'', re.sub(r'\s\'', '\'', in_str ) )
@@ -1195,12 +1198,27 @@ class MassUploadRepresentation( UIDandMetaInfo ):
                 issues.append( f"/nHawkID '{k}' was found unencoded within the string, output will overwrite this." )    
         return in_str, issues
     
-    def __str__( self ) -> str:
+    def __str__( self ) -> str:     return self.print_rows( rows='all' )
+    
+    def print_rows( self, rows: Opt[str]='both' ) -> str:
+        assert rows in ['errors', 'warnings', 'both', 'all'], f"Inputted 'rows' must be a list containing either 'errors', 'warnings', 'both', or 'all'; you provided '{rows}'."
         if ( self.summary_table == '' ).all().all():   return f"MassUploadRepresntation\n\tFilename:\t{self.ffn.name}\n\tRows:\t{len(self.df)}\n\tCols:\t{len(self.df.columns)}\n\tIssues:\tNone"
         num_row_errs = self.summary_table.apply( lambda row: any(cell in ['E', 'EW'] for cell in row), axis=1 ).sum()
         num_row_warns = self.summary_table.apply( lambda row: any(cell in ['W', 'EW'] for cell in row), axis=1 ).sum()
-        df_str = self.summary_table.copy()
+        df_str = self._summary_table.copy()
+        df_str['row'] = df_str.index + 2  # Add a column with the original indices
+        if rows == 'errors':
+            df_str = df_str.loc[df_str.apply(lambda row: any(cell in ['E', 'EW'] for cell in row), axis=1)]
+        elif rows == 'warnings':
+            df_str = df_str.loc[df_str.apply(lambda row: any(cell in ['W', 'EW'] for cell in row), axis=1)]
+        elif rows == 'both':
+            df_str = df_str.loc[df_str.apply(lambda row: any(cell in ['E', 'EW', 'W'] for cell in row), axis=1)]
+        
         df_str.columns = ['\n'.join(col.split()) for col in df_str.columns]
-        df_str.index = df_str.index + 1
-        df_str = tabulate( df_str.values.tolist(), headers=df_str.columns.tolist(), tablefmt='pretty', showindex=True, stralign='center' )
-        return f"MassUploadRepresntation\n\tFile:\t{self.ffn.name}\n\tRows:\t{len(self.df)}\n\t\t/w Errors:\t{num_row_errs}\n\t\t/w Warnings:\t{num_row_warns}\n\tCols:\t{len(self.df.columns)}\n\tIssues:\n{df_str}"
+        cols = df_str.columns.tolist()
+        cols = [cols[-1]] + cols[:-1]
+        df_str = df_str[cols]
+        if len( df_str ) > 0:
+            df_str = tabulate( df_str.values.tolist(), headers=df_str.columns.tolist(), tablefmt='pretty', showindex=False, stralign='center' )
+        else:   df_str = ''
+        return f"MassUploadRepresntation\n\tFile:\t{self.ffn.name}\n\tRows:\t{len(self.df)+1} (w header)\n\t\t/w Errors:\t{num_row_errs}\n\t\t/w Warnings:\t{num_row_warns}\n\tCols:\t{len(self.df.columns)}\n{df_str}"

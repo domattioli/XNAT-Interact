@@ -113,8 +113,8 @@ class ExperimentData():
     def write( self, config: ConfigTables, zip_dest: Opt[Path] = None, verbose: Opt[bool]=True ) -> Tuple[dict, ConfigTables]:   raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
     
 
-    def publish_to_xnat( self, xnat_connection: XNATConnection, validated_login: XNATLogin, zipped_data: dict, delete_zip: Opt[bool] = True, verbose: Opt[bool] = False ) -> None:
-        if verbose:     print( f'\t...Pushing {self.schema_prefix_str} Session Data to XNAT...' )
+    def publish_to_xnat( self, xnat_connection: XNATConnection, validated_login: XNATLogin, zipped_data: dict, delete_zip: Opt[bool] = True, verbose: Opt[bool] = True ) -> None:
+        if verbose:             print( f'\t...Pushing {self.schema_prefix_str} Session Data to XNAT...' )
         subj_qs, exp_qs, scan_qs, files_qs, resource_label = self._generate_queries( xnat_connection=xnat_connection )
         subj_inst, exp_inst, scan_inst = self._select_objects( xnat_connection=xnat_connection, subj_qs=subj_qs, exp_qs=exp_qs, scan_qs=scan_qs, files_qs=files_qs )
 
@@ -150,7 +150,7 @@ class ExperimentData():
             print( f'\t...Successfully deleted zip file:\n' + '\n'.join(f'\t\t{key}' for key in zipped_data.keys()) + '\n')
 
 
-    def write_publish_catalog_subroutine( self, config: ConfigTables, xnat_connection: XNATConnection, validated_login: XNATLogin, verbose: Opt[bool] = False, delete_zip: Opt[bool] = True ) -> ConfigTables:
+    def write_publish_catalog_subroutine( self, config: ConfigTables, xnat_connection: XNATConnection, validated_login: XNATLogin, verbose: Opt[bool] = True, delete_zip: Opt[bool] = True ) -> ConfigTables:
         try:
             zipped_data, config = self.write( config=config, verbose=verbose )
         except Exception as e:
@@ -191,7 +191,7 @@ class ExperimentData():
             raise
 
         # Delete local copy of the config data
-        if verbose:     print( f'\t...Deleting local copy of config data...' )
+        if verbose:         print( f'\t...Deleting local copy of config data...' )
         if os.path.exists( config.config_ffn ): os.remove( config.config_ffn )
         else: print(f'---------- error deleting config data file; no file found at:----------\n\t\t{config.config_ffn}')
         return config
@@ -213,11 +213,8 @@ class ExperimentData():
         return text
 
     
-
-
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for all radio fluoroscopic (source image) sessions.
-from src.xnat_experiment_data import ExperimentData
 class SourceRFSession( ExperimentData ):
     """
     A class representing the XNAT Experiment for Radio Fluoroscopic (RF) Source Images. Inherits from ExperimentData. Intended for structuring trauma cases with fluoroscopic image sequences.
@@ -371,7 +368,7 @@ class SourceRFSession( ExperimentData ):
         else:
             return f' -- {self.__class__.__name__} --\nUID:\t{None}\nAcquisition Site:\t{intake_form.acquisition_site}\nGroup:\t\t\t{intake_form.group}\nDate-Time:\t\t{None}\nValid:\t\t\t{valid_str}\nQuestionable:\t\t{questionable_str}\n{df.head()}\n...\n{df.tail()}'
 
-    def write( self, config: ConfigTables, verbose: Opt[bool]=True ) -> Tuple[dict, ConfigTables]:
+    def write( self, config: ConfigTables, verbose: Opt[bool] = True ) -> Tuple[dict, ConfigTables]:
         """
         Writes the SourceRFSession to a zipped folder in a temporary local directory, which can then be pushed to XNAT.
         Inputs:
@@ -388,12 +385,12 @@ class SourceRFSession( ExperimentData ):
         assert self.is_valid, f"Session is invalid; could be for several reasons. try evaluating whether all of the image hash_strings already exist in the matatable."
         
         # (Try to) Add the subject to the config
-        if verbose:     print( f'\t...Validating subject uniqueness...' )
+        if verbose:         print( f'\t...Validating subject uniqueness...' )
         success, msg = config.add_new_item( table_name='SUBJECTS', item_name=self.intake_form.uid, item_uid=self.intake_form.uid, verbose=verbose,
                                             extra_columns_values={ 'ACQUISITION_SITE': config.get_uid( table_name='ACQUISITION_SITES', item_name=self.intake_form.acquisition_site ),
                                                                 'GROUP': config.get_uid( table_name='GROUPS', item_name=self.intake_form.group ) }
                                          )
-        if verbose:    print( ) # empty new line
+        if verbose:         print( ) # empty new line
         assert success, f"According to the config data, subject has already been uploaded to XNAT; error given:\n\t{msg}"
 
         # Lets fail this case if any of the images are already in the imagehash table
@@ -403,7 +400,7 @@ class SourceRFSession( ExperimentData ):
         # Zip the mp4 and dicom data to separate folders
         zipped_data, home_dir = {}, self.tmp_source_data_dir
         num_dicom, num_successes = 0, 0
-        if verbose:    print( f'\t...Validating dicom files and writing to temporary directory for zipping...' )
+        if verbose:         print( f'\t...Validating dicom files and writing to temporary directory for zipping...' )
         with tempfile.TemporaryDirectory( dir=home_dir ) as dcm_temp_dir:
             for idx in range( len( self.df ) ): # Iterate through each row in the DataFrame, writing each to a temp directory before we zip it up and delete the unzipped folder.
                 # if self.df.loc[idx, 'IS_VALID']:
@@ -595,7 +592,7 @@ class SourceESVSession( ExperimentData ):
             zipped_data[mp4_zip_full_path] = { 'CONTENT': 'VIDEO', 'FORMAT': 'MP4', 'TAG': 'INTRA_OP' }
             zipped_data[dcm_zip_full_path] = { 'CONTENT': 'IMAGE', 'FORMAT': 'DICOM', 'TAG': 'POST_OP' }
 
-        if verbose: print( f'\t...Zipped folder(s) of {num_dicom} dicom and {num_mp4} mp4 files successfully written to:\n\t\t{dcm_zip_full_path}\n\t\t{mp4_zip_full_path}' )
+        if verbose:             print( f'\t...Zipped folder(s) of {num_dicom} dicom and {num_mp4} mp4 files successfully written to:\n\t\t{dcm_zip_full_path}\n\t\t{mp4_zip_full_path}' )
         return zipped_data, config
     
 

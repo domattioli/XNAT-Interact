@@ -33,13 +33,14 @@ def check_and_install_requirements( requirements_file: Path ) -> None:
 
 def import_all_necessary_modules( requirements_file: Path ) -> None:
     # Check and install requirements
-    print( f"\t...Checking and installing requirements...")
+    print( f"\t...Checking installation of each required library...")
     check_and_install_requirements(requirements_file)
     
     # Import necessary modules
     with open(requirements_file, 'r') as file:
         requirements = file.readlines()
 
+    print( f"\t...Checking import of each installed library...")
     for requirement in requirements:
         requirement = requirement.strip()
         if requirement:
@@ -47,9 +48,9 @@ def import_all_necessary_modules( requirements_file: Path ) -> None:
             library_name = requirement.split('==')[0].split('>=')[0].split('<=')[0].split('>')[0].split('<')[0]
             try:
                 importlib.import_module(library_name)
-                print(f"\tSuccessfully imported {library_name}")
+                print(f"\t\tSuccessfully imported {library_name}")
             except ImportError as e:
-                print(f"\tError importing {library_name}: {e}")
+                print(f"\t\tError importing {library_name}: {e}")
 
 def main() -> None:
     """
@@ -70,8 +71,8 @@ def main() -> None:
     ffn = this_directory / requirements_file
     try:
         import_all_necessary_modules( requirements_file=ffn )
-        print( f'--- All necessary modules are available...' )
-        print( f'--- Tests complete...\n\t...Updating repository...\n' )
+        print( f'--- All necessary modules are available...\n' )
+        print( f'--- Tests complete...\n...Updating repository...' )
     except Exception as e:
         print( f'ERROR\t-- You must install all necessary modules before running this script.\n\tError printout:\n{e}' )
         sys.exit( 1 )

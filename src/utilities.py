@@ -23,7 +23,7 @@ from tabulate import tabulate
 
 
 # Define list for allowable imports from this module -- do not want to import _local_variables. As more classes are added you will need to update this list.
-__all__ = ['UIDandMetaInfo', 'XNATLogin', 'ConfigTables', 'XNATConnection', 'USCentralDateTime', 'ImageHash', 'MassUploadRepresentation']
+__all__ = ['UIDandMetaInfo', 'XNATLogin', 'ConfigTables', 'XNATConnection', 'USCentralDateTime', 'ImageHash', 'BatchUploadRepresentation']
 
 
 data_librarian_hawk_id = 'dmattioli' # Update as needed. *** Not sure if changing this to stelong will cause errors.
@@ -997,7 +997,7 @@ class ImageHash( UIDandMetaInfo ):
 
 #--------------------------------------------------------------------------------------------------------------------------
 # Class for representing an imported batch upload spreadsheet.
-class MassUploadRepresentation( UIDandMetaInfo ):
+class BatchUploadRepresentation( UIDandMetaInfo ):
     def __init__( self, xls_ffn: Path, config: ConfigTables, verbose: bool = True ):
         assert isinstance( xls_ffn, Path ), f"Inputted 'xls_ffn' must be a {type( Path() )} object; you provided a '{type( xls_ffn )}' object."
         assert xls_ffn.exists(), f"Inputted 'xls_ffn' path does not exist; you entered:\n\t'{xls_ffn}'"
@@ -1052,8 +1052,6 @@ class MassUploadRepresentation( UIDandMetaInfo ):
                     else 'W' if not self._col_is_empty( self.warnings.at[x.name, col] )
                     else '', axis=1 )
     
-    def _col_is_empty( self, col_name: str )  -> bool:      return col_name in ['', ' ', None]
-
     def _check_required_columns( self, idx: Hashable, row: pd.Series, tag_info: dict ) -> None:
         if self._col_is_empty( row['Filer HawkID'] ) or row['Filer HawkID'].lower() not in tag_info['hawk_ids']:
             self._errors.at[idx, 'Filer HawkID'] = f"'Filer HawkID' ('{row['Filer HawkID']}') not registered in the 'Registered_Users' config table."
@@ -1178,7 +1176,9 @@ class MassUploadRepresentation( UIDandMetaInfo ):
             self._df.at[idx, 'Was Radiology Contacted'] = 'Unknown'
             self._warnings.at[idx, 'Was Radiology Contacted'] += f"'Was Radiology Contacted' is blank, converting to 'Unknown'."
 
-    # --------------- Helpers ---------------
+    # --------------- Helpers ----------------------------------------------------------------
+    def _col_is_empty( self, col_name: str )  -> bool:      return col_name in ['', ' ', None]
+
     def _revise_string( self, in_str: str ) -> str:         return re.sub( r'\'\s', '\'', re.sub(r'\s\'', '\'', in_str ) )
 
     def _validate_and_format_dict_string( self, input_string: str ) -> str:
@@ -1223,11 +1223,12 @@ class MassUploadRepresentation( UIDandMetaInfo ):
                 issues.append( f"/nHawkID '{k}' was found unencoded within the string, output will overwrite this." )    
         return in_str, issues
     
-    def __str__( self ) -> str:     return self.print_rows( rows='all' )
+    def __str__( self ) -> str:                             return self.print_rows( rows='all' )
     
     def print_rows( self, rows: Opt[str]='both' ) -> str:
+        class_name = {self.__class__.__name__}
         assert rows in ['errors', 'warnings', 'both', 'all'], f"Inputted 'rows' must be a list containing either 'errors', 'warnings', 'both', or 'all'; you provided '{rows}'."
-        if ( self.summary_table == '' ).all().all():   return f"MassUploadRepresntation\n\tFilename:\t{self.ffn.name}\n\tRows:\t{len(self.df)}\n\tCols:\t{len(self.df.columns)}\n\tIssues:\tNone"
+        if ( self.summary_table == '' ).all().all():   return f"{class_name}\n\tFilename:\t{self.ffn.name}\n\tRows:\t{len(self.df)}\n\tCols:\t{len(self.df.columns)}\n\tIssues:\tNone"
         num_row_errs = self.summary_table.apply( lambda row: any(cell in ['E', 'EW'] for cell in row), axis=1 ).sum()
         num_row_warns = self.summary_table.apply( lambda row: any(cell in ['W', 'EW'] for cell in row), axis=1 ).sum()
         df_str = self._summary_table.copy()
@@ -1246,11 +1247,11 @@ class MassUploadRepresentation( UIDandMetaInfo ):
         if len( df_str ) > 0:
             df_str = tabulate( df_str.values.tolist(), headers=df_str.columns.tolist(), tablefmt='pretty', showindex=False, stralign='center' )
         else:   df_str = ''
-        return f"MassUploadRepresntation\n\tFile:\t{self.ffn.name}\n\tRows:\t{len(self.df)+1} (w header)\n\t\t/w Errors:\t{num_row_errs}\n\t\t/w Warnings:\t{num_row_warns}\n\tCols:\t{len(self.df.columns)}\n{df_str}"
+        return f"{class_name}\n\tFile:\t{self.ffn.name}\n\tRows:\t{len(self.df)+1} (w header)\n\t\t/w Errors:\t{num_row_errs}\n\t\t/w Warnings:\t{num_row_warns}\n\tCols:\t{len(self.df.columns)}\n{df_str}"
  
     def _init_mass_upload_summary_doc( self ) -> str:
         """ Create a summary document of the mass upload data"""
-        return f"""Summary of Mass Data Upload
+        return f"""Summary of Batch Upload
         ===========================\n\n
         Filename: {self.ffn.name}
         Date: {datetime.now().strftime("%Y-%m-%d %H:%M")}\n\n
@@ -1260,6 +1261,7 @@ class MassUploadRepresentation( UIDandMetaInfo ):
 
     def upload_sessions( self, xnat_connection: XNATConnection, verbose: bool = True ) -> None:
         """ Upload the sessions to XNAT. """
+        assert 1 == 0, "Functionality not yet implemented."
         txt = self._init_mass_upload_summary_doc()
         ind = 0
         failed_rows = {}

@@ -1006,19 +1006,19 @@ class MassUploadRepresentation( UIDandMetaInfo ):
         self._import_data_and_process_columns()
         self._process_mass_upload_data()
         if verbose:                     self.print_rows( rows='all' )
-    
+            
     @property
-    def ffn( self ) -> Path:                    return self._ffn
+    def ffn( self )             -> Path:                    return self._ffn
     @property
-    def config( self ) -> ConfigTables:         return self._config
+    def config( self )          -> ConfigTables:            return self._config
     @property
-    def df( self ) -> pd.DataFrame:             return self._df
+    def df( self )              -> pd.DataFrame:            return self._df
     @property
-    def warnings( self ) -> pd.DataFrame:       return self._warnings
+    def warnings( self )        -> pd.DataFrame:            return self._warnings
     @property
-    def errors( self ) -> pd.DataFrame:         return self._errors
+    def errors( self )          -> pd.DataFrame:            return self._errors
     @property
-    def summary_table( self ) -> pd.DataFrame:  return self._summary_table
+    def summary_table( self )   -> pd.DataFrame:            return self._summary_table
     
     def _import_data_and_process_columns( self ) -> None:   # Load data from excel file and ignore the warning resulting from enforced dropdowns within the excel template that i made
         with open( self.ffn, 'rb' ) as f:
@@ -1026,6 +1026,7 @@ class MassUploadRepresentation( UIDandMetaInfo ):
             self._df        = pd.read_excel( f, header=0 )
             self._df        = self._df.fillna( '' )
             self._df.columns= [col.replace('\n', ' ').strip() for col in self._df.columns]
+            self._df        = self.df.loc[:, ~self.df.columns.str.contains('^Unnamed')] # Remove any unnamed columns
             self._warnings      = pd.DataFrame( data=np.empty( ( len( self.df ), len( self.df.columns ) ), dtype=str ), columns=self.df.columns )   
             self._errors        = self.warnings.copy()
             self._summary_table = self.warnings.copy()
@@ -1035,12 +1036,12 @@ class MassUploadRepresentation( UIDandMetaInfo ):
         assert not missing_columns, f"The following required columns are missing from the imported file: {', '.join( missing_columns )}"
 
     def _process_mass_upload_data( self ) -> None:          # Iterate through each row, performing custom checks on all the columns
-        registered_users = self.retrieve_server_config_tags()
-        surgeons = registered_users['surgeon_hawk_id_encodings']
+        all_tag_info = self.retrieve_server_config_tags()
+        surgeon_hawkids = all_tag_info['surgeon_hawk_id_encodings']
         for idx, row in self.df.iterrows():
-            self._check_required_columns( idx=idx, row=row, tag_info=registered_users )
-            self._check_optional_columns( idx=idx, row=row, tag_info=surgeons )
-            self._check_conditional_columns( idx=idx, row=row, tag_info=surgeons ) # conditional on either a required or optional column's value.
+            self._check_required_columns( idx=idx, row=row, tag_info=all_tag_info )
+            self._check_optional_columns( idx=idx, row=row, surgeon_hawkids=surgeon_hawkids )
+            self._check_conditional_columns( idx=idx, row=row, surgeon_hawkids=surgeon_hawkids ) # conditional on either a required or optional column's value.
         
         # Assign 'E' then 'W' to cells in the summary table based on the presence of errors or warnings in the respective columns.
         for col in self.summary_table.columns:
@@ -1051,7 +1052,7 @@ class MassUploadRepresentation( UIDandMetaInfo ):
                     else 'W' if not self._col_is_empty( self.warnings.at[x.name, col] )
                     else '', axis=1 )
     
-    def _col_is_empty( self, col_name: str )  -> bool:    return col_name in ['', ' ', None]
+    def _col_is_empty( self, col_name: str )  -> bool:      return col_name in ['', ' ', None]
 
     def _check_required_columns( self, idx: Hashable, row: pd.Series, tag_info: dict ) -> None:
         if self._col_is_empty( row['Filer HawkID'] ) or row['Filer HawkID'].lower() not in tag_info['hawk_ids']:
@@ -1073,34 +1074,77 @@ class MassUploadRepresentation( UIDandMetaInfo ):
         elif not Path( row['Full Path to Data'] ).exists():
             self._errors.at[idx, 'Full Path to Data'] = f"'Full Path to Data' '{row['Full Path to Data']}' does not exist."
 
-    def _check_conditional_columns( self, idx: Hashable, row: pd.Series, tag_info: dict ) -> None:
+    def _check_conditional_columns( self, idx: Hashable, row: pd.Series, surgeon_hawkids: dict ) -> None:
         if not self._col_is_empty( row['Epic End Time'] ) and row['Epic End Time'] != 'Unknown':
             if datetime.strptime( str( row['Epic End Time'] ), '%H:%M' ) < datetime.strptime( row['Epic Start Time'], '%H:%M' ): 
                 self._errors.at[idx, 'Epic End Time'] += f"'Epic End Time' '{str( row['Epic End Time'] )}' cannot be before provided 'Epic Start Time' '{ str( row['Epic Start Time'] )}'."
-        if not self._col_is_empty( row['Supervising Surgeon HawkID'] ) and row['Epic End Time'] != 'Unknown' and self._col_is_empty( row['Supervising Surgeon Presence'] ):
-            self._warnings.at[idx, 'Supervising Surgeon Presence'] += f"'Supervising Surgeon Presence' is blank, converting to 'Unknown'."
+                
+        # Checks for Supervising Surgeon HawkID.
+        if self._col_is_empty( row['Supervising Surgeon HawkID'] ):
+            self._df.at[idx, 'Supervising Surgeon HawkID'] = 'Unknown'
+            self._warnings.at[idx, 'Supervising Surgeon HawkID'] += f"'Supervising Surgeon HawkID' is blank, converting to 'Unknown'."
+        elif row['Performing Surgeon HawkID'] != 'Unknown':
+            if row['Supervising Surgeon HawkID'].lower() not in surgeon_hawkids:
+                self._errors.at[idx, 'Supervising Surgeon HawkID'] += f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID']}') not found in the 'Surgeons' config table."
+
+        # Checks for Performing Surgeon HawkID.
+        if self._col_is_empty( row['Performing Surgeon HawkID'] ):
+            self._df.at[idx, 'Performing Surgeon HawkID'] = 'Unknown'
+            self._warnings.at[idx, 'Performing Surgeon HawkID'] += f"'Performing Surgeon HawkID' is blank, converting to 'Unknown'."
+        elif row['Performing Surgeon HawkID'] != 'Unknown':
+            if row['Performing Surgeon HawkID'].lower() not in surgeon_hawkids:
+                self._errors.at[idx, 'Performing Surgeon HawkID'] += f"'Performing Surgeon HawkID' ('{row['Performing Surgeon HawkID']}') not found in the 'Surgeons' config table."
+        elif not self._col_is_empty(row['Performer HawkID-Task']):
+            self._errors.at[idx, 'Performing Surgeon HawkID'] += "'Performing Surgeon HawkID' cannot be empty if 'Performer HawkID-Task' is not empty."
+            self._errors.at[idx, 'Performer HawkID-Task'] += "'Performing Surgeon HawkID' cannot be empty if 'Performer HawkID-Task' is not empty."
+        
+        # Checks for # of Participating Performing Surgeons
         if self._col_is_empty( row['# of Participating Performing Surgeons'] ):
-            self._df.at[idx, '# of Participating Performing Surgeons'] = 1
-            self._warnings.at[idx, '# of Participating Performing Surgeons'] += f"'# of Participating Performing Surgeons' is blank, converting to '1'."
-        if not self._col_is_empty( row['Performing Surgeon HawkID'] ) and row['Performing Surgeon HawkID'] not in row['Performer HawkID-Task']:
-            self._errors.at[idx, 'Performer HawkID-Task'] += f"'Performing Surgeon HawkID' ('{row['Performing Surgeon HawkID']}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}'); double-check spelling."
-        if not self._col_is_empty( row['Supervising Surgeon HawkID'] ) and row['Supervising Surgeon HawkID'] not in row['Performer HawkID-Task']:
-            self._errors.at[idx, 'Performer HawkID-Task'] += f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID']}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}'); double-check spelling."
-        if not self._col_is_empty( row['Performer HawkID-Task'] ) and row['Performer HawkID-Task'] != 'Unknown':
-            n_perf_surgs = int( row['# of Participating Performing Surgeons'] )       #***************
-            if n_perf_surgs == 1:
-                self._warnings.at[idx, 'Performer HawkID-Task'] += f"'when # of Participating Performing Surgeons' = 1, 'Performer HawkID-Task' can be blank; scanning and removing sensitive info regardless."
-            self._df.at[idx,'Performer HawkID-Task'], issues = self.process_performer_hawk_id_task( in_str=row['Performer HawkID-Task'], num_performers=n_perf_surgs, hawk_ids=tag_info )
-            for iss in issues:      self._warnings.at[idx, 'Performer HawkID-Task'] += f"{self._warnings.at[idx, 'Performer HawkID-Task']}\n{iss}"
+            num_surgeons = None
+            if not self._col_is_empty( row['Performer HawkID-Task'] ) and row['Performing Surgeon HawkID'] != 'Unknown':
+                self._errors.at[idx, '# of Participating Performing Surgeons'] += "'# of Participating Performing Surgeons' cannot be empty if 'Performer HawkID-Task' or 'Performing Surgeon HawkID' is not empty."
+                self._errors.at[idx, 'Performer HawkID-Task'] += "'# of Participating Performing Surgeons' cannot be empty if 'Performer HawkID-Task' or 'Performing Surgeon HawkID' is not empty."
+        else:
+            num_surgeons = int( row['# of Participating Performing Surgeons'] )
+            
+        # Checks for Performer HawkID-Task
+        if not self._col_is_empty( row['Performer HawkID-Task'] ):
+            try:
+                performer_hawk_id_task = ast.literal_eval( self._validate_and_format_dict_string( row['Performer HawkID-Task'] ) )
+                assert isinstance( performer_hawk_id_task, dict ), "The input string was not in a valid Python dictionary format."
+                for key in performer_hawk_id_task.keys():
+                    if key.lower() not in surgeon_hawkids:
+                        self._errors.at[idx, 'Performer HawkID-Task'] += f"\nError: HawkID '{key}' is not found in 'Surgeons'."
+                    else: # Replace the key with the encoding to protect identity information.
+                        performer_hawk_id_task[key] = self.replace_hawk_ids_with_encodings( performer_hawk_id_task[key], surgeon_hawkids )
+                if len( performer_hawk_id_task.keys() ) != num_surgeons:
+                    self._errors.at[idx, 'Performer HawkID-Task'] += f"\nError: Number of keys in 'Performer HawkID-Task' ({len(performer_hawk_id_task)}) does not match '# of Participating Performing Surgeons' ({num_surgeons})."
+                    self._errors.at[idx, '# of Participating Performing Surgeons'] += f"\nError: Number of keys in 'Performer HawkID-Task' ({len(performer_hawk_id_task)}) does not match '# of Participating Performing Surgeons' ({num_surgeons})."
+            except:
+                self._errors.at[idx, 'Performer HawkID-Task'] += "'Performer HawkID-Task' must be structured in a valid Python dictionary format, e.g., '{surgeon1_hawkid: task performed, surgeon2_hawkid: task_performed, ...}'."
+        elif num_surgeons is not None and num_surgeons != 1:
+            self._errors.at[idx, 'Performer HawkID-Task'] += "'Performer HawkID-Task' cannot be empty if '# of Participating Performing Surgeons' is not 1."
+            self._errors.at[idx, '# of Participating Performing Surgeons'] += "'Performer HawkID-Task' cannot be empty if '# of Participating Performing Surgeons' is not 1."
+
+        # Additional checks for consistency between columns
+        if not self._col_is_empty(row['Performing Surgeon HawkID']) and not self._col_is_empty(row['Performer HawkID-Task']):
+            if row['Performing Surgeon HawkID'] not in row['Performer HawkID-Task']:
+                self._errors.at[idx, 'Performer HawkID-Task'] += f"'Performing Surgeon HawkID' ('{row['Performing Surgeon HawkID']}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}'); double-check spelling."
+                self._errors.at[idx, 'Performing Surgeon HawkID'] += f"'Performing Surgeon HawkID' ('{row['Performing Surgeon HawkID']}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}'); double-check spelling."
+        if not self._col_is_empty(row['Supervising Surgeon HawkID']) and not self._col_is_empty(row['Performer HawkID-Task']):
+            if row['Supervising Surgeon HawkID'] not in row['Performer HawkID-Task']:
+                self._errors.at[idx, 'Performer HawkID-Task'] += f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID']}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}'); double-check spelling."
+                self._errors.at[idx, 'Supervising Surgeon HawkID'] += f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID']}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}'); double-check spelling."
+        
         if not self._col_is_empty( row['Skills Assessment Requested'] ) and row['Skills Assessment Requested'] != 'Unknown':
             if self._col_is_empty( row['Assessor HawkID'] ):            # Let the user state that they know an assessment was done but not who did it.
                 self._df.at[idx, 'Assessor HawkID'] = 'Unknown'
                 self._warnings.at[idx, 'Assessor HawkID'] += f"'Assessor HawkID' is blank, converting to 'Unknown'."
-            elif row['Assessor HawkID'].lower() not in tag_info:
+            elif row['Assessor HawkID'].lower() not in surgeon_hawkids:
                 self._errors.at[idx, 'Assessor HawkID'] += f"'Assessor HawkID' ('{row['Assessor HawkID']}') not registered in the 'Registered_Users' config table."
             if not self._col_is_empty( row['Assessor HawkID'] ) and row['Skills Assessment Requested'].lower() != 'y':
                 self._errors.at[idx, 'Skills Assessment Requested'] += f"'Assessor HawkID' provided but 'Skills Assessment Requested' ('{row['Skills Assessment Requested']}') not set to 'Y'."
-            if not self._col_is_empty( row['Additional Assessment Details'] ):  self._issues_appending_helper( in_row=row, idx=idx, col_name='Additional Assessment Details', hawk_ids=tag_info )
+            if not self._col_is_empty( row['Additional Assessment Details'] ):  self._issues_appending_helper( in_row=row, idx=idx, col_name='Additional Assessment Details', hawk_ids=surgeon_hawkids )
         if not self._col_is_empty( row['Was Radiology Contacted'] ) and row['Was Radiology Contacted'] != 'Unknown':
             if self._col_is_empty( row['Radiology Contact Date'] ):
                 self._errors.at[idx, 'Radiology Contact Date'] += f"'Radiology Contact Date' cannot be blank when 'Was Radiology Contacted' is specified'."
@@ -1108,25 +1152,25 @@ class MassUploadRepresentation( UIDandMetaInfo ):
                 try:        datetime.strptime( row['Radiology Contact Date'], '%Y-%m-%d' )
                 except:     self._errors.at[idx, 'Radiology Contact Date'] += f"'Radiology Contact Date' ('{row['Radiology Contact Date']}') is not a valid date format."
          
-    def _check_optional_columns( self, idx: Hashable, row: pd.Series, tag_info: dict ) -> None:
+    def _check_optional_columns( self, idx: Hashable, row: pd.Series, surgeon_hawkids: dict ) -> None:
         if self._col_is_empty( row['Quality'] ):                                                                                     
             self._df.at[idx, 'Quality'] = 'Unknown'
             self._warnings.at[idx, 'Quality'] += f"'Quality' is blank, converting to 'Unknown'."
         if self._col_is_empty( row['Supervising Surgeon HawkID'] ):
             self._df.at[idx, 'Supervising Surgeon HawkID'] = 'Unknown'
             self._warnings.at[idx, 'Supervising Surgeon HawkID'] += f"'Supervising Surgeon HawkID' is blank, converting to 'Unknown'."
-        elif row['Supervising Surgeon HawkID'].lower() not in tag_info:
+        elif row['Supervising Surgeon HawkID'].lower() not in surgeon_hawkids:
             self._df.at[idx, 'Supervising Surgeon HawkID'] = self.config.get_uid( table_name='Surgeons', item_name=row['Supervising Surgeon'] )
             self._errors.at[idx, 'Supervising Surgeon HawkID'] += f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID']}') not registered in the 'Registered_Users' config table."
         if self._col_is_empty( row['Performing Surgeon HawkID'] ):
             self._df.at[idx, 'Performing Surgeon HawkID'] = 'Unknown'
             self._warnings.at[idx, 'Performing Surgeon HawkID'] += f"'Performing Surgeon HawkID' is blank, converting to 'Unknown'."
-        elif row['Performing Surgeon HawkID'].lower() not in tag_info: 
+        elif row['Performing Surgeon HawkID'].lower() not in surgeon_hawkids: 
             self._df.at[idx, 'Performing Surgeon HawkID'] = self.config.get_uid( table_name='Surgeons', item_name=row['Performing Surgeon HawkID'] )
             self._errors.at[idx, 'Performing Surgeon HawkID'] += f"'Performing Surgeon HawkID' ('{row['Performing Surgeon HawkID']}') not registered in the 'Registered_Users' config table."
-        if not self._col_is_empty( row['Unusual Features'] ):                   self._issues_appending_helper( in_row=row, idx=idx, col_name='Unusual Features', hawk_ids=tag_info )
-        if not self._col_is_empty( row['Diagnostic Notes'] ):                   self._issues_appending_helper( in_row=row, idx=idx, col_name='Diagnostic Notes', hawk_ids=tag_info )
-        if not self._col_is_empty( row['Additional Comments'] ):                self._issues_appending_helper( in_row=row, idx=idx, col_name='Additional Comments', hawk_ids=tag_info )
+        if not self._col_is_empty( row['Unusual Features'] ):                   self._issues_appending_helper( in_row=row, idx=idx, col_name='Unusual Features', hawk_ids=surgeon_hawkids )
+        if not self._col_is_empty( row['Diagnostic Notes'] ):                   self._issues_appending_helper( in_row=row, idx=idx, col_name='Diagnostic Notes', hawk_ids=surgeon_hawkids )
+        if not self._col_is_empty( row['Additional Comments'] ):                self._issues_appending_helper( in_row=row, idx=idx, col_name='Additional Comments', hawk_ids=surgeon_hawkids )
         if self._col_is_empty( row['Skills Assessment Requested'] ):                                                                 
             self._df.at[idx, 'Skills Assessment Requested'] = 'Unknown'
             self._warnings.at[idx, 'Skills Assessment Requested'] += f"'Skills Assessment Requested' is blank, converting to 'Unknown'."
@@ -1134,10 +1178,30 @@ class MassUploadRepresentation( UIDandMetaInfo ):
             self._df.at[idx, 'Was Radiology Contacted'] = 'Unknown'
             self._warnings.at[idx, 'Was Radiology Contacted'] += f"'Was Radiology Contacted' is blank, converting to 'Unknown'."
 
-    def _revise_string( self, in_str: str ) -> str: # Revise a string to replace all instances of spaces before and after apostrophes.
-        return re.sub( r'\'\s', '\'', re.sub(r'\s\'', '\'', in_str ) )
-
     # --------------- Helpers ---------------
+    def _revise_string( self, in_str: str ) -> str:         return re.sub( r'\'\s', '\'', re.sub(r'\s\'', '\'', in_str ) )
+
+    def _validate_and_format_dict_string( self, input_string: str ) -> str:
+        # Strip all apostrophes and quotation marks from the string
+        input_string = input_string.replace( "'", '' ).replace( '"', '' )
+
+        # Check that the string begins with '{' and ends with '}'
+        assert input_string.startswith( '{') and input_string.endswith('}' ), "The input string must begin with '{' and end with '}'."
+
+        # Check for appropriate use of commas and colons
+        assert re.match( r'^\{(?:\s*[^{}]+:\s*[^{}]+(?:,\s*[^{}]+:\s*[^{}]+)*\s*)?\}$', input_string ), "The input string must use commas and colons appropriately."
+
+        # Add quotes around keys and values if they are not already quoted
+        def add_quotes( match ):  
+            key, value = match.groups()
+            key, value = key.strip(), value.strip()
+            if not (key.startswith('"') and key.endswith('"')):
+                key = f'"{key}"'
+            if not (value.startswith('"') and value.endswith('"')):
+                value = f'"{value}"'
+            return f'{key}: {value}'
+        return re.sub( r'(\b\w+\b)\s*:\s*([^,{}]+)', add_quotes, input_string )
+
     def retrieve_server_config_tags( self ) -> dict:
         surgeon_hawkids = self.config.list_of_all_items_in_table( table_name='Surgeons' )
         return {'hawk_ids': [id.lower() for id in self.config.list_of_all_items_in_table( table_name='Registered_Users' )],
@@ -1145,46 +1209,7 @@ class MassUploadRepresentation( UIDandMetaInfo ):
             'procedure_names': [p.lower() for p in self.config.list_of_all_items_in_table( table_name='Groups' )],
             'surgeon_hawk_ids': surgeon_hawkids,
             'surgeon_hawk_id_encodings': {u.lower(): self.config.get_uid( table_name='Surgeons', item_name=u ) for u in surgeon_hawkids} }
-        
-    def process_performer_hawk_id_task( self, in_str: str, hawk_ids: dict, num_performers: int ) -> Tuple[Opt[str], List[str]]:
-        """
-        Process the Performer-HawkID_Task string to extract the relevant data.
-        # 1. ensure the string is a valid python dictionary, 
-        # 2. ensure the keys are valid HawkIDs, 
-        # 3. replace any text within the values that contains the hawkids with their respective encoding, 
-        # 4. return the dictionary.
-        """
-        # Check if the string is a valid python dictionary
-        issues = []
-        try:
-            performer_hawk_id_task = ast.literal_eval( self._revise_string( in_str ) )
-            if not isinstance( performer_hawk_id_task, dict ):
-                issues.append( f"\nWarning: 'Performer HawkID_Task' must be in the following dict format '{{hawkid: task description, ..., hawkidN: task description N.}}'" )
-        except:
-            issues.append( f"\nError: 'Performer HawkID-Task' '{in_str}' is not a valid Python dictionary." )
-            return None, issues
-        
-        # Colloborate the dictionary and check if the number of performers is correct.
-        num_tasks = len( performer_hawk_id_task )
-        if num_tasks != num_performers:
-            issues.append( f"\nError: Number of performers noted in 'Performer HawkID-Task' ({num_tasks}) does not match the expected number of performers ({num_performers}).")
-            return None, issues
-        
-        # Check if each key in the dict is a valid HawkID, and replace it with its encoding.
-        output_string = "{'"
-        for key in performer_hawk_id_task.keys():
-            if key.lower() not in hawk_ids:
-                output_string += ( f"{key}': '" )
-                issues.append( f"\nError: HawkID '{key}' is not found in 'Registered Users'." )
-            else:   output_string += ( f"{hawk_ids[key.lower()]}': '" )
-            
-            # Check if any other hawk_ids are in the value text.
-            value_text, issues_text = self.replace_hawk_ids_with_encodings( performer_hawkid_task[key], hawk_ids )  
-            issues += issues_text
-            output_string += value_text + "', '"
-        output_string = output_string[:-3] + "}"
-        return output_string, issues
-
+     
     def _issues_appending_helper( self, in_row: pd.Series, idx: Hashable, col_name: str, hawk_ids: dict ) -> None:
         self._df.at[idx, col_name], issues = self.replace_hawk_ids_with_encodings( in_str=in_row[col_name], hawk_ids=hawk_ids )
         for iss in issues:      self._warnings.at[idx, col_name] = f"{self._warnings.at[idx, col_name]}\n{iss}"
@@ -1222,3 +1247,25 @@ class MassUploadRepresentation( UIDandMetaInfo ):
             df_str = tabulate( df_str.values.tolist(), headers=df_str.columns.tolist(), tablefmt='pretty', showindex=False, stralign='center' )
         else:   df_str = ''
         return f"MassUploadRepresntation\n\tFile:\t{self.ffn.name}\n\tRows:\t{len(self.df)+1} (w header)\n\t\t/w Errors:\t{num_row_errs}\n\t\t/w Warnings:\t{num_row_warns}\n\tCols:\t{len(self.df.columns)}\n{df_str}"
+ 
+    def _init_mass_upload_summary_doc( self ) -> str:
+        """ Create a summary document of the mass upload data"""
+        return f"""Summary of Mass Data Upload
+        ===========================\n\n
+        Filename: {self.ffn.name}
+        Date: {datetime.now().strftime("%Y-%m-%d %H:%M")}\n\n
+        Total Rows Processeed:\t{len( self.df )}\n
+        Successful Rows:\t\t
+        """
+
+    def upload_sessions( self, xnat_connection: XNATConnection, verbose: bool = True ) -> None:
+        """ Upload the sessions to XNAT. """
+        txt = self._init_mass_upload_summary_doc()
+        ind = 0
+        failed_rows = {}
+        for idx, row in self.df.iterrows():
+            # Iterate through the errors and append them to the failed_rows dictionary key for this row index. Use self.summary_table to get the exact error description
+            if any( self.summary_table.loc[idx].notna() & self.summary_table.loc[idx] != '' ): # type: ignore
+                failed_rows[ind] = [self.errors.loc[ind, col] for col in self.errors.columns if self.summary_table.loc[ind, col] == 'E']
+                continue
+        print( failed_rows)

@@ -46,6 +46,7 @@ def import_all_necessary_modules() -> None:
     import tempfile
     import sys
     import warnings
+    import openpyxl
 
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
     

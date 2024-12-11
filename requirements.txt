@@ -5,6 +5,7 @@ cycler
 fonttools
 idna
 importlib_resources
+ipykernel
 kiwisolver
 lxml
 matplotlib

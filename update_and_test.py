@@ -76,6 +76,14 @@ def main() -> None:
         print( f'ERROR\t-- You must install all necessary modules before running this script.\n\tError printout:\n{e}' )
         sys.exit( 1 )
 
+    # Before updating local files, we must ask the user to confirm that all files that might be overwritten are closed on their local machine.
+    print( f'--- Pulling latest changes from the master branch...\n' )
+    print( f'\tWARNING: Before proceeding, ensure that all files that might be overwritten are closed on your local machine.\n' )
+    print( f'\tHave you closed all files that might be overwritten? Input 1 for yes and 2 for no)\n' )
+    batch_upload_file = input( f'\tAnswer:\t' )
+    if batch_upload_file != '1':
+        print( f'\nERROR\t-- Please close all files that might be overwritten before proceeding...\n' )
+        sys.exit( 1 )
     try:
         pull_from_master()
         print( f'SUCCESS\t-- Codebase is up-to-date with the master branch...\n' )

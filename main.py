@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 from pyxnat import Interface
 from pyxnat.core.jsonutil import JsonTable
 
-from src.utilities import ConfigTables, USCentralDateTime, XNATLogin, XNATConnection, ImageHash
+from src.utilities import ConfigTables, USCentralDateTime, XNATLogin, XNATConnection, ImageHash, BatchUploadRepresentation
 from src.xnat_experiment_data import *
 from src.xnat_scan_data import *
 from src.xnat_resource_data import ORDataIntakeForm
@@ -49,6 +49,21 @@ def prompt_function( verbose: bool ) -> str:
     return ORDataIntakeForm.prompt_until_valid_answer_given( 'Select a task', acceptable_options=['1', '2', '3'] )
 
 
+def prompt_individual_or_batch_upload( verbose: bool ) -> str:
+    """
+    Prompt the user to select an individual or batch upload.
+
+    Args:
+        verbose (bool): Whether to enable verbose output.
+
+    Returns:
+        str: The selected upload type ('1' for Individual Upload or '2' for Batch Upload).
+    """
+    if verbose: print( f'\n...selecting upload type...' )
+    print( f'\tUpload type selection:\n\t\t-- Please enter "1" for Individual Upload or "2" for Batch Upload.' )
+    return ORDataIntakeForm.prompt_until_valid_answer_given( 'Select an upload type', acceptable_options=['1', '2'] )
+
+
 def prompt_login( username: Opt[str]=None, password: Opt[str]=None ) -> Tuple[str, str]:
     """
     Prompt the user for their XNAT login credentials if not provided.
@@ -66,6 +81,16 @@ def prompt_login( username: Opt[str]=None, password: Opt[str]=None ) -> Tuple[st
         password = pwinput.pwinput( prompt=f"\t{username.upper()} Password:\t", mask="*" )
     return username, password
 
+
+def prompt_source_and_group() -> Tuple[str, str]:
+    """
+    Prompt the user to provide the acquisition site and surgical procedure.
+
+    Returns:
+        Tuple[str, str]: Acquisition site and surgical procedure name.
+    """
+    return input( "Acquisition Site: " ), input( "Surgical Procedure: " )
+    
 
 def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, verbose: Opt[bool]=True ) -> Tuple[XNATLogin, XNATConnection, ConfigTables]:
     """
@@ -101,16 +126,6 @@ def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, 
         raise ValueError( f"\tThe provided login credentials did not lead to a successful connection. Please try again, or contact the Data Librarian for help." )
     return validated_login, xnat_connection, config
 
-
-def prompt_source_and_group() -> Tuple[str, str]:
-    """
-    Prompt the user to provide the acquisition site and surgical procedure.
-
-    Returns:
-        Tuple[str, str]: Acquisition site and surgical procedure name.
-    """
-    return input( "Acquisition Site: " ), input( "Surgical Procedure: " )
-    
 
 def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection, config: ConfigTables, verbose: Opt[bool]=False ) -> ConfigTables:
     """
@@ -392,8 +407,6 @@ def download_queried_data( validated_login: XNATLogin, xnat_connection: XNATConn
         print( f'\n-----Concluding Download Process-----\n' )
 
 
-
-
 def header_footer_print( header_or_footer: str ):
     if header_or_footer == 'header': # Print header
         command = 'cls' if os.name == 'nt' else 'clear'
@@ -428,7 +441,17 @@ def main():
         while True:
             choice = prompt_function( verbose=verbose )
             if choice == '1':
-                config = upload_new_case( validated_login=validated_login, xnat_connection=xnat_connection, config=config, verbose=verbose )
+                upload_type = prompt_individual_or_batch_upload( verbose=verbose )
+                if upload_type == '1':
+                    config = upload_new_case( validated_login=validated_login, xnat_connection=xnat_connection, config=config, verbose=verbose )
+                elif upload_type == '2':
+                    # Prompt user to input the location of the batch_upload file.
+                    print( f'\tPlease enter the full path to the batch upload file:\t' )
+                    batch_upload_file = input( f'\tAnswer:\t' )
+                    data = BatchUploadRepresentation( xls_ffn=Path( batch_upload_file ), config=config, verbose=verbose )
+                    out = data.print_rows( rows='errors' )
+                    print( out )
+                    return
             elif choice == '3':
                 download_queried_data( validated_login=validated_login, xnat_connection=xnat_connection, config=config, verbose=verbose ) 
             # # elif choice == 2:

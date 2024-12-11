@@ -458,7 +458,7 @@ class ConfigTables( UIDandMetaInfo ):
     my_login_info = { 'USERNAME': '...', 'PASSWORD' : '...', 'URL' : 'https://rpacs.iibi.uiowa.edu/xnat/' }
     my_login = XNATLogin( my_login_info )
     my_connection = XNATConnection( my_login )
-    mt = MetaTables( my_login, my_connection )
+    mt = ConfigTables( my_login, my_connection )
     print( mt )
 
     # Create some new tables -- convention is for inputs to be plural. Will automatically caps everything
@@ -617,6 +617,8 @@ class ConfigTables( UIDandMetaInfo ):
         self.add_new_item( table_name='Surgeons', item_name='wdodd',        extra_columns_values={'first_name': 'DODD', 'last_name': 'WILLIAM', 'middle_initial': 'S'} )
         self.add_new_item( table_name='Surgeons', item_name='jcdavison',    extra_columns_values={'first_name': 'DAVISON', 'last_name': 'JOHN', 'middle_initial': 'C'} )
         self.add_new_item( table_name='Surgeons', item_name='cjcall',       extra_columns_values={'first_name': 'CALL', 'last_name': 'CORY', 'middle_initial': 'J'} )
+        self.add_new_item( table_name='Surgeons', item_name='unknown',      extra_columns_values={'first_name': 'UNKNOWN', 'last_name': 'UNKNOWN', 'middle_initial': ''} )
+        self.add_new_item( table_name='Surgeons', item_name='not-applicable', extra_columns_values={'first_name': 'NOT', 'last_name': 'APPLICABLE', 'middle_initial': 'NA'} )
 
         self.add_new_item( 'registered_users', 'gthomas' )
         self.add_new_item( 'registered_users', 'andersondd' )
@@ -687,7 +689,9 @@ class ConfigTables( UIDandMetaInfo ):
 
 
     def ensure_primary_keys_validity( self ) -> None:
-        '''Ensure that Subjects found in Image Hashes table are also found in the Subjects table.'''
+        '''Ensure that Subjects found in Image Hashes table are also found in the Subjects table.
+        TBD...
+        '''
         # # Test 1: Ensure that all subjects in the Image Hashes table are also in the Subjects table
         # unique_referenced_subject_uids = self._tables['IMAGE_HASHES']['SUBJECT'].unique()
         # unique_subjects = self.list_of_all_items_in_table( 'SUBJECTS' )
@@ -696,22 +700,32 @@ class ConfigTables( UIDandMetaInfo ):
         pass
 
 
-    def push_to_xnat( self, verbose: Opt[bool] = True ) -> None:
-        self.ensure_primary_keys_validity()
-        self.save( verbose )
-        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
-        if verbose:                     print( f'\t...ConfigTables (config.json) successfully updated on XNAT!\n' )
+    def push_to_xnat( self, verbose: Opt[bool] = True ) -> bool:
+        try:
+            self.ensure_primary_keys_validity()
+            if self.save( verbose ) is False:   return False
+            self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
+            if verbose:                     print( f'\t...ConfigTables (config.json) successfully updated on XNAT!\n' )
+            return True
+        except Exception as e:
+            print( f'\tERROR! --- Failed to push ConfigTables to XNAT server. Error message: {e}\n' )
+            return False
 
 
-    def save( self, verbose: Opt[bool] = True ) -> None: # Convert all tables to JSON; Write the data to the file
+    def save( self, verbose: Opt[bool] = True ) -> bool: # Convert all tables to JSON; Write the data to the file
         '''Only saves locally. To save to the server, all the 'catalog_new_data' method(s) in the experiment class(es) must be called.'''
-        self._validate_login_for_important_functions( assert_librarian=False ) # To-do: is this necessary if the user musts create a valid xnat connection first (which should check the same thing)?
-        tables_json = {name: df.to_dict( 'records' ) for name, df in self.tables.items()}
-        data = {'metadata': self.metadata, 'tables': tables_json }
-        # json_str = json.dumps( data, indent=2, separators=( ',', ':' ) )
-        json_str = self._custom_json_serializer( data )
-        with open( self.config_ffn, 'w' ) as f:         f.write( json_str )
-        if verbose:                     print( f'\tSUCCESS! --- saved ConfigTables to: {self.config_ffn}\n' )
+        try:
+            self._validate_login_for_important_functions( assert_librarian=False ) # To-do: is this necessary if the user musts create a valid xnat connection first (which should check the same thing)?
+            tables_json = {name: df.to_dict( 'records' ) for name, df in self.tables.items()}
+            data = {'metadata': self.metadata, 'tables': tables_json }
+            # json_str = json.dumps( data, indent=2, separators=( ',', ':' ) )
+            json_str = self._custom_json_serializer( data )
+            with open( self.config_ffn, 'w' ) as f:         f.write( json_str )
+            if verbose:                         print( f'\tSUCCESS! --- saved ConfigTables to: {self.config_ffn}\n' )
+            return True
+        except Exception as e:
+            print( f'\tERROR! --- Failed to save ConfigTables to: {self.config_ffn}. Error message: {e}\n' )
+            return False
 
 
     def is_user_registered( self, user_name: Opt[str] = None ) -> bool:
@@ -729,15 +743,19 @@ class ConfigTables( UIDandMetaInfo ):
         return user_name.upper() in self.tables['REGISTERED_USERS']['NAME'].values
 
 
-    def register_new_user( self, user_name: str, verbose: Opt[bool] = True ):
-        self._validate_login_for_important_functions( assert_librarian=True )   
-        if not self.is_user_registered( user_name ):
-            self.add_new_item( 'REGISTERED_USERS', user_name )
-        if verbose:                     print( f'\tSUCCESS! --- Registered new user: {user_name}\n' )
+    def register_new_user( self, user_name: str, verbose: Opt[bool] = True ) -> bool:
+        try:
+            self._validate_login_for_important_functions( assert_librarian=True )   
+            if not self.is_user_registered( user_name ):
+                self.add_new_item( 'REGISTERED_USERS', user_name )
+            if verbose:                     print( f'\tSUCCESS! --- Registered new user: {user_name}\n' )
+            return True
+        except Exception as e:
+            print( f'\tERROR! --- Failed to register new user: {user_name}. Error message: {e}\n' )
+            return False
 
 
-    def list_of_all_tables( self ) -> list:
-        return list( self.tables.keys() )
+    def list_of_all_tables( self ) -> list:                             return list( self.tables.keys() )
 
 
     def list_of_all_items_in_table( self, table_name: str ) -> list:
@@ -755,12 +773,10 @@ class ConfigTables( UIDandMetaInfo ):
         else:   return [] # Return an empty list if the table does not exist or is empty
             
 
-    def table_exists( self, table_name: str ) -> bool:
-        return table_name.upper() in self.list_of_all_tables()
+    def table_exists( self, table_name: str ) -> bool:                  return table_name.upper() in self.list_of_all_tables()
 
 
-    def item_exists( self, table_name: str, item_name: str ) -> bool:
-        return not self.tables[table_name.upper()].empty and item_name.upper() in self.tables[table_name.upper()].values
+    def item_exists( self, table_name: str, item_name: str ) -> bool:   return not self.tables[table_name.upper()].empty and item_name.upper() in self.tables[table_name.upper()].values
 
 
     def add_new_table( self, table_name: str, extra_column_names: Opt[typehintList[str]] = None, verbose: Opt[bool] = True ) -> None:

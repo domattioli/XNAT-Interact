@@ -1065,8 +1065,6 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
             self._errors.at[idx, 'Institution Name'] = f"'Institution Name' ('{row['Institution Name']}') not registered in the 'Acquisition_Sites' config table."
         if self._col_is_empty( row['Procedure Name'] ) or row['Procedure Name'].lower() not in tag_info['procedure_names']:
             self._errors.at[idx, 'Procedure Name'] = f"'Procedure Name' ('{row['Procedure Name']}') not registered in the 'Groups' config table."
-        if self._col_is_empty( row['Name/ Type of Storage Device'] ):
-            self._errors.at[idx, 'Name/ Type of Storage Device'] = "'Name/ Type of Storage Device' cannot be blank."
         if self._col_is_empty( row['Full Path to Data'] ):
             self._errors.at[idx, 'Full Path to Data'] = "'Full Path to Data' cannot be blank."
         elif not Path( row['Full Path to Data'] ).exists():

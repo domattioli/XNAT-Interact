@@ -1239,8 +1239,8 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
     
     def __str__( self ) -> str:                             return self.print_rows( rows='all' )
     
-    def print_rows( self, rows: Opt[str]='both' ) -> str:
-        class_name = {self.__class__.__name__}
+    def print_rows( self, rows: Opt[str]='both', write_to_file: Opt[bool]=False ) -> str:
+        class_name = self.__class__.__name__;
         assert rows in ['errors', 'warnings', 'both', 'all'], f"Inputted 'rows' must be a list containing either 'errors', 'warnings', 'both', or 'all'; you provided '{rows}'."
         if ( self.summary_table == '' ).all().all():   return f"{class_name}\n\tFilename:\t{self.ffn.name}\n\tRows:\t{len(self.df)}\n\tCols:\t{len(self.df.columns)}\n\tIssues:\tNone"
         num_row_errs = self.summary_table.apply( lambda row: any(cell in ['E', 'EW'] for cell in row), axis=1 ).sum()
@@ -1261,7 +1261,10 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         if len( df_str ) > 0:
             df_str = tabulate( df_str.values.tolist(), headers=df_str.columns.tolist(), tablefmt='pretty', showindex=False, stralign='center' )
         else:   df_str = ''
-        return f"{class_name}\n\tFile:\t{self.ffn.name}\n\tRows:\t{len(self.df)+1} (w header)\n\t\t/w Errors:\t{num_row_errs}\n\t\t/w Warnings:\t{num_row_warns}\n\tCols:\t{len(self.df.columns)}\n{df_str}"
+        return_str = f"{class_name}\n\tFile:\t{self.ffn.name}\n\tRows:\t{len(self.df)+1} (w header)\n\t\t/w Errors:\t{num_row_errs}\n\t\t/w Warnings:\t{num_row_warns}\n\tCols:\t{len(self.df.columns)}\n{df_str}"
+        if write_to_file:
+            with open( self.ffn.with_suffix('.txt'), 'w' ) as f: f.write( return_str )
+        return return_str
  
     def _init_mass_upload_summary_doc( self ) -> str:
         """ Create a summary document of the mass upload data"""

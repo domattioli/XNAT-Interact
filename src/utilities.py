@@ -1042,6 +1042,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
             self._df        = pd.read_excel( f, header=0 )
             self._df        = self._df.fillna( '' )
             self._df.columns= [col.replace('\n', ' ').strip() for col in self._df.columns]
+            self._df        = self.df.loc[:, ~self.df.columns.str.contains('^Casse Name')] # This column is only there for the user's reference.
             self._df        = self.df.loc[:, ~self.df.columns.str.contains('^Unnamed')] # Remove any unnamed columns
             self._warnings      = pd.DataFrame( data=np.empty( ( len( self.df ), len( self.df.columns ) ), dtype=str ), columns=self.df.columns )   
             self._errors        = self.warnings.copy()

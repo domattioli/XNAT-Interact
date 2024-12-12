@@ -1203,19 +1203,17 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         # Check that the string begins with '{' and ends with '}'
         assert input_string.startswith( '{') and input_string.endswith('}' ), "The input string must begin with '{' and end with '}'."
 
-        # Check for appropriate use of commas and colons
-        assert re.match( r'^\{(?:\s*[^{}]+:\s*[^{}]+(?:,\s*[^{}]+:\s*[^{}]+)*\s*)?\}$', input_string ), "The input string must use commas and colons appropriately."
+        # Check for appropriate use of semicolons and colons
+        assert re.match( r'^\{(?:\s*[^{}]+:\s*[^{}]+(?:;\s*[^{}]+:\s*[^{}]+)*\s*)?\}$', input_string ), "The input string must use semicolons and colons appropriately."
 
         # Add quotes around keys and values if they are not already quoted
         def add_quotes( match ):  
             key, value = match.groups()
             key, value = key.strip(), value.strip()
-            if not (key.startswith('"') and key.endswith('"')):
-                key = f'"{key}"'
-            if not (value.startswith('"') and value.endswith('"')):
-                value = f'"{value}"'
+            if not (key.startswith('"') and key.endswith('"')):         key = f'"{key}"'
+            if not (value.startswith('"') and value.endswith('"')):     value = f'"{value}"'
             return f'{key}: {value}'
-        return re.sub( r'(\b\w+\b)\s*:\s*([^,{}]+)', add_quotes, input_string )
+        return re.sub( r'(\b\w+\b)\s*:\s*([^,{}]+)', add_quotes, input_string ).replace(';', ',')
 
     def retrieve_server_config_tags( self ) -> dict:
         surgeon_hawkids = self.config.list_of_all_items_in_table( table_name='Surgeons' )

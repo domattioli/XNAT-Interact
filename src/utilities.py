@@ -27,7 +27,7 @@ import textwrap
 __all__ = ['UIDandMetaInfo', 'XNATLogin', 'ConfigTables', 'XNATConnection', 'USCentralDateTime', 'ImageHash', 'BatchUploadRepresentation']
 
 
-data_librarian_hawk_id = 'dmattioli' # Update as needed. *** Not sure if changing this to stelong will cause errors.
+data_librarian_hawk_id = ['dmattioli', 'domattioli', 'stelong'] # Somehow my (Dom's) xnat account has a different username than my hawkid, but I am required to use my hawkid to login. I requested IT staff to fix this but they didn't get back to me.
 
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -102,7 +102,7 @@ class _local_variables:
                         'xnat_config_folder_name': xnat_config_folder_name,
                         'default_meta_table_columns' : ['NAME', 'UID', 'CREATED_DATE_TIME', 'CREATED_BY'],
                         'template_img_dir' : template_img_dir,
-                        'data_librarian': data_librarian_hawk_id.upper(),
+                        'data_librarian': [id.lower() for id in data_librarian_hawk_id],
                         'template_img' : self._read_template_image( template_img_dir ),
                         'acceptable_img_dtypes' : [np.uint8, np.int8, np.uint16, np.int16, np.uint32, np.int32, np.uint64, np.int64],
                         'required_img_size_for_hashing' : self._img_sizes,
@@ -204,7 +204,9 @@ class UIDandMetaInfo:
     @property
     def redacted_string( self )                 -> str:                 return self.local_variables.redacted_string
     @property
-    def data_librarian( self )                  -> str:                 return self.local_variables.data_librarian
+    def data_librarian( self )                  -> list:                return [librarian.lower() for librarian in self.local_variables.data_librarian]
+    @property
+    def project_owner( self )                   -> list:                return self.data_librarian
     @property
     def required_batch_upload_columns( self )   -> dict:                return self.local_variables.required_batch_upload_columns
     @property
@@ -388,7 +390,7 @@ class XNATConnection( UIDandMetaInfo ):
         username = self.get_user.lower()                # type: ignore 
         self._failed_tests['User is not added to project (XNAT-side)'] = False
         if username not in [u.lower() for u in self.project_handle.users()]:
-            if username != self.data_librarian.lower(): # this is a quirk specific to domattioli (i'm the only one who's username is not his hawkid (idk how this happened). Might be a problem for others in the future is they somehow do what i did).
+            if username not in [owner.lower() for owner in self.project_owner]:
                 self._failed_tests['User is not added to project (XNAT-side)'] = True
                 return
             
@@ -424,9 +426,8 @@ class XNATConnection( UIDandMetaInfo ):
 
     def __str__( self ) -> str:
         project_users = self.project_handle.users() if self.project_handle else 'None'
-        data_librarian = self.data_librarian.lower()
-        if self.is_verified:    return (f"-- XNAT Connection --\n\tStatus:\t\t{'Open' if self.is_open else 'Closed'}\n\tUsername:\t{self.get_user}\n\tVerified:\t{self.is_verified}\n\tProject:\t{self.project_handle}\n\tLibrarian:\t{data_librarian}\n\tApproved Users:\t{project_users}" )
-        else:                   return (f"-- XNAT Connection --\n\tStatus:\t\t{'Open' if self.is_open else 'Closed'}\n\tUsername:\t{self.get_user}\n\tVerified:\t{self.is_verified}\n\tFailed Tests:\t{self.failed_tests}\n\tProject:\t{self.project_handle}\n\tLibrarian:\t{data_librarian}\n\tApproved Users:\t{project_users}" )
+        if self.is_verified:    return (f"-- XNAT Connection --\n\tStatus:\t\t{'Open' if self.is_open else 'Closed'}\n\tUsername:\t{self.get_user}\n\tVerified:\t{self.is_verified}\n\tProject:\t{self.project_handle}\n\tLibrarian(s)/Owner(s):\t{self.project_owner}\n\tApproved Users:\t{project_users}" )
+        else:                   return (f"-- XNAT Connection --\n\tStatus:\t\t{'Open' if self.is_open else 'Closed'}\n\tUsername:\t{self.get_user}\n\tVerified:\t{self.is_verified}\n\tFailed Tests:\t{self.failed_tests}\n\tProject:\t{self.project_handle}\n\tLibrarian(s)/Owner(s):\t{self.project_owner}\n\tApproved Users:\t{project_users}" )
           
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -483,6 +484,7 @@ class ConfigTables( UIDandMetaInfo ):
             self._instantiate_json_file()
             self._initialize_tables()
             self.push_to_xnat( verbose=verbose )
+        self._verify_project_owners_are_registered()
         if verbose:                         print( self )
             
 
@@ -501,6 +503,13 @@ class ConfigTables( UIDandMetaInfo ):
 
 
     #==========================================================PRIVATE METHODS==========================================================
+    def _verify_project_owners_are_registered( self ) -> bool:
+        '''Verify that all project owners are registered users in the database.'''
+        # Return true if all self.project_owner (except 'domattioli', which is an artifact of my strange xnat registration) are in the registered users table.
+        data_librarians = [item for item in self.project_owner if item != 'domattioli']
+        return all( self.item_exists( table_name='registered_users', item_name=owner ) for owner in data_librarians )
+            
+
     def _reinitialize_tables_with_extra_columns( self ) -> None:
         # iterate through each table in self._tables and ensure that all columns denoted in self.metadata['TABLE_EXTRA_COLUMNS'] are present.
         for table_name, table in self._tables.items():
@@ -519,7 +528,7 @@ class ConfigTables( UIDandMetaInfo ):
         self._validate_login_for_important_functions( assert_librarian=True )
         now_datetime = self.now_datetime
         librarian_uid_init = self.generate_uid()
-        default_users = { self.data_librarian: [librarian_uid_init, now_datetime, librarian_uid_init] }
+        default_users = { 'DMATTIOLI': [librarian_uid_init, now_datetime, librarian_uid_init] }
         # if self.accessor_username not in ( k.upper() for k in default_users.keys() ):
         #     default_users[self.accessor_username] = [self.generate_uid(), now_datetime, 'INIT']
         data = [[name] + info for name, info in default_users.items()]
@@ -659,7 +668,7 @@ class ConfigTables( UIDandMetaInfo ):
     def _validate_login_for_important_functions( self, assert_librarian: Opt[bool]=False ) ->  None:
         assert self.login_info.is_valid, f"Provided login info must be validated before accessing config file: {self.login_info}"
         if hasattr( self, '_tables' ):      assert self.is_user_registered(), f'User {self.accessor_uid} must first be registed before saving config file.'
-        if assert_librarian:                assert self.accessor_username.upper() == self.data_librarian.upper(), f'Only user {self.data_librarian} can push config file to the xnat server.'
+        if assert_librarian:                assert self.accessor_username.lower() in [owner.lower() for owner in self.project_owner], f'Only user(s) {self.project_owner} can push config file to the xnat server.'
     
     
     def _custom_json_serializer( self, data, indent=4 ):
@@ -1350,8 +1359,8 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
 
         # Note TO SELF -- Reconvert all commentary to Uppercase for the first letter of each sentence. ********
         failed_details = self.build_issue_details()
-
-        txt = self._init_mass_upload_summary_doc()
+        assert 1 == 0, "This function is not yet implemented."
+        # txt = self._init_mass_upload_summary_doc()
         ind = 0
         failed_rows = {}
         for idx, row in self.df.iterrows():

@@ -1177,7 +1177,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
                 self._issues_appending_helper( in_row=row, idx=idx, col_name='Additional Assessment Details', hawk_ids=surgeon_hawkids )
         if not self._col_is_empty( row['Was Radiology Contacted'] ) and row['Was Radiology Contacted'] != 'unknown':
             if self._col_is_empty( row['Radiology Contact Date'] ):
-                self._log_issue( idx=idx, column='Radiology Contact Date', message="'Radiology Contact Date' cannot be blank when 'Was Radiology Contacted' is specified.", issue_type='error' )
+                self._log_issue( idx=idx, column='Radiology Contact Date', message="'Radiology Contact Date' is blank but 'Was Radiology Contacted' is specified; if you have the date, please input it.", issue_type='warning' )
             else:   # ensure that the text provided corresponds to a date                                                                
                 try:
                     datetime.strptime( row['Radiology Contact Date'], '%Y-%m-%d' )

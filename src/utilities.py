@@ -480,11 +480,11 @@ class ConfigTables( UIDandMetaInfo ):
         
         try: # Need to try to pull it from the xnat server if it exists, otherwise create it from scratch.
             self.pull_from_xnat( verbose=verbose )
+            self._verify_project_owners_are_registered()
         except: # This should only ever happen one time -- when the XNAT database is first created.
             self._instantiate_json_file()
             self._initialize_tables()
             self.push_to_xnat( verbose=verbose )
-        self._verify_project_owners_are_registered()
         if verbose:                         print( self )
             
 
@@ -788,8 +788,8 @@ class ConfigTables( UIDandMetaInfo ):
 
     def item_exists(self, table_name: str, item_name: str) -> bool:
         table = self.tables[table_name.upper()]
-        if 'Name' in table.columns:
-            return not table.empty and item_name.upper() in table['Name'].str.upper().values
+        if 'NAME' in table.columns:
+            return not table.empty and item_name.upper() in table['NAME'].str.upper().values
         return False
 
 

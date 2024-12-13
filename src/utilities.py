@@ -1110,16 +1110,16 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
                 
         # Checks for Supervising Surgeon HawkID.
         if self._col_is_empty( row['Supervising Surgeon HawkID'] ):
-            self._df.at[idx, 'Supervising Surgeon HawkID'] = 'Unknown'
-            self._log_issue( idx=idx, column='Supervising Surgeon HawkID', message="'Supervising Surgeon HawkID' is blank, converting to 'Unknown'.", issue_type='warning' )
+            self._df.at[idx, 'Supervising Surgeon HawkID'] = 'unknown'
+            self._log_issue( idx=idx, column='Supervising Surgeon HawkID', message="'Supervising Surgeon HawkID' is blank, converting to 'unknown'.", issue_type='warning' )
         elif row['Performing Surgeon HawkID'] != 'unknown':
             if row['Supervising Surgeon HawkID'] not in surgeon_hawkids:
                 self._log_issue( idx=idx, column='Supervising Surgeon HawkID', message=f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID']}') not found in the 'Surgeons' config table.", issue_type='error' )
 
         # Checks for Performing Surgeon HawkID.
         if self._col_is_empty( row['Performing Surgeon HawkID'] ):
-            self._df.at[idx, 'Performing Surgeon HawkID'] = 'Unknown'
-            self._log_issue( idx=idx, column='Performing Surgeon HawkID', message="'Performing Surgeon HawkID' is blank, converting to 'Unknown'.", issue_type='warning' )
+            self._df.at[idx, 'Performing Surgeon HawkID'] = 'unknown'
+            self._log_issue( idx=idx, column='Performing Surgeon HawkID', message="'Performing Surgeon HawkID' is blank, converting to 'unknown'.", issue_type='warning' )
         elif row['Performing Surgeon HawkID'] != 'unknown':
             if row['Performing Surgeon HawkID'] not in surgeon_hawkids:
                 self._log_issue( idx=idx, column='Performing Surgeon HawkID', message=f"'Performing Surgeon HawkID' ('{row['Performing Surgeon HawkID']}') not found in the 'Surgeons' config table.", issue_type='error' )
@@ -1167,8 +1167,8 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         
         if not self._col_is_empty( row['Skills Assessment Requested'] ) and row['Skills Assessment Requested'] != 'unknown':
             if self._col_is_empty( row['Assessor HawkID'] ):            # Let the user state that they know an assessment was done but not who did it.
-                self._df.at[idx, 'Assessor HawkID'] = 'Unknown'
-                self._log_issue( idx=idx, column='Assessor HawkID', message="'Assessor HawkID' is blank, converting to 'Unknown'.", issue_type='warning' )
+                self._df.at[idx, 'Assessor HawkID'] = 'unknown'
+                self._log_issue( idx=idx, column='Assessor HawkID', message="'Assessor HawkID' is blank, converting to 'unknown'.", issue_type='warning' )
             elif row['Assessor HawkID'] not in surgeon_hawkids:
                 self._log_issue( idx=idx, column='Assessor HawkID', message=f"'Assessor HawkID' ('{row['Assessor HawkID']}') not found in the 'Surgeons' config table.", issue_type='error' )
             if not self._col_is_empty( row['Assessor HawkID'] ) and row['Skills Assessment Requested'] != 'y':
@@ -1186,17 +1186,17 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
          
     def _check_optional_columns( self, idx: Hashable, row: pd.Series, surgeon_hawkids: dict ) -> None:
         if self._col_is_empty( row['Quality'] ):                                                                                     
-            self._df.at[idx, 'Quality'] = 'Unknown'
-            self._log_issue( idx=idx, column='Quality', message="'Quality' is blank, converting to 'Unknown'.", issue_type='warning' )
+            self._df.at[idx, 'Quality'] = 'unknown'
+            self._log_issue( idx=idx, column='Quality', message="'Quality' is blank, converting to 'unknown'.", issue_type='warning' )
         if self._col_is_empty( row['Supervising Surgeon HawkID'] ):
-            self._df.at[idx, 'Supervising Surgeon HawkID'] = 'Unknown'
-            self._log_issue( idx=idx, column='Supervising Surgeon HawkID', message="'Supervising Surgeon HawkID' is blank, converting to 'Unknown'.", issue_type='warning' )
+            self._df.at[idx, 'Supervising Surgeon HawkID'] = 'unknown'
+            self._log_issue( idx=idx, column='Supervising Surgeon HawkID', message="'Supervising Surgeon HawkID' is blank, converting to 'unknown'.", issue_type='warning' )
         elif row['Supervising Surgeon HawkID'] not in surgeon_hawkids:
             self._df.at[idx, 'Supervising Surgeon HawkID'] = self.config.get_uid( table_name='Surgeons', item_name=row['Supervising Surgeon'] )
             self._log_issue( idx=idx, column='Supervising Surgeon HawkID', message=f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID']}') not registered in the 'Registered_Users' config table.", issue_type='error' )
         if self._col_is_empty( row['Performing Surgeon HawkID'] ):
-            self._df.at[idx, 'Performing Surgeon HawkID'] = 'Unknown'
-            self._log_issue( idx=idx, column='Performing Surgeon HawkID', message="'Performing Surgeon HawkID' is blank, converting to 'Unknown'.", issue_type='warning' )
+            self._df.at[idx, 'Performing Surgeon HawkID'] = 'unknown'
+            self._log_issue( idx=idx, column='Performing Surgeon HawkID', message="'Performing Surgeon HawkID' is blank, converting to 'unknown'.", issue_type='warning' )
         elif row['Performing Surgeon HawkID'] not in surgeon_hawkids: 
             self._df.at[idx, 'Performing Surgeon HawkID'] = self.config.get_uid( table_name='Surgeons', item_name=row['Performing Surgeon HawkID'] )
             self._log_issue( idx=idx, column='Performing Surgeon HawkID', message=f"'Performing Surgeon HawkID' ('{row['Performing Surgeon HawkID']}') not registered in the 'Registered_Users' config table.", issue_type='error' )
@@ -1204,11 +1204,11 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         if not self._col_is_empty( row['Diagnostic Notes'] ):                   self._issues_appending_helper( in_row=row, idx=idx, col_name='Diagnostic Notes', hawk_ids=surgeon_hawkids )
         if not self._col_is_empty( row['Additional Comments'] ):                self._issues_appending_helper( in_row=row, idx=idx, col_name='Additional Comments', hawk_ids=surgeon_hawkids )
         if self._col_is_empty( row['Skills Assessment Requested'] ):                                                                 
-            self._df.at[idx, 'Skills Assessment Requested'] = 'Unknown'
-            self._log_issue( idx=idx, column='Skills Assessment Requested', message="'Skills Assessment Requested' is blank, converting to 'Unknown'.", issue_type='warning' )
+            self._df.at[idx, 'Skills Assessment Requested'] = 'unknown'
+            self._log_issue( idx=idx, column='Skills Assessment Requested', message="'Skills Assessment Requested' is blank, converting to 'unknown'.", issue_type='warning' )
         if self._col_is_empty( row['Was Radiology Contacted'] ):                                                                     
-            self._df.at[idx, 'Was Radiology Contacted'] = 'Unknown'
-            self._log_issue( idx=idx, column='Was Radiology Contacted', message="'Was Radiology Contacted' is blank, converting to 'Unknown'.", issue_type='warning' )
+            self._df.at[idx, 'Was Radiology Contacted'] = 'unknown'
+            self._log_issue( idx=idx, column='Was Radiology Contacted', message="'Was Radiology Contacted' is blank, converting to 'unknown'.", issue_type='warning' )
 
     # --------------- Helpers ----------------------------------------------------------------
     def _col_is_empty( self, col_name: str )  -> bool:      return col_name in ['', ' ', None]

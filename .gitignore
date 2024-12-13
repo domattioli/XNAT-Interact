@@ -17,4 +17,4 @@
 /doc/Sensitive_Info_Not_for_Pushing_to_Remote/Hawk_IDs_of_UIowa_Residents.xlsx
 
 # Ignore the main.ipynb file (for now, as of 11/11/2024) bc it is currently for sandboxing. when i pass it off to the team I will include examples in this file and push it.
-main.ipynb
+/main.ipynb

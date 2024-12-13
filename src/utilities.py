@@ -1140,7 +1140,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         if not self._col_is_empty( row['Performer HawkID-Task'] ):
             try:
                 performer_hawk_id_task = ast.literal_eval( self._validate_and_format_dict_string( row['Performer HawkID-Task'] ) )
-                assert isinstance( performer_hawk_id_task, dict ), "The input string was not in a valid Python dictionary format."
+                assert isinstance( performer_hawk_id_task, dict ), "The input string was not in a valid format, e.g., {k1: v1; ...; kn: vn}."
                 for key in performer_hawk_id_task.keys():
                     if key.lower() not in surgeon_hawkids:
                         self._log_issue( idx=idx, column='Performer HawkID-Task', message=f"'Performer HawkID-Task' key ('{key}') not found in the 'Surgeons' config table.", issue_type='error' )
@@ -1150,7 +1150,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
                     self._log_issue( idx=idx, column='Performer HawkID-Task', message=f"Number of keys in 'Performer HawkID-Task' ({len(performer_hawk_id_task)}) does not match '# of Participating Performing Surgeons' ({num_surgeons}).", issue_type='error' )
                     self._log_issue( idx=idx, column='# of Participating Performing Surgeons', message=f"Number of keys in 'Performer HawkID-Task' ({len(performer_hawk_id_task)}) does not match '# of Participating Performing Surgeons' ({num_surgeons}).", issue_type='error' )
             except:
-                self._log_issue( idx=idx, column='Performer HawkID-Task', message="'Performer HawkID-Task' must be structured in a valid Python dictionary format, e.g., '{surgeon1_hawkid: task performed, surgeon2_hawkid: task_performed, ...}'.", issue_type='error' )
+                self._log_issue( idx=idx, column='Performer HawkID-Task', message="'Performer HawkID-Task' must be structured in the following format, e.g., '{surgeon1_hawkid: task performed; ...; surgeonN_hawkid: task_performed, ...}'.", issue_type='error' )
         elif num_surgeons is not None and num_surgeons != 1:
             self._log_issue( idx=idx, column='Performer HawkID-Task', message="'Performer HawkID-Task' cannot be empty if '# of Participating Performing Surgeons' is not 1.", issue_type='error' )
             self._log_issue( idx=idx, column='# of Participating Performing Surgeons', message="'Performer HawkID-Task' cannot be empty if '# of Participating Performing Surgeons' is not 1.", issue_type='error' )
@@ -1338,7 +1338,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         #     successful_rows_details += f"\t- {detail['surgeons']} surgeon(s) operating on a {detail['case']} case on {detail['date']} in {detail['location']}.\n"
 
         # Create the footer & Combine all parts
-        output = header + failed_rows_details + successful_rows_details + "\n===========================\nEnd of Summary"
+        output = header + failed_rows_details + successful_rows_details + "\n===========================\nEnd of Summary\n"
         if write_to_file:
             with open( self._ffn.with_name( self._ffn.stem + '-summary.txt' ), 'w' ) as f:
                 f.write( output )

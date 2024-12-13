@@ -777,7 +777,11 @@ class ConfigTables( UIDandMetaInfo ):
     def table_exists( self, table_name: str ) -> bool:                  return table_name.upper() in self.list_of_all_tables()
 
 
-    def item_exists( self, table_name: str, item_name: str ) -> bool:   return not self.tables[table_name.upper()].empty and item_name.upper() in self.tables[table_name.upper()].values
+    def item_exists(self, table_name: str, item_name: str) -> bool:
+        table = self.tables[table_name.upper()]
+        if 'Name' in table.columns:
+            return not table.empty and item_name.upper() in table['Name'].str.upper().values
+        return False
 
 
     def add_new_table( self, table_name: str, extra_column_names: Opt[typehintList[str]] = None, verbose: Opt[bool] = True ) -> None:
@@ -1296,13 +1300,9 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         return failed_details
     
 
-    def generate_summary( self, write_to_file: Opt[bool] = False ) -> str:
-        # Compute the number of failed and successful rows
-        failed_details = self.build_issue_details()
-        failed_rows = len(failed_details)
-        # successful_rows = len(self.successful_details)
-
+    def generate_summary( self, failed_details: list, successful_details: list, write_to_file: Opt[bool] = False ) -> str:
         # Create the header
+        failed_rows, successful_rows = len( failed_details ), 0 # len( self.successful_details )
         header = textwrap.dedent( f"""\
         Summary of Mass Data Upload
         ===========================
@@ -1311,7 +1311,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         Date: {datetime.now().strftime("%Y-%m-%d %H:%M")}
 
         Total Rows Processed:\t{len( self.df )}
-        Successful Rows:\t{''}
+        Successful Rows:\t{successful_rows}
         Failed Rows:\t\t{failed_rows}
 
         *Row corresponds to the header with column names.
@@ -1349,10 +1349,8 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         """ Upload the sessions to XNAT. """
 
         # Note TO SELF -- Reconvert all commentary to Uppercase for the first letter of each sentence. ********
+        failed_details = self.build_issue_details()
 
-        if write_to_file: # Write before printing because the header
-            with open( self.ffn.with_suffix('.txt'), 'w' ) as f: f.write( output )
-        assert 1 == 0, "Functionality not yet implemented."
         txt = self._init_mass_upload_summary_doc()
         ind = 0
         failed_rows = {}

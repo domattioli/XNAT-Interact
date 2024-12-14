@@ -1305,23 +1305,28 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
             df_str = ''
         return f"{class_name}\n\tFile:\t{self.ffn.name}\n\tRows:\t{len(self.df)+1} (w header)\n\t\t/w Errors:\t{num_row_errs}\n\t\t/w Warnings:\t{num_row_warns}\n\tCols:\t{len(self.df.columns)}\n{df_str}"
 
-    def build_issue_details( self ) -> List[Dict[str, Any]]:
-        failed_details = []
+    def build_issue_details( self ) -> Tuple[List[Dict[str, Any]],List[int]]:
+        failed_details, counts = [], [0, 0]
         for idx, row in self._errors.iterrows():
             errors, warnings = [], []
             for column in self._errors.columns:
-                if row[column]:                 errors.extend(row[column])
+                if row[column]:
+                    errors.extend(row[column])
+                    counts[0] += 1
             if idx in self._warnings.index:
                 warning_row = self._warnings.loc[idx]  # type: ignore .at removes the red line but leads to a runtime error
                 for column in self._warnings.columns:
-                    if warning_row[column]:     warnings.extend(warning_row[column])
+                    if warning_row[column]:
+                        warnings.extend(warning_row[column])
+                        counts[1] += 1
             if errors or warnings:
                 failed_details.append( { 'row': idx, 'errors': errors, 'warnings': warnings } )
-        return failed_details
+        return failed_details, counts
     
 
-    def generate_summary( self, failed_details: list, write_to_file: Opt[bool] = False ) -> str:
+    def generate_summary( self, write_to_file: Opt[bool] = False ) -> Tuple[str, bool]:
         # Create the details for failed rows
+        failed_details, counts = self.build_issue_details()
         failed_rows_details, num_failed = "", len( failed_details )
         for i, detail in enumerate( failed_details, 1 ):
             failed_rows_details += f"({i}/{num_failed}) Row {detail['row']+2}:\n"
@@ -1341,9 +1346,9 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
 
         Total Rows Processed:\t{len( self.df )}
         Rows with Fatal Errors:\t{num_failed}
-        Total # of Errors:\t{sum( 1 for item in failed_details if item['errors'] )}
+        Total # of Errors:\t{counts[0]}
         Rows with Notices:\t{sum( 1 for item in failed_details if item['warnings'] )}
-        Total # of Notices:\t{sum( len( item['warnings'] ) for item in failed_details )}
+        Total # of Notices:\t{counts[1]}
 
         ------------------------
         Details for Failed Rows:
@@ -1358,15 +1363,17 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         if write_to_file:
             with open( self._ffn.with_name( self._ffn.stem + '-summary.txt' ), 'w' ) as f:
                 f.write( output )
-        return output
+        return output, num_failed == 0
     
 
-    def upload_sessions( self, xnat_connection: XNATConnection, verbose: bool = True, write_to_file: Opt[bool]=False ) -> None:
+    def upload_sessions( self, xnat_connection: XNATConnection, write_to_file: Opt[bool]=False, verbose: bool = True ) -> None:
         """ Upload the sessions to XNAT. """
 
         # Note TO SELF -- Reconvert all commentary to Uppercase for the first letter of each sentence. ********
-        failed_details = self.build_issue_details()
-        self.generate_summary( failed_details, write_to_file=True )
+        out_str, permission_to_upload = self.generate_summary( write_to_file=True )
+        if not permission_to_upload:
+            print( out_str )
+            return
         assert 1 == 0, "This function is not yet implemented."
         # txt = self._init_mass_upload_summary_doc()
         ind = 0

@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import re
 import warnings
 import ast
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from collections.abc import Hashable
 from tabulate import tabulate
 import textwrap
@@ -1152,18 +1152,20 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         # Checks for Performer HawkID-Task
         if not self._col_is_empty( row['Performer HawkID-Task'] ):
             try:
-                performer_hawk_id_task = ast.literal_eval( self._validate_and_format_dict_string( row['Performer HawkID-Task'] ) )
+                formatted_str, notices = self._validate_and_format_dict_string( row['Performer HawkID-Task'] )
+                for notice in notices:      self._log_issue( idx=idx, column='Performer HawkID-Task', message=notice, issue_type='warning' )
+                performer_hawk_id_task = ast.literal_eval( formatted_str )
                 assert isinstance( performer_hawk_id_task, dict ), "The input string was not in a valid format, e.g., {k1: v1; ...; kn: vn}."
                 for key in performer_hawk_id_task.keys():
                     if key.lower() not in surgeon_hawkids:
                         self._log_issue( idx=idx, column='Performer HawkID-Task', message=f"'Performer HawkID-Task' key ('{key}') not found in the 'Surgeons' config table.", issue_type='error' )
                     else: # Replace the key with the encoding to protect identity information.
-                        performer_hawk_id_task[key] = self.replace_hawk_ids_with_encodings( performer_hawk_id_task[key], surgeon_hawkids )
+                        performer_hawk_id_task[key] = self.replace_hawk_ids_with_encodings( performer_hawk_id_task[key], surgeon_hawkids, original_col_name='Performer HawkID-Task' )
                 if len( performer_hawk_id_task.keys() ) != num_surgeons:
                     self._log_issue( idx=idx, column='Performer HawkID-Task', message=f"Number of keys in 'Performer HawkID-Task' ({len(performer_hawk_id_task)}) does not match '# of Participating Performing Surgeons' ({num_surgeons}).", issue_type='error' )
                     self._log_issue( idx=idx, column='# of Participating Performing Surgeons', message=f"Number of keys in 'Performer HawkID-Task' ({len(performer_hawk_id_task)}) does not match '# of Participating Performing Surgeons' ({num_surgeons}).", issue_type='error' )
             except:
-                self._log_issue( idx=idx, column='Performer HawkID-Task', message="'Performer HawkID-Task' must be structured in the following format, e.g., '{surgeon1_hawkid: task performed; ...; surgeonN_hawkid: task_performed, ...}'.", issue_type='error' )
+                self._log_issue( idx=idx, column='Performer HawkID-Task', message="'Performer HawkID-Task' must follow this format {surgeon1_hawkid: task performed; ...; surgeonN_hawkid: task_performed, ...}", issue_type='error' )
         elif num_surgeons is not None and num_surgeons != 1:
             self._log_issue( idx=idx, column='Performer HawkID-Task', message="'Performer HawkID-Task' cannot be empty if '# of Participating Performing Surgeons' is not 1.", issue_type='error' )
             self._log_issue( idx=idx, column='# of Participating Performing Surgeons', message="'Performer HawkID-Task' cannot be empty if '# of Participating Performing Surgeons' is not 1.", issue_type='error' )
@@ -1172,11 +1174,9 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         if not self._col_is_empty( row['Performing Surgeon HawkID'] ) and not self._col_is_empty( row['Performer HawkID-Task'] ):
             if row['Performing Surgeon HawkID'] not in row['Performer HawkID-Task'] and row['Performing Surgeon HawkID'] != 'unknown' and row['Performing Surgeon HawkID'] != 'not-applicable':
                 self._log_issue( idx=idx, column='Performer HawkID-Task', message=f"'Performing Surgeon HawkID' ('{row['Performing Surgeon HawkID']}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}'); double-check spelling.", issue_type='error' )
-                self._log_issue( idx=idx, column='Performing Surgeon HawkID', message=f"'Performing Surgeon HawkID' ('{row['Performing Surgeon HawkID']}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}'); double-check spelling.", issue_type='error' )
         if not self._col_is_empty( row['Supervising Surgeon HawkID'] ) and not self._col_is_empty( row['Performer HawkID-Task'] ):
             if row['Supervising Surgeon HawkID'] not in row['Performer HawkID-Task'] and row['Supervising Surgeon HawkID'] != 'unknown' and row['Supervising Surgeon HawkID'] != 'not-applicable':
-                self._log_issue( idx=idx, column='Performer HawkID-Task', message=f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID']}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}'); double-check spelling.", issue_type='error' )
-                self._log_issue( idx=idx, column='Supervising Surgeon HawkID', message=f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID']}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}'); double-check spelling.", issue_type='error' )
+                self._log_issue( idx=idx, column='Performer HawkID-Task', message=f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID']}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}'); make sure you specify any role they had outside of supervising.", issue_type='warning' )
         
         if not self._col_is_empty( row['Skills Assessment Requested'] ) and row['Skills Assessment Requested'] != 'unknown':
             if self._col_is_empty( row['Assessor HawkID'] ):            # Let the user state that they know an assessment was done but not who did it.
@@ -1188,7 +1188,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
                 self._log_issue( idx=idx, column='Skills Assessment Requested', message=f"'Assessor HawkID' provided but 'Skills Assessment Requested' ('{row['Skills Assessment Requested']}') not set to 'Y'.", issue_type='error' )
             if not self._col_is_empty( row['Additional Assessment Details'] ):
                 self._issues_appending_helper( in_row=row, idx=idx, col_name='Additional Assessment Details', hawk_ids=surgeon_hawkids )
-        if not self._col_is_empty( row['Was Radiology Contacted'] ) and row['Was Radiology Contacted'] != 'unknown':
+        if self._col_is_empty( row['Radiology Contact Date'] ) and not row['Was Radiology Contacted'] != 'y':
             if self._col_is_empty( row['Radiology Contact Date'] ):
                 self._log_issue( idx=idx, column='Radiology Contact Date', message="'Radiology Contact Date' is blank but 'Was Radiology Contacted' is specified; if you have the date, please input it.", issue_type='warning' )
             else:   # ensure that the text provided corresponds to a date                                                                
@@ -1228,24 +1228,35 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
 
     def _revise_string( self, in_str: str ) -> str:         return re.sub( r'\'\s', '\'', re.sub(r'\s\'', '\'', in_str ) )
 
-    def _validate_and_format_dict_string( self, input_string: str ) -> str:
-        # Strip all apostrophes and quotation marks from the string
-        input_string = input_string.replace( "'", '' ).replace( '"', '' )
+    def _validate_and_format_dict_string( self, input_string: str ) -> Tuple[str, list]:
+      # Strip all apostrophes and quotation marks from the string
+        input_string = input_string.replace("'", '').replace('"', '')
 
         # Check that the string begins with '{' and ends with '}'
-        assert input_string.startswith( '{') and input_string.endswith('}' ), "The input string must begin with '{' and end with '}'."
+        notices = []
+        if not input_string.startswith('{') or not input_string.endswith('}'):
+            notices.append("The input string must begin with '{' and end with '}'.")
 
         # Check for appropriate use of semicolons and colons
-        assert re.match( r'^\{(?:\s*[^{}]+:\s*[^{}]+(?:;\s*[^{}]+:\s*[^{}]+)*\s*)?\}$', input_string ), "The input string must use semicolons and colons appropriately."
+        if not re.match(r'^\{(?:\s*[^{}]+:\s*[^{}]+(?:;\s*[^{}]+:\s*[^{}]+)*\s*)?\}$', input_string):
+            notices.append("The input string must use semicolons and colons appropriately.")
+
+        # Count the number of colons and semicolons (-1) in the string, they should be equal.
+        num_colons, num_semicolons = input_string.count(':'), input_string.count(';')
+        if num_colons != ( num_semicolons + 1 ):
+            notices.append(f"The number of colons ({num_colons}) do not equal the number of semicolons+1 ({num_semicolons+1}), indicating invalid key:value; formatting.")
 
         # Add quotes around keys and values if they are not already quoted
-        def add_quotes( match ):  
+        def add_quotes(match):
             key, value = match.groups()
             key, value = key.strip(), value.strip()
-            if not (key.startswith('"') and key.endswith('"')):         key = f'"{key}"'
-            if not (value.startswith('"') and value.endswith('"')):     value = f'"{value}"'
+            if not (key.startswith('"') and key.endswith('"')):
+                key = f'"{key}"'
+            if not (value.startswith('"') and value.endswith('"')):
+                value = f'"{value}"'
             return f'{key}: {value}'
-        return re.sub( r'(\b\w+\b)\s*:\s*([^,{}]+)', add_quotes, input_string ).replace(';', ',')
+        return re.sub(r'(\b\w+\b)\s*:\s*([^;{}]+)', add_quotes, input_string).replace(';', ','), notices
+
 
     def retrieve_server_config_tags( self ) -> dict:
         surgeon_hawkids = self.config.list_of_all_items_in_table( table_name='Surgeons' )
@@ -1256,17 +1267,17 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
             'surgeon_hawk_id_encodings': {u.lower(): self.config.get_uid( table_name='Surgeons', item_name=u ) for u in surgeon_hawkids} }
      
     def _issues_appending_helper( self, in_row: pd.Series, idx: Hashable, col_name: str, hawk_ids: dict ) -> None:
-        self._df.at[idx, col_name], issues = self.replace_hawk_ids_with_encodings( in_str=in_row[col_name], hawk_ids=hawk_ids )
+        self._df.at[idx, col_name], issues = self.replace_hawk_ids_with_encodings( in_str=in_row[col_name], hawk_ids=hawk_ids, original_col_name=col_name )
         for iss in issues:
             self._log_issue( idx=idx, column=col_name, message=iss, issue_type='warning' )
 
-    def replace_hawk_ids_with_encodings( self, in_str: str, hawk_ids: dict ) -> Tuple[str, List[str]]:
+    def replace_hawk_ids_with_encodings( self, in_str: str, hawk_ids: dict, original_col_name: str ) -> Tuple[str, List[str]]:
         """ Replace all instances of HawkIDs in a string with their respective encoding. """
         issues = []
         for k in hawk_ids:
             if k in in_str:
                 in_str = in_str.replace( k, 'HAWKID='+hawk_ids[k] )
-                issues.append( f"/nHawkID '{k}' was found unencoded within the string, output will overwrite this." )    
+                issues.append( f"HawkID '{k}' was found unencoded within '{original_col_name}', output will automatically encode this." )    
         return in_str, issues
     
     def print_rows( self, rows: Opt[str]='both' ) -> str:
@@ -1309,9 +1320,18 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         return failed_details
     
 
-    def generate_summary( self, failed_details: list, successful_details: list, write_to_file: Opt[bool] = False ) -> str:
+    def generate_summary( self, failed_details: list, write_to_file: Opt[bool] = False ) -> str:
+        # Create the details for failed rows
+        failed_rows_details, num_failed = "", len( failed_details )
+        for i, detail in enumerate( failed_details, 1 ):
+            failed_rows_details += f"({i}/{num_failed}) Row {detail['row']+2}:\n"
+            for error in detail['errors']:
+                failed_rows_details += f"! Error: {error}\n"
+            for warning in detail.get( 'warnings', []):
+                failed_rows_details += f"\t- Notice: {warning}\n"
+            failed_rows_details += "\n"
+
         # Create the header
-        failed_rows, successful_rows = len( failed_details ), 0 # len( self.successful_details )
         header = textwrap.dedent( f"""\
         Summary of Mass Data Upload
         ===========================
@@ -1320,34 +1340,21 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         Date: {datetime.now().strftime("%Y-%m-%d %H:%M")}
 
         Total Rows Processed:\t{len( self.df )}
-        Successful Rows:\t{successful_rows}
-        Failed Rows:\t\t{failed_rows}
-
-        *Row corresponds to the header with column names.
+        Rows with Fatal Errors:\t{num_failed}
+        Total # of Errors:\t{sum( 1 for item in failed_details if item['errors'] )}
+        Rows with Notices:\t{sum( 1 for item in failed_details if item['warnings'] )}
+        Total # of Notices:\t{sum( len( item['warnings'] ) for item in failed_details )}
 
         ------------------------
         Details for Failed Rows:
         ------------------------
+        *Row 1 corresponds to the excel file header containing the column names.
+
         """ )
 
-        # Create the details for failed rows
-        failed_rows_details = ""
-        for i, detail in enumerate( failed_details, 1 ):
-            failed_rows_details += f"({i}/{failed_rows}) Row {detail['row']+1}:\n"
-            for error in detail['errors']:
-                failed_rows_details += f"- Error: {error}\n"
-            for warning in detail.get('warnings', []):
-                failed_rows_details += f"- Warning: {warning}\n"
-            failed_rows_details += "\n"
-
-        # Create the details for successful rows
-        successful_rows_details = "\n----------------------------\nDetails for Successful Rows:\n----------------------------\n"
-        # for i, detail in enumerate(self.successful_details, 1):
-        #     successful_rows_details += f"({i}/{successful_rows})\tRow {detail['row']}: \tsuccessfully uploaded at {detail['time']} as '{detail['id']}'\n"
-        #     successful_rows_details += f"\t- {detail['surgeons']} surgeon(s) operating on a {detail['case']} case on {detail['date']} in {detail['location']}.\n"
 
         # Create the footer & Combine all parts
-        output = header + failed_rows_details + successful_rows_details + "\n===========================\nEnd of Summary\n"
+        output = header + failed_rows_details  + "\n===========================\nEnd of Summary\n"
         if write_to_file:
             with open( self._ffn.with_name( self._ffn.stem + '-summary.txt' ), 'w' ) as f:
                 f.write( output )
@@ -1359,6 +1366,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
 
         # Note TO SELF -- Reconvert all commentary to Uppercase for the first letter of each sentence. ********
         failed_details = self.build_issue_details()
+        self.generate_summary( failed_details, write_to_file=True )
         assert 1 == 0, "This function is not yet implemented."
         # txt = self._init_mass_upload_summary_doc()
         ind = 0

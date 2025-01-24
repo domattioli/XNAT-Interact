@@ -21,6 +21,7 @@ from typing import List, Dict, Any, Tuple
 from collections.abc import Hashable
 from tabulate import tabulate
 import textwrap
+import shutil
 
 
 # Define list for allowable imports from this module -- do not want to import _local_variables. As more classes are added you will need to update this list.
@@ -213,8 +214,7 @@ class UIDandMetaInfo:
     def now_datetime( self )                    -> str:                 return datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
     
 
-    def convert_all_kwarg_strings_to_uppercase( **kwargs ):
-        return {k: v.upper() if isinstance(v, str) else v for k, v in kwargs.items()}
+    def convert_all_kwarg_strings_to_uppercase( **kwargs ):             return {k: v.upper() if isinstance(v, str) else v for k, v in kwargs.items()}
 
 
     def generate_uid( self )                    -> str:
@@ -333,7 +333,7 @@ class XNATConnection( UIDandMetaInfo ):
 
     def __init__( self, login_info: XNATLogin, stay_connected: bool = False, verbose: Opt[bool] = True ):
         assert login_info.is_valid, f"Provided login info must be validated before accessing xnat server: {login_info}"
-        super().__init__()  # Call the __init__ method of the base clas
+        super().__init__()  # Call the __init__ method of the base class
         self._login_info, self._project_handle, self._is_verified, self._is_open, self._failed_tests = login_info, None, False, stay_connected, {}
         self._verify_login()
         if self.is_verified and not stay_connected: # Disconnect from the project instance connection if we successfully connected.
@@ -485,6 +485,8 @@ class ConfigTables( UIDandMetaInfo ):
             self._instantiate_json_file()
             self._initialize_tables()
             self.push_to_xnat( verbose=verbose )
+        # Create a backup of the config file, always.
+        self.create_backup( verbose=verbose )
         if verbose:                         print( self )
             
 
@@ -685,7 +687,19 @@ class ConfigTables( UIDandMetaInfo ):
 
 
     #==========================================================PUBLIC METHODS==========================================================
-    def pull_from_xnat( self, write_ffn: Opt[Path]=None, verbose: Opt[bool] = True ) -> Opt[Path]:
+    def create_backup( self, write_pn: Opt[Path]=None, verbose: Opt[bool]=True ) -> Opt[Path]:
+        if write_pn is not None:    assert isinstance( write_pn, Path ), f"Must be a valid Path object to write copy to: {write_pn}"
+        write_fn = self.config_fn   # Modify file name to go from fn.ext to fn-backup.ext
+        write_fn = write_fn.split( '.' )
+        write_fn = write_fn[0] + '-backup.' + write_fn[1]
+        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( write_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
+        if write_pn is not None:
+            shutil.copy( self.config_ffn, write_pn )
+            if verbose:             print( f'\tSUCCESS! -- Created backup of config file at:\t{write_pn}\n' )
+            return write_pn
+        else: return None
+    
+    def pull_from_xnat( self, write_ffn: Opt[Path]=None, verbose: Opt[bool]=True ) -> Opt[Path]:
         if write_ffn is None:   write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( self.config_ffn )
         else:
             assert isinstance( write_ffn, Path ), f"Provided write file path must be a valid Path object: {write_ffn}"
@@ -710,7 +724,7 @@ class ConfigTables( UIDandMetaInfo ):
         pass
 
 
-    def push_to_xnat( self, verbose: Opt[bool] = True ) -> bool:
+    def push_to_xnat( self, verbose: Opt[bool]=True ) -> bool:
         try:
             self.ensure_primary_keys_validity()
             if self.save( verbose ) is False:   return False
@@ -722,7 +736,7 @@ class ConfigTables( UIDandMetaInfo ):
             return False
 
 
-    def save( self, verbose: Opt[bool] = True ) -> bool: # Convert all tables to JSON; Write the data to the file
+    def save( self, verbose: Opt[bool]=True ) -> bool: # Convert all tables to JSON; Write the data to the file
         '''Only saves locally. To save to the server, all the 'catalog_new_data' method(s) in the experiment class(es) must be called.'''
         try:
             self._validate_login_for_important_functions( assert_librarian=False ) # To-do: is this necessary if the user musts create a valid xnat connection first (which should check the same thing)?
@@ -738,7 +752,7 @@ class ConfigTables( UIDandMetaInfo ):
             return False
 
 
-    def is_user_registered( self, user_name: Opt[str] = None ) -> bool:
+    def is_user_registered( self, user_name: Opt[str]=None ) -> bool:
         """
         Check if a user is registered in the system.
 
@@ -753,7 +767,7 @@ class ConfigTables( UIDandMetaInfo ):
         return user_name.upper() in self.tables['REGISTERED_USERS']['NAME'].values
 
 
-    def register_new_user( self, user_name: str, verbose: Opt[bool] = True ) -> bool:
+    def register_new_user( self, user_name: str, verbose: Opt[bool]=True ) -> bool:
         try:
             self._validate_login_for_important_functions( assert_librarian=True )   
             if not self.is_user_registered( user_name ):
@@ -907,33 +921,33 @@ class USCentralDateTime():
 #--------------------------------------------------------------------------------------------------------------------------
 # Class for representing images as unique hashes.
 class ImageHash( UIDandMetaInfo ):
+    '''ImageHash()
+    A class for creating a unique hash for an image. A list of seen-hashes will allow us to prevent duplicate images in the db.
+        - Cataloging of the hashes is done elsewhere.
+
+    Hashes are computed through the following algorithm:
+    1.  Ensure/convert to grayscale
+    2.  Convert to uint8 (normalize to 0-255 pixel values)
+        - Currently supported types are signed- and unsigned-int8, 16, 32, and 64 bits.
+            - Floats are not supported. Not sure how to handle them.
+        - We want to convert images down to uint8 to account for possible outside-transformation of images.
+            - Don't want ImageHash( np.int16( img ) ) != ImageHash( np.float32( img ) )
+    3. Resize to 256x256.
+        - Some of our images derived from the same performance can look to similar
+            - Don't want to risk generating the same hash by downsampling too much.
+    
+    To-do: If need be, revisit the init to require only an image ffn so we can use cv2 ro imread it into a predictable way, i.e., rgb not bgr.
+
+    # Example usage:
+    tst1 = ImageHash( reference_table( XNatLogin( {...} ) ) ) # computes hash using the template dicom image stored in the UIDandMetaInfo attributes.
+    tst2 = ImageHash( reference_table( XNatLogin( {...} ) ), np.uint32( tst1.raw_img ) )
+    tst3 = ImageHash( reference_table( XNatLogin( {...} ) ), np.int16(  tst1.raw_img ) )
+    print( tst1 )
+    print( tst2 )
+    print( tst3 )
+    print( 'All hash strings the same:', tst1.hash_str == tst1.hash_str and tst1.hash_str == tst3.hash_str and tst2.hash_str == tst3.hash_str )
+    '''
     def __init__( self, reference_table: Opt[ConfigTables]=None, img: Opt[np.ndarray] = None ):
-        '''ImageHash()
-        A class for creating a unique hash for an image. A list of seen-hashes will allow us to prevent duplicate images in the db.
-            - Cataloging of the hashes is done elsewhere.
-
-        Hashes are computed through the following subroutine:
-        1.  Ensure/convert to grayscale
-        2.  Convert to uint8 (normalize to 0-255 pixel values)
-            - Currently supported types are signed- and unsigned-int8, 16, 32, and 64 bits.
-                - Floats are not supported. Not sure how to handle them.
-            - We want to convert images down to uint8 to account for possible outside-transformation of images.
-                - Don't want ImageHash( np.int16( img ) ) != ImageHash( np.float32( img ) )
-        3. Resize to 256x256.
-            - Some of our images derived from the same performance can look to similar
-                - Don't want to risk generating the same hash by downsampling too much.
-        
-        To-do: If need be, revisit the init to require only an image ffn so we can use cv2 ro imread it into a predictable way, i.e., rgb not bgr.
-
-        # Example usage:
-        tst1 = ImageHash( reference_table( XNatLogin( {...} ) ) ) # computes hash using the template dicom image stored in the UIDandMetaInfo attributes.
-        tst2 = ImageHash( reference_table( XNatLogin( {...} ) ), np.uint32( tst1.raw_img ) )
-        tst3 = ImageHash( reference_table( XNatLogin( {...} ) ), np.int16(  tst1.raw_img ) )
-        print( tst1 )
-        print( tst2 )
-        print( tst3 )
-        print( 'All hash strings the same:', tst1.hash_str == tst1.hash_str and tst1.hash_str == tst3.hash_str and tst2.hash_str == tst3.hash_str )
-        '''
         super().__init__()  # Call the __init__ method of the base class
         self._validate_input( img )
         self._processed_img, self._gray_img, self._hash_str  = self.dummy_image(), self.dummy_image(), ''
@@ -995,8 +1009,7 @@ class ImageHash( UIDandMetaInfo ):
         self._gray_img = cv2.normalize( self.gray_img, np.zeros( self.gray_img.shape, np.uint8 ), 0, 255, cv2.NORM_MINMAX ).astype( np.uint8 )
 
 
-    def _resize_image( self ):
-        self._processed_img = cv2.resize( self.gray_img, self.required_img_size_for_hashing )
+    def _resize_image( self ):          self._processed_img = cv2.resize( self.gray_img, self.required_img_size_for_hashing )
     
 
     def _compute_hash_str( self ):

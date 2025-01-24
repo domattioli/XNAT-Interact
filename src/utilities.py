@@ -83,11 +83,14 @@ class _local_variables:
 
 
     def _set_local_variables( self ) -> dict: # !!DO NOT DELETE!! This is the only place where these local variables/paths are defined.
+        '''
+        NOTE: if you add any new local variables, make sure to add a corresponding getter property method to the UIDandMetaInfo.'''
         # xnat_project_name = 'domSandBox' # original corrupted project.
         # xnat_project_name = 'GROK_AHRQ_main' # another corrupted project -- added a user who wasnt registered, lost ability to do anything except add new data.
         xnat_project_name = 'GROK_AHRQ_Data'
         xnat_url = r'https://rpacs.iibi.uiowa.edu/xnat/'
         xnat_config_folder_name, config_fn = 'config', 'database_config.json'
+        xnat_backups_folder_name, backup_fn = 'backups', 'database_config-backup-.json'
         template_img_dir = os.path.join( os.getcwd(), 'data', 'image_templates', 'unwanted_dcm_image_template.png' )
         tmp_data_dir = os.path.join( tempfile.gettempdir(), 'XNAT_Interact' ) # create a directory with the software name in the user's Temp folder.
         redacted_string = "REDACTED PYTHON-TO-XNAT UPLOAD SCRIPT"
@@ -97,10 +100,12 @@ class _local_variables:
                         'tmp_data_dir': tmp_data_dir,
                         'config_fn': config_fn,
                         'config_ffn': os.path.join( tmp_data_dir, config_fn ), # local file for storing all meta information
+                        'backup_fn': backup_fn,
                         'required_login_keys': ['USERNAME', 'PASSWORD', 'URL'],
                         'xnat_project_name': xnat_project_name,
                         'xnat_project_url': xnat_url,
                         'xnat_config_folder_name': xnat_config_folder_name,
+                        'xnat_backups_folder_name': xnat_backups_folder_name,
                         'default_meta_table_columns' : ['NAME', 'UID', 'CREATED_DATE_TIME', 'CREATED_BY'],
                         'template_img_dir' : template_img_dir,
                         'data_librarian': [id.lower() for id in data_librarian_hawk_id],
@@ -183,7 +188,11 @@ class UIDandMetaInfo:
     @property
     def config_ffn( self )                      -> str:                 return self.local_variables.config_ffn
     @property
+    def backup_fn( self )                       -> str:                 return self.local_variables.backup_fn
+    @property
     def xnat_config_folder_name ( self )        -> str:                 return self.local_variables.xnat_config_folder_name
+    @property
+    def xnat_backups_folder_name ( self )       -> str:                 return self.local_variables.xnat_backups_folder_name
     @property
     def required_login_keys( self )             -> list:                return self.local_variables.required_login_keys
     @property
@@ -470,7 +479,7 @@ class ConfigTables( UIDandMetaInfo ):
     mt.add_new_item( table_name='hello', item_name='world' )
     # mt.save()
     '''
-    def __init__( self, login_info: XNATLogin, xnat_connection: XNATConnection, verbose: Opt[bool] = True ):
+    def __init__( self, login_info: XNATLogin, xnat_connection: XNATConnection, verbose: Opt[bool]=True ):
         assert login_info.is_valid, f"Cannot access CongifTables without valid login_info. You provided the following login information:\n{login_info}"
         assert xnat_connection.is_open, f"Cannot access ConfigTables without an open connection to the XNAT server. Your xnat_connection data is:\n{xnat_connection}"
         assert xnat_connection.is_verified, f"Cannot access ConfigTables without a verified connection to the XNAT server. Your xnat_connection data is:\n{xnat_connection}"
@@ -485,8 +494,7 @@ class ConfigTables( UIDandMetaInfo ):
             self._instantiate_json_file()
             self._initialize_tables()
             self.push_to_xnat( verbose=verbose )
-        # Create a backup of the config file, always.
-        self.create_backup( verbose=verbose )
+            self.create_backup( verbose=verbose )
         if verbose:                         print( self )
             
 
@@ -689,15 +697,17 @@ class ConfigTables( UIDandMetaInfo ):
     #==========================================================PUBLIC METHODS==========================================================
     def create_backup( self, write_pn: Opt[Path]=None, verbose: Opt[bool]=True ) -> Opt[Path]:
         if write_pn is not None:    assert isinstance( write_pn, Path ), f"Must be a valid Path object to write copy to: {write_pn}"
-        write_fn = self.config_fn   # Modify file name to go from fn.ext to fn-backup.ext
+        write_fn = self.backup_fn   # Modify file name to go from fn.ext to fn-backup-todays_date_in_YYYY_MM_DD_Format.ext
         write_fn = write_fn.split( '.' )
-        write_fn = write_fn[0] + '-backup.' + write_fn[1]
-        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( write_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
+        write_fn = write_fn[0] + datetime.today().strftime( '%Y_%m_%d_%H_%M_%S' ) + '.' + write_fn[1]
+
+        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_backup_folder_name ).file( write_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
         if write_pn is not None:
             shutil.copy( self.config_ffn, write_pn )
             if verbose:             print( f'\tSUCCESS! -- Created backup of config file at:\t{write_pn}\n' )
             return write_pn
         else: return None
+        
     
     def pull_from_xnat( self, write_ffn: Opt[Path]=None, verbose: Opt[bool]=True ) -> Opt[Path]:
         if write_ffn is None:   write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( self.config_ffn )

@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil import parser
 import pytz
 import hashlib
@@ -1073,6 +1073,21 @@ class ImageHash( UIDandMetaInfo ):
 #--------------------------------------------------------------------------------------------------------------------------
 # Class for representing an imported batch upload spreadsheet.
 class BatchUploadRepresentation( UIDandMetaInfo ):
+    '''
+    # Example usage:
+    data = BatchUploadRepresentation( xls_ffn=Path( 'path/to/file.xlsx' ), config=ConfigTables( XNatLogin( {...} ) ) )
+    use the 'print_rows' method to print out the rows of the batch upload file with the errors and warnings.
+        - e.g., data.print_rows( rows='errors' ) # shows all rows with at least one error.
+            - use data.print_errors_list() to print out the errors in a more readable format.
+        - Each W/E cell in the summary table corresponds to a warning or error associated with that row in the excel file.
+        - To see specific errors or warnings, print ( data.errors)
+        - Warnings are not fatal to the upload process, but errors are.
+
+    ## Common Errors.
+    - Not using semicolons to separate the key-value pairs in Performer HawkID-Task. For example {surgeon1hawkid: task1; surgeon2hawkid: task2}
+    - Misspelling hawkids. use config.list_of_all_items_in_table( table_name='SURGEONS' ) to see all valid hawkids, or ask the librarian to add a missing/new surgeon's info.
+    - Using the wrong drive letter for data on the RDSS (some people will assign different letters for their hawkid).
+    '''
     def __init__( self, xls_ffn: Path, config: ConfigTables, verbose: bool = True ):
         assert isinstance( xls_ffn, Path ), f"Inputted 'xls_ffn' must be a {type( Path() )} object; you provided a '{type( xls_ffn )}' object."
         assert xls_ffn.exists(), f"Inputted 'xls_ffn' path does not exist; you entered:\n\t'{xls_ffn}'"
@@ -1162,10 +1177,8 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
             self._log_issue( idx=idx, column='Full Path to Data', message=f"'Full Path to Data' '{row['Full Path to Data']}' is not found on your local machine.", issue_type='error' )
 
     def _check_conditional_columns( self, idx: Hashable, row: pd.Series, surgeon_hawkids: dict ) -> None:
-        print( row['Epic Start Time'])
-        print( row['Epic End Time'])
         if not self._col_is_empty( row['Epic End Time'] ) and row['Epic End Time'] != 'unknown':
-            if datetime.strptime( str( row['Epic End Time'] ), '%H:%M' ) < datetime.strptime( row['Epic Start Time'], '%H:%M' ): 
+            if datetime.strptime(':'.join(str(row['Epic End Time']).split(':')[:2]), '%H:%M') < datetime.strptime(':'.join(str(row['Epic Start Time']).split(':')[:2]), '%H:%M'): # Drop the seconds from the time strings
                 self._log_issue( idx=idx, column='Epic End Time', message=f"'Epic End Time' '{str( row['Epic End Time'] )}' cannot be before provided 'Epic Start Time' '{ str( row['Epic Start Time'] )}'.", issue_type='error' )
                 
         # Checks for Supervising Surgeon HawkID.
@@ -1203,6 +1216,9 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
                 for notice in notices:      self._log_issue( idx=idx, column='Performer HawkID-Task', message=notice, issue_type='warning' )
                 performer_hawk_id_task = ast.literal_eval( formatted_str )
                 assert isinstance( performer_hawk_id_task, dict ), "The input string was not in a valid format, e.g., {k1: v1; ...; kn: vn}."
+                # At least one of the keys needs to be the performing surgeon hawkid
+                if row['Performing Surgeon HawkID'] not in performer_hawk_id_task.keys() and row['Performing Surgeon HawkID'] != 'unknown':
+                    self._log_issue( idx=idx, column='Performer HawkID-Task', message=f"'Performing Surgeon HawkID' ('{row['Performing Surgeon HawkID']}') not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}').", issue_type='error' )
                 for key in performer_hawk_id_task.keys():
                     if key.lower() not in surgeon_hawkids:
                         self._log_issue( idx=idx, column='Performer HawkID-Task', message=f"'Performer HawkID-Task' key ('{key}') not found in the 'Surgeons' config table.", issue_type='error' )
@@ -1351,6 +1367,25 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         else:
             df_str = ''
         return f"{class_name}\n\tFile:\t{self.ffn.name}\n\tRows:\t{len(self.df)+1} (w header)\n\t\t/w Errors:\t{num_row_errs}\n\t\t/w Warnings:\t{num_row_warns}\n\tCols:\t{len(self.df.columns)}\n{df_str}"
+
+    def print_errors_list( self ) -> str:
+        # Walk through each error in the tablo, printing out a new line in the following format: row # -- column name: error message
+        error_str, ind = "", 2 # Start at 2 to account for the header row
+        for _, row in self._errors.iterrows():
+            for col in self._errors.columns:
+                if row[col]:    error_str += f"Row {ind}\t{row[col]}\n"
+            ind += 1
+        return error_str
+    
+    def print_warnings_list( self ) -> str:
+        # Walk through each warning in the tablo, printing out a new line in the following format: row # -- column name: warning message
+        warning_str, ind = "", 2 # Start at 2 to account for the header row
+        for _, row in self._warnings.iterrows():
+            for col in self._warnings.columns:
+                if row[col]:    warning_str += f"Row {ind}\t{row[col]}\n"
+            ind += 1
+        return warning_str
+    
 
     def build_issue_details( self ) -> Tuple[List[Dict[str, Any]],List[int]]:
         failed_details, counts = [], [0, 0]

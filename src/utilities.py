@@ -478,6 +478,11 @@ class ConfigTables( UIDandMetaInfo ):
     # Add new items to the tables - convention is for inputs to be plural
     mt.add_new_item( table_name='hello', item_name='world' )
     # mt.save()
+
+    # Note about backups:
+    - We create a backup when we first initialize the ConfigTables class (theoretically, only done once, unless you wipe the server).
+    - We always create a backup when the push_to_xnat method is called (make a copy of the current config file then push the changes).
+        - If any error occurs, we delete the backup file that was created at the start of the push_to_xnat method call.
     '''
     def __init__( self, login_info: XNATLogin, xnat_connection: XNATConnection, verbose: Opt[bool]=True ):
         assert login_info.is_valid, f"Cannot access CongifTables without valid login_info. You provided the following login information:\n{login_info}"
@@ -494,8 +499,8 @@ class ConfigTables( UIDandMetaInfo ):
             self._instantiate_json_file()
             self._initialize_tables()
             self.push_to_xnat( verbose=verbose )
-            self.create_backup( verbose=verbose )
-        if verbose:                         print( self )
+        self._original_tables = self.tables.copy()
+        if verbose:                                     print( self )
             
 
     @property
@@ -504,6 +509,8 @@ class ConfigTables( UIDandMetaInfo ):
     def xnat_connection( self )     -> XNATConnection:  return self._xnat_connection
     @property
     def tables( self )              -> dict:            return self._tables
+    @property
+    def original_tables( self )     -> dict:            return self._original_tables
     @property
     def metadata( self )            -> dict:            return self._metadata
     @property
@@ -594,17 +601,18 @@ class ConfigTables( UIDandMetaInfo ):
         self.add_new_table( 'IMAGE_HASHES', ['subject', 'INSTANCE_NUM'] ) # need additional columns to reference uids from other tables
 
         self.add_new_table( 'Surgeons', ['first_name', 'last_name', 'middle_initial'] )
-        self.add_new_item( 'surgeons', 'unknown', extra_columns_values={'first_name':'', 'last_name': '', 'middle_initial': '' } )
-        self.add_new_item( 'surgeons', 'karamm', extra_columns_values={'first_name':'MATTHEW', 'last_name': 'KARAM', 'middle_initial': 'D' } )
-        self.add_new_item( 'surgeons', 'kowalskih', extra_columns_values={'first_name':'HEATHER', 'last_name': 'KOWALSKI', 'middle_initial': 'R' } )
-        self.add_new_item( 'surgeons', 'mbollier', extra_columns_values={'first_name':'MATTHEW', 'last_name': 'BOLLIER', 'middle_initial': 'J' } )
-        self.add_new_item( 'surgeons', 'wolfb', extra_columns_values={'first_name':'BRIAN', 'last_name': 'WOLF', 'middle_initial': 'R' } )
-        self.add_new_item( 'surgeons', 'rwestermann', extra_columns_values={'first_name':'ROBERT', 'last_name': 'WESTERMAN', 'middle_initial': '' } )
-        self.add_new_item( 'surgeons', 'kduchman', extra_columns_values={'first_name':'KYLE', 'last_name': 'DUCHMAN', 'middle_initial': 'R' } )
-        self.add_new_item( 'surgeons', 'tdenhartog', extra_columns_values={'first_name':'TAYLOR', 'last_name': 'DEN_HARTOG', 'middle_initial': 'J' } )
-        self.add_new_item( 'surgeons', 'cjmaly', extra_columns_values={'first_name':'CONNOR', 'last_name': 'MALY', 'middle_initial': 'J' } )
-        self.add_new_item( 'surgeons', 'ryanse', extra_columns_values={'first_name':'SARAH', 'last_name': 'RYAN', 'middle_initial': 'E' } )
-        self.add_new_item( 'surgeons', 'brwilkinson', extra_columns_values={'first_name':'BRADY', 'last_name': 'WILKINSON', 'middle_initial': 'R' } )
+        self.add_new_item( table_name='surgeons', item_name='unknown', extra_columns_values={'first_name':'UNKNOWN', 'last_name': 'UNKNOWN', 'middle_initial': '' } )
+        self.add_new_item( table_name='Surgeons', item_name='not-applicable', extra_columns_values={'first_name': 'NOT-APPLICABLE', 'last_name': 'NOT-APPLICABLE', 'middle_initial': 'NA'} )
+        self.add_new_item( table_name='surgeons', item_name='karamm', extra_columns_values={'first_name':'MATTHEW', 'last_name': 'KARAM', 'middle_initial': 'D' } )
+        self.add_new_item( table_name='surgeons', item_name='kowalskih', extra_columns_values={'first_name':'HEATHER', 'last_name': 'KOWALSKI', 'middle_initial': 'R' } )
+        self.add_new_item( table_name='surgeons', item_name='mbollier', extra_columns_values={'first_name':'MATTHEW', 'last_name': 'BOLLIER', 'middle_initial': 'J' } )
+        self.add_new_item( table_name='surgeons', item_name='wolfb', extra_columns_values={'first_name':'BRIAN', 'last_name': 'WOLF', 'middle_initial': 'R' } )
+        self.add_new_item( table_name='surgeons', item_name='rwestermann', extra_columns_values={'first_name':'ROBERT', 'last_name': 'WESTERMAN', 'middle_initial': '' } )
+        self.add_new_item( table_name='surgeons', item_name='kduchman', extra_columns_values={'first_name':'KYLE', 'last_name': 'DUCHMAN', 'middle_initial': 'R' } )
+        self.add_new_item( table_name='surgeons', item_name='tdenhartog', extra_columns_values={'first_name':'TAYLOR', 'last_name': 'DEN_HARTOG', 'middle_initial': 'J' } )
+        self.add_new_item( table_name='surgeons', item_name='cjmaly', extra_columns_values={'first_name':'CONNOR', 'last_name': 'MALY', 'middle_initial': 'J' } )
+        self.add_new_item( table_name='surgeons', item_name='ryanse', extra_columns_values={'first_name':'SARAH', 'last_name': 'RYAN', 'middle_initial': 'E' } )
+        self.add_new_item( table_name='surgeons', item_name='brwilkinson', extra_columns_values={'first_name':'BRADY', 'last_name': 'WILKINSON', 'middle_initial': 'R' } )
         self.add_new_item( table_name='Surgeons', item_name='rhguzek',      extra_columns_values={'first_name': 'RYAN', 'last_name': 'GUZEK', 'middle_initial': 'H'} )
         self.add_new_item( table_name='Surgeons', item_name='kgeigr',       extra_columns_values={'first_name': 'KYLE', 'last_name': 'GEIGER', 'middle_initial': 'W'} )
         self.add_new_item( table_name='Surgeons', item_name='willey',       extra_columns_values={'first_name': 'MICHAEL', 'last_name': 'WILLEY', 'middle_initial': 'C'} )
@@ -637,8 +645,8 @@ class ConfigTables( UIDandMetaInfo ):
         self.add_new_item( table_name='Surgeons', item_name='wdodd',        extra_columns_values={'first_name': 'DODD', 'last_name': 'WILLIAM', 'middle_initial': 'S'} )
         self.add_new_item( table_name='Surgeons', item_name='jcdavison',    extra_columns_values={'first_name': 'DAVISON', 'last_name': 'JOHN', 'middle_initial': 'C'} )
         self.add_new_item( table_name='Surgeons', item_name='cjcall',       extra_columns_values={'first_name': 'CALL', 'last_name': 'CORY', 'middle_initial': 'J'} )
-        self.add_new_item( table_name='Surgeons', item_name='unknown',      extra_columns_values={'first_name': 'UNKNOWN', 'last_name': 'UNKNOWN', 'middle_initial': ''} )
-        self.add_new_item( table_name='Surgeons', item_name='not-applicable', extra_columns_values={'first_name': 'NOT', 'last_name': 'APPLICABLE', 'middle_initial': 'NA'} )
+        self.add_new_item( table_name='Surgeons', item_name='dwkins',       extra_columns_values={'first_name': 'JONATHAN', 'last_name': 'DAWKINS', 'middle_initial': ''} )
+        self.add_new_item( table_name='Surgeons', item_name='rvantienderen',    extra_columns_values={'first_name': 'Richard', 'last_name': 'VanTienderen', 'middle_initial': 'J'} )
 
         self.add_new_item( 'registered_users', 'gthomas' )
         self.add_new_item( 'registered_users', 'andersondd' )
@@ -695,18 +703,27 @@ class ConfigTables( UIDandMetaInfo ):
 
 
     #==========================================================PUBLIC METHODS==========================================================
-    def create_backup( self, write_pn: Opt[Path]=None, verbose: Opt[bool]=True ) -> Opt[Path]:
+    def create_backup( self, write_pn: Opt[Path]=None, verbose: Opt[bool]=True ) -> Tuple[Opt[Path], Opt[str]]:
+        '''Create a backup of the current config file in the XNAT backups folder. If write_pn is provided, also write a copy to the provided path.
+        This is intended to be used when you make changes to the config file and confirm that the new uploaded data has no errors upon upload.'''
         if write_pn is not None:    assert isinstance( write_pn, Path ), f"Must be a valid Path object to write copy to: {write_pn}"
         write_fn = self.backup_fn   # Modify file name to go from fn.ext to fn-backup-todays_date_in_YYYY_MM_DD_Format.ext
         write_fn = write_fn.split( '.' )
         write_fn = write_fn[0] + datetime.today().strftime( '%Y_%m_%d_%H_%M_%S' ) + '.' + write_fn[1]
+        
+        # # Depracated Need to check if a file with today's date exists in the backup folder. If it does, do not create a new backup.
+        # def remove_hidden_characters( s ):  return re.sub(r'[^\x20-\x7E]', '', s)
+        # list_of_backup_fns = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_connection.xnat_backups_folder_name ).files().get()
+        # if remove_hidden_characters( write_fn ) in list_of_backup_fns:
+        #     if verbose:             print( f'\tNOTE -- A backup of the config file for today already exists in the XNAT backups folder: {write_fn}\n' )
+        #     return None
 
-        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_backup_folder_name ).file( write_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
+        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_backups_folder_name ).file( write_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
         if write_pn is not None:
             shutil.copy( self.config_ffn, write_pn )
             if verbose:             print( f'\tSUCCESS! -- Created backup of config file at:\t{write_pn}\n' )
-            return write_pn
-        else: return None
+            return write_pn, write_fn
+        else: return None, write_fn
         
     
     def pull_from_xnat( self, write_ffn: Opt[Path]=None, verbose: Opt[bool]=True ) -> Opt[Path]:
@@ -735,13 +752,18 @@ class ConfigTables( UIDandMetaInfo ):
 
 
     def push_to_xnat( self, verbose: Opt[bool]=True ) -> bool:
+        # Create a backup before we do anything.
+        _, out = self.create_backup( verbose=verbose )
         try:
             self.ensure_primary_keys_validity()
             if self.save( verbose ) is False:   return False
+            #
             self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
             if verbose:                     print( f'\t...ConfigTables (config.json) successfully updated on XNAT!\n' )
             return True
         except Exception as e:
+            # Delete the backupfile
+            if out is not None:     self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_backups_folder_name ).file( out ).delete()
             print( f'\tERROR! --- Failed to push ConfigTables to XNAT server. Error message: {e}\n' )
             return False
 
@@ -1140,6 +1162,8 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
             self._log_issue( idx=idx, column='Full Path to Data', message=f"'Full Path to Data' '{row['Full Path to Data']}' is not found on your local machine.", issue_type='error' )
 
     def _check_conditional_columns( self, idx: Hashable, row: pd.Series, surgeon_hawkids: dict ) -> None:
+        print( row['Epic Start Time'])
+        print( row['Epic End Time'])
         if not self._col_is_empty( row['Epic End Time'] ) and row['Epic End Time'] != 'unknown':
             if datetime.strptime( str( row['Epic End Time'] ), '%H:%M' ) < datetime.strptime( row['Epic Start Time'], '%H:%M' ): 
                 self._log_issue( idx=idx, column='Epic End Time', message=f"'Epic End Time' '{str( row['Epic End Time'] )}' cannot be before provided 'Epic Start Time' '{ str( row['Epic Start Time'] )}'.", issue_type='error' )
@@ -1228,13 +1252,13 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
             self._df.at[idx, 'Supervising Surgeon HawkID'] = 'unknown'
             self._log_issue( idx=idx, column='Supervising Surgeon HawkID', message="'Supervising Surgeon HawkID' is blank, converting to 'unknown'.", issue_type='warning' )
         elif row['Supervising Surgeon HawkID'] not in surgeon_hawkids:
-            self._df.at[idx, 'Supervising Surgeon HawkID'] = self.config.get_uid( table_name='Surgeons', item_name=row['Supervising Surgeon'] )
+            # self._df.at[idx, 'Supervising Surgeon HawkID'] = self.config.get_uid( table_name='Surgeons', item_name=row['Supervising Surgeon'] )
             self._log_issue( idx=idx, column='Supervising Surgeon HawkID', message=f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID']}') not registered in the 'Registered_Users' config table.", issue_type='error' )
         if self._col_is_empty( row['Performing Surgeon HawkID'] ):
             self._df.at[idx, 'Performing Surgeon HawkID'] = 'unknown'
             self._log_issue( idx=idx, column='Performing Surgeon HawkID', message="'Performing Surgeon HawkID' is blank, converting to 'unknown'.", issue_type='warning' )
         elif row['Performing Surgeon HawkID'] not in surgeon_hawkids: 
-            self._df.at[idx, 'Performing Surgeon HawkID'] = self.config.get_uid( table_name='Surgeons', item_name=row['Performing Surgeon HawkID'] )
+            # self._df.at[idx, 'Performing Surgeon HawkID'] = self.config.get_uid( table_name='Surgeons', item_name=row['Performing Surgeon HawkID'] )
             self._log_issue( idx=idx, column='Performing Surgeon HawkID', message=f"'Performing Surgeon HawkID' ('{row['Performing Surgeon HawkID']}') not registered in the 'Registered_Users' config table.", issue_type='error' )
         if not self._col_is_empty( row['Unusual Features'] ):                   self._issues_appending_helper( in_row=row, idx=idx, col_name='Unusual Features', hawk_ids=surgeon_hawkids )
         if not self._col_is_empty( row['Diagnostic Notes'] ):                   self._issues_appending_helper( in_row=row, idx=idx, col_name='Diagnostic Notes', hawk_ids=surgeon_hawkids )

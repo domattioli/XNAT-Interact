@@ -16,5 +16,9 @@
 !/doc/*
 /doc/Sensitive_Info_Not_for_Pushing_to_Remote/Hawk_IDs_of_UIowa_Residents.xlsx
 
+# Don't ignore the Batch_Uploads_Go_Here subfolder of doc (do ignore its contents)
+!/doc/Batch_Uploads_Go_Here
+/doc/Batch_Uploads_Go_Here/*
+
 # Ignore the main.ipynb file (for now, as of 11/11/2024) bc it is currently for sandboxing. when i pass it off to the team I will include examples in this file and push it.
 /main.ipynb

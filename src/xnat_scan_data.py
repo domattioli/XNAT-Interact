@@ -159,6 +159,9 @@ class ArthroDiagnosticImage( ScanFile ):
         ds.SeriesInstanceUID = dcmUID( self.uid.replace( '_', '.' ) )
         ds.SeriesDescription = f'Arthro. Diagn. Img. #{self.still_num}'
 
+        # Store the original filename in the Image Comments field for backtracking purposes
+        ds.ImageComments = self.ffn_str
+
         ds.InstitutionName = self.intake_form.acquisition_site
 
         ds.ImageType, ds.Modality = ['ORIGINAL', 'PRIMARY', 'ARTHRO_DIAGN_IMG'], 'ES' # Endoscopy (video)

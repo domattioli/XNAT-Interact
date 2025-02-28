@@ -1,0 +1,63 @@
+; Explanation:
+; The following hierarchy represents a structured dataset organization for medical imaging and analysis, following XNAT datatype conventions.
+; Each subject (UID) contains multiple experiments, categorized primarily as Source Data (original scans), Semantic Segmentations (MTurk-processed labeled data), DHS Analysis (individual researcher analyses), and Derived Data Types (future extensions).
+
+; Key nuances:
+; Source Data (rfSession xnat-type) stores original DICOM scans, typically with a single scan (00), unless a re-upload is needed.
+; Semantic Segmentations (otherDicomSession xnat-type) mirrors Source Data filenames but allows multiple versions (e.g., different MTurk batches).
+; DHS Analysis follows the same structure, but analyses by different researchers (e.g., Dom Mattioli, Steven Long) are stored separately.
+; Derived Data Types are placeholders for additional processed data.
+; File Naming is timestamped and zero-indexed, ensuring consistency across experiments.
+; DICOM Formatting allows multiple segmentations within a single file, particularly for labeled datasets.
+; Multiple Scans within an experiment capture iterative processing (e.g., segmentation batches, redo attempts).
+; This structure ensures data integrity, traceability, and scalability while maintaining the hierarchical relationship between raw, labeled, and analyzed data.
+
+Project/
+├── 12345_654_1_2325 (Subject uid)/
+│   ├── 12345_654_1_2325-Source_Data (Experiment, rfSession xnat-type)/
+│   │   ├── 00 (Scan)/
+│   │   │   ├── 00_timestamp.dcm  # DICOM file (zero-indexed, sorted by metadata timestamps)
+│   │   │   ├── ...
+│   │   │   ├── 150_timestamp.dcm  # N total DICOM files for this surgery
+│   ├── 12345_654_1_2325-Semantic_Segmentations (Experiment, otherDicomSession xnat-type)/
+│   │   ├── 00 (Scan)  # MTurk Batch 2024-01-01
+│   │   │   ├── 00_timestamp.dcm  # Corresponding file (distinct from source)
+│   │   │   ├── 01_timestamp.dcm
+│   │   │   ├── ...
+│   │   │   ├── 50_timestamp.dcm
+│   │   ├── 01 (Scan)  # MTurk Batch 2024-02-05 (Unprocessed files)
+│   │   │   ├── 02_timestamp.dcm
+│   │   │   ├── 04_timestamp.dcm
+│   │   │   ├── ...
+│   │   │   ├── 49_timestamp.dcm
+│   │   ├── 09 (Scan)  # MTurk Batch 2024-02-05 (Redo of various files)
+│   │   │   ├── 00_timestamp.dcm
+│   │   │   ├── 02_timestamp.dcm
+│   │   │   ├── 05_timestamp.dcm
+│   │   │   ├── 150_timestamp.dcm
+│   ├── 12345_654_1_2325-DHS_Analysis (Experiment, otherDicomSession xnat-type)/
+│   │   ├── 00 (Scan)  # Dom Mattioli’s Analysis 2024-03-01
+│   │   │   ├── 00_timestamp.dcm
+│   │   │   │   ├── [DICOM Data] (e.g., geometric shapes & coordinates stored)
+│   │   │   ├── 01_timestamp.dcm
+│   │   │   ├── ...
+│   │   │   ├── 150_timestamp.dcm
+│   │   ├── 01 (Scan)  # Steven Long’s Analysis 2024-03-02
+│   │   │   ├── ... (Includes all files from Steven’s analysis)
+│   ├── 12345_654_1_2325-TBD_Derived_Data_Type (Experiment, otherDicomSession xnat-type)/
+│   │   ├── 00 (Scan)/
+│   │   │   ├── ... (.dcm)
+├── 86870_123_13 (Subject uid)/
+│   ├── 86870_123_13-Source_Data (Experiment, esvSession xnat-type)  # Arthro surgery
+│   │   ├── 00 (Scan)  # Initial
+│   │   │   ├── 00_timestamp.mp4
+│   │   │   ├── 01_timestamp.dcm
+│   │   │   ├── ...
+│   │   │   ├── NN_timestamp.dcm
+│   ├── 86870_123_13-Evan_Arthro_Analysis (Experiment, otherDicomSession xnat-type)/
+│   │   ├── 00 (Scan)/
+│   │   │   ├── 00_timestamp.dcm
+│   │   │   │   ├── [DICOM Data] ...
+│   │   │   ├── ...
+│   │   │   ├── NN_timestamp.dcm
+

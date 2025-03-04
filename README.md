@@ -1,116 +1,140 @@
 # XNAT-Interact
-First things First:
+
+## First Things First:
 - You will need to register with XNAT and then be added as a member to the RPACS XNAT server by the Data Librarian.
     - Make sure that you register a new account with your HawkID.
-    - You must be using your VPN when you access the link included on the invitation email!
+    - You must be using your VPN when you access the link included in the invitation email!
 
-Some scripts for getting your source and derived fluoroscopic image data to and from your team's XNAT RPACS server.
-
+This repository contains scripts for getting your source and derived fluoroscopic image data to and from your team's XNAT RPACS server.
 
 ---
+
 ## Installation
-### Option 1 via git clone
+
+### **Option 1: Cloning the Repository (*For General Use*)**
+*If you **only need to use the software and do not plan to contribute changes**, follow these steps*:
+
 0. Open a command prompt/terminal.
-1. Ensure that [git](https://git-scm.com/) installed on your machine.
-```bash
-git --version
-```
-- If you get an error, install git (for windows, go [here](https://gitforwindows.org/)).
-  
-2. Ensure that python 3.8 (64-bit) is installed on your machine.
-```bash
-python --version
-```
-  - Note: "python" may not work correctly if you have python 2 and python 3 both installed on your machine. If that is the case, use "python3".
-- If you get an error, install [python3.8](https://www.python.org/downloads/release/python-380/).
-    - Don't forget to add the python38.exe file to your environment PATH variable.
-      
-2. Navigate to the folder where this library will live.
-```bash
-cd path_to_my_fav_local_folder_for_storing_repositories_of_code
-```
+1. Ensure that [git](https://git-scm.com/) is installed on your machine:
+    ```bash
+    git --version
+    ```
+   - If you get an error, install git (for Windows, go [here](https://gitforwindows.org/)).
 
-3. Copy the repository to a local directory: 
-```bash
-git clone https://github.com/domattioli/XNAT-Interact.git
-```
-3. Navigate into the cloned directory:
-```bash
-cd XNAT-Interact
-```
-4. Create and then activate a virtual environment:
-```bash
-python -m venv .my_venv_for_xnat_interact
-```
->Activate virtual environment using _Windows_:
->```bash
->.my_venv_for_xnat_interact\Scripts\activate 
->```
->
->Activate virtual environment using _Unix_:
->```bash
->source .my_venv_for_xnat_interact/Scripts/Activate
->```
+2. Ensure that Python 3.8 (64-bit) is installed:
+    ```bash
+    python --version
+    ```
+   - If Python 3 is not installed, download [Python 3.8](https://www.python.org/downloads/release/python-380/).
+   - If you have both Python 2 and Python 3 installed, use `python3` instead.
 
-You'll need to install [pip](https://pypi.org/project/pip/), too, by first downloading a get-pip.py file and then running it via python
->Intall pip using _Windows_:
->```bash
->curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
->python get-pip.py
->pip --version
->```
->
->Intall pip using Unix:
-> ```bash
->apt-get install python3-pip
-> ```
+3. Navigate to your preferred directory:
+    ```bash
+    cd path_to_my_fav_local_folder_for_storing_repositories_of_code
+    ```
 
-5. Install the requirements, i.e., the python libraries necessary for running our code:
-```bash
-pip install -r requirements.txt
-```
+4. Clone the repository:
+    ```bash
+    git clone https://github.com/domattioli/XNAT-Interact.git
+    ```
 
-6. Run a test to verify correct installation:
-```bash
-python update_and_test.py
-```
+5. Navigate into the cloned directory:
+    ```bash
+    cd XNAT-Interact
+    ```
 
-===
-### Option 2 via pip **todo**
+6. Create and activate a virtual environment:
+    ```bash
+    python -m venv .my_venv_for_xnat_interact
+    ```
+   **Activate the virtual environment:**
+   - **Windows**:
+     ```bash
+     .my_venv_for_xnat_interact\Scripts\activate
+     ```
+   - **Unix (Mac/Linux)**:
+     ```bash
+     source .my_venv_for_xnat_interact/bin/activate
+     ```
 
+7. Install the required dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+8. Run a test to verify correct installation:
+    ```bash
+    python update_and_test.py
+    ```
+
+---
+
+### **Option 2: Forking the Repository (*For Contributing Changes*)**
+*If you want to **make changes to the code and push them to GitHub**, follow these steps instead*:
+
+1. **Fork this repository**:
+   - Go to [XNAT-Interact](https://github.com/domattioli/XNAT-Interact) on GitHub.
+   - Click the **Fork** button (top right) to create your own copy of the repository.
+
+2. **Clone your forked repository** (replace `YOUR-USERNAME` with your GitHub username):
+    ```bash
+    git clone https://github.com/YOUR-USERNAME/XNAT-Interact.git
+    ```
+
+3. **Navigate into the directory**:
+    ```bash
+    cd XNAT-Interact
+    ```
+
+4. **Set the upstream remote** (so you can sync with the original repo later):
+    ```bash
+    git remote add upstream https://github.com/domattioli/XNAT-Interact.git
+    ```
+
+5. **Create and activate a virtual environment (same as in Option 1)**.
+
+6. **Create a new branch for your changes**:
+    ```bash
+    git checkout -b my-feature-branch
+    ```
+
+7. **Make your changes and commit them**:
+    ```bash
+    git add .
+    git commit -m "Describe the changes you made"
+    ```
+
+8. **Push your changes to your fork**:
+    ```bash
+    git push origin my-feature-branch
+    ```
+
+9. **Create a pull request**:
+   - Go to your fork on GitHub (`https://github.com/YOUR-USERNAME/XNAT-Interact`).
+   - Click **"Compare & pull request"**.
+   - Select:
+     - **Base repository:** `domattioli/XNAT-Interact`
+     - **Base branch:** `main`
+     - **Head repository:** `YOUR-USERNAME/XNAT-Interact`
+     - **Head branch:** `my-feature-branch`
+   - Add a description and click **"Create pull request"**.
+   - 
+### **Option 2: Installing via `pip` (To-Do)**
+🚧 **Note:** This installation method is not yet implemented. Future versions of this repository may support installation via `pip`. 🚧
+        - This will require setting up the environment.yaml github workflow, I think.
+Once available, you will be able to install `XNAT-Interact` directly using:
 ```bash
 pip install XNAT-Interact
 ```
-===
-
-
 ---
-## Example Usage
-#### UIowa VPN -- Required
-- If you are not running the following code from a university machine, you must make sure you are logged into the [UIowa Cisco VPN](https://its.uiowa.edu/support/article/1876) before trying to run these commands.
-- Note: You cannot go back once you begin one of the tasks (e.g., uploading a case). If you make a mistake then I suggect you click Ctrl-C to exit and then restart your task.
-  
-#### Best Practice: run the following script each time you begin a new session:
+
+
+## **Example Usage**
+### **UIowa VPN -- Required**
+- If you are not running the following code from a university machine, you must be logged into the [UIowa Cisco VPN](https://its.uiowa.edu/support/article/1876) before running any commands.
+- **Note:** You cannot go back once you begin one of the tasks (e.g., uploading a case). If you make a mistake, press **Ctrl + C** to exit and restart the task.
+
+## **Best Practice: Run the following script at the start of each session**:
 ```bash
 python update_and_test.py
 ```
-
-#### All functionality requires running the following command in the terminal:
-```bash
-python main.py --username my_hawkid --password my_password
-```
-###### You may also run the following command if you prefer your password to be obscured.
-```bash
-python main.py
-```
-- Note that you must be added as a registered user by the librarian for the XNAT server.
-- For more helpful feedback from the software as you perform a task, include the --verbose argument:
-  
-```bash
-python main.py --verbose
-```
-```bash
-python main.py --username my_hawkid --password my_password --verbose
-```
-
-###### Follow the prompts to (1) Upload new data (source images), (2) Upload derived data for existing source images, and/or (3) perform a query to download existing source and derived data.

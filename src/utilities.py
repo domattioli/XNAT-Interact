@@ -654,6 +654,8 @@ class ConfigTables( UIDandMetaInfo ):
         self.add_new_item( 'registered_users', 'stelong' )
         self.add_new_item( 'registered_users', 'jhill7' )
         self.add_new_item( 'registered_users', 'ezwilliams' )
+        self.add_new_item( 'registered_users', 'aedwards2' )
+        self.add_new_item( 'registered_users', 'Stfrerking' )
 
 
     def _load( self, local_meta_tables_ffn: Opt[Path], verbose: Opt[bool] = True ) -> None:

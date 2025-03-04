@@ -1,0 +1,36 @@
+name: base
+channels:
+  - defaults
+dependencies:
+  - certifi
+  - charset-normalizer
+  - contourpy
+  - cycler
+  - fonttools
+  - idna
+  - importlib_resources
+  - ipykernel
+  - kiwisolver
+  - lxml
+  - matplotlib
+  - matplotlib-inline
+  - numpy
+  - opencv-python
+  - packaging
+  - pandas
+  - pathlib
+  - pwinput
+  - pydicom
+  - pyparsing
+  - python-dateutil
+  - pytz
+  - pyxnat
+  - requests
+  - setuptools
+  - six
+  - tabulate
+  - tzdata
+  - urllib3
+  - wheel
+  - zipp
+  - openpyxl

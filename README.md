@@ -1,12 +1,13 @@
 # XNAT-Interact
 
+This repository contains scripts for getting your source and derived fluoroscopic image data to and from our XNAT RPACS server.
+
 ## First Things First:
 - You will need to register with XNAT and then be added as a member to the RPACS XNAT server by the Data Librarian.
     - Make sure that you register a new account with your HawkID.
     - You must be using your VPN when you access the link included in the invitation email!
 
-This repository contains scripts for getting your source and derived fluoroscopic image data to and from your team's XNAT RPACS server.
-
+- NOTE: the SSL certificate for our accounts seems to require an annual renewal. It was most recently requested for renewal as of 2025-03-04.
 ---
 
 ## Installation

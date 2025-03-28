@@ -1480,36 +1480,66 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         return warning_str
     
 
-    def build_issue_details( self ) -> Tuple[List[Dict[str, Any]],List[int]]:
-        failed_details, counts = [], [0, 0]
+    def _build_issue_details( self ) -> Tuple[List[Dict[str, Any]],List[int]]:
+        failed_details, counts = [], [0, 0]  # counts[0] = total errors, counts[1] = total warnings
+        ind = 2  # Start at 2 to account for the header row
+
         for idx, row in self._errors.iterrows():
             errors, warnings = [], []
-            for column in self._errors.columns:
-                if row[column]:
-                    errors.extend(row[column])
-                    counts[0] += 1
+            row_has_errors = False  # Track if the row has errors
+
+            # Process errors
+            for col in self._errors.columns:
+                if row[col]:
+                    counts[0] += 1  # Increment total errors
+                    row_has_errors = True  # Mark that this row has errors
+                    if isinstance(row[col], list):
+                        errors.extend(row[col])
+                    else:
+                        errors.append(row[col])
+
+            # Process warnings if the row exists in the warnings table
             if idx in self._warnings.index:
-                warning_row = self._warnings.loc[idx]  # type: ignore .at removes the red line but leads to a runtime error
-                for column in self._warnings.columns:
-                    if warning_row[column]:
-                        warnings.extend(warning_row[column])
-                        counts[1] += 1
+                warning_row = self._warnings.loc[idx] # type: ignore
+                for col in self._warnings.columns:
+                    if warning_row[col]:
+                        counts[1] += 1  # Increment total warnings
+                        if isinstance(warning_row[col], list):
+                            warnings.extend(warning_row[col])
+                        else:
+                            warnings.append(warning_row[col])
+
+            # Append details if there are errors or warnings
             if errors or warnings:
-                failed_details.append( { 'row': idx, 'errors': errors, 'warnings': warnings } )
+                failed_details.append({
+                    'row': ind,  # Use the adjusted row index (starting at 2)
+                    'errors': errors,
+                    'warnings': warnings
+                })
+
+            # Increment the "rows with errors" count only if the row has errors
+            if row_has_errors:
+                counts[0] += 1
+
+            ind += 1  # Increment the row index for the next iteration
         return failed_details, counts
     
 
     def generate_summary( self, write_to_file: Opt[bool] = False ) -> Tuple[str, bool]:
         # Create the details for failed rows
-        failed_details, counts = self.build_issue_details()
+        failed_details, counts = self._build_issue_details()
         failed_rows_details, num_failed = "", len( failed_details )
         for i, detail in enumerate( failed_details, 1 ):
             failed_rows_details += f"({i}/{num_failed}) Row {detail['row']+2}:\n"
             for error in detail['errors']:
                 failed_rows_details += f"! Error: {error}\n"
             for warning in detail.get( 'warnings', []):
-                failed_rows_details += f"\t- Notice: {warning}\n"
+                failed_rows_details += f"\t- Warning: {warning}\n"
             failed_rows_details += "\n"
+        num_errors, rows_w_errors = 0, 0
+        for item in failed_details:
+            rows_w_errors += 1
+            num_errors += len( item['errors'] )
 
         # Create the header
         header = textwrap.dedent( f"""\
@@ -1520,10 +1550,10 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         Date: {datetime.now().strftime("%Y-%m-%d %H:%M")}
 
         Total Rows Processed:\t{len( self.df )}
-        Rows with Fatal Errors:\t{num_failed}
-        Total # of Errors:\t{counts[0]}
-        Rows with Notices:\t{sum( 1 for item in failed_details if item['warnings'] )}
-        Total # of Notices:\t{counts[1]}
+        Rows with Fatal Errors:\t{num_errors}
+        Total # of Errors:\t{num_errors}
+        Rows with Warnings:\t{sum( 1 for item in failed_details if item['warnings'] )}
+        Total # of Warnings:\t{counts[1]}
 
         ------------------------
         Details for Failed Rows:

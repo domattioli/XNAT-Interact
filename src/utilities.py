@@ -1243,7 +1243,8 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         if num_surgeons is not None and num_surgeons != 1 and not self._col_is_empty( row['Performer HawkID-Task'] ):
             try: # First, we need to validate that the formatting is valid.
                 formatted_str, notices = self._validate_and_format_dict_string( row['Performer HawkID-Task'] )
-                for notice in notices:      self._log_issue( idx=idx, column='Performer HawkID-Task', message=notice, issue_type='warning' )
+                for notice in notices:
+                    self._log_issue( idx=idx, column='Performer HawkID-Task', message=notice, issue_type='warning' )
                 performer_hawk_id_task = ast.literal_eval( formatted_str )
                 performer_hawk_id_task = {k.lower(): v for k, v in performer_hawk_id_task.items()}
                 assert isinstance( performer_hawk_id_task, dict ), "The input string was not in a valid format, e.g., {k1: v1; ...; kn: vn}."
@@ -1263,22 +1264,31 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
                     column='Performer HawkID-Task',
                     message=f"'Performing Surgeon HawkID' ('{row['Performing Surgeon HawkID'].upper()}') not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}').",
                     issue_type='error' )
-            for key in performer_hawk_id_task.keys():
-                key_suggestion = difflib.get_close_matches( key.upper(), surgeon_hawkids, n=1, cutoff=0.6 )
-                if not self.config.item_exists( table_name='surgeons', item_name=key ):
-                    self._log_issue(
-                        idx=idx,
-                        column='Performer HawkID-Task',
-                        message=f"'Performer HawkID-Task' key ('{key.upper()}') not found in the 'Surgeons' config table;\n\t--\tDid you mean '{key_suggestion[0]}'?",
-                        issue_type='error' )
-                else: # Replace the key with the encoding to protect identity information.
-                    performer_hawk_id_task[key] = self.replace_hawk_ids_with_encodings( performer_hawk_id_task[key], surgeon_hawkids_dict, original_col_name='Performer HawkID-Task' )
-            if len( performer_hawk_id_task.keys() ) != num_surgeons:
+            
+            # Need to make sure the number of keys matches the number of participating surgeons.
+            if len(performer_hawk_id_task.keys()) != num_surgeons:
                 self._log_issue(
                     idx=idx,
                     column='Performer HawkID-Task',
                     message=f"Number of keys in 'Performer HawkID-Task' ({len(performer_hawk_id_task)}) does not match '# of Participating Performing Surgeons' ({num_surgeons}).\n\t--\tMake sure you're using proper formatting, e.g., {desired_format}\n\t--\tYou entered: {row['Performer HawkID-Task']}",
                     issue_type='error' )
+            else:
+                for key in performer_hawk_id_task.keys():
+                    key_suggestion = difflib.get_close_matches( key.upper(), surgeon_hawkids, n=1, cutoff=0.6 )
+                    if not self.config.item_exists( table_name='surgeons', item_name=key ):
+                        self._log_issue(
+                            idx=idx,
+                            column='Performer HawkID-Task',
+                            message=f"'Performer HawkID-Task' key ('{key.upper()}') not found in the 'Surgeons' config table;\n\t--\tDid you mean '{key_suggestion[0]}'?",
+                            issue_type='error' )
+                    else: # Replace the key with the encoding to protect identity information.
+                        performer_hawk_id_task[key] = self.replace_hawk_ids_with_encodings( performer_hawk_id_task[key], surgeon_hawkids_dict, original_col_name='Performer HawkID-Task' )
+                if len( performer_hawk_id_task.keys() ) != num_surgeons:
+                    self._log_issue(
+                        idx=idx,
+                        column='Performer HawkID-Task',
+                        message=f"Number of keys in 'Performer HawkID-Task' ({len(performer_hawk_id_task)}) does not match '# of Participating Performing Surgeons' ({num_surgeons}).\n\t--\tMake sure you're using proper formatting, e.g., {desired_format}\n\t--\tYou entered: {row['Performer HawkID-Task']}",
+                        issue_type='error' )
         elif num_surgeons is not None and num_surgeons != 1:
             self._log_issue( idx=idx, column='Performer HawkID-Task', message="'Performer HawkID-Task' cannot be empty if '# of Participating Performing Surgeons' is not 1.", issue_type='error' )
             self._log_issue( idx=idx, column='# of Participating Performing Surgeons', message="'Performer HawkID-Task' cannot be empty if '# of Participating Performing Surgeons' is not 1.", issue_type='error' )
@@ -1434,13 +1444,16 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
                 if row[col]:
                     num_errors_total += 1
                     if isinstance( row[col], list ):
-                        for item in row[col]:       error_str += f"Row {ind}\t{item}\n"
-                    else:                           error_str += f"Row {ind}\t{row[col]}\n"
+                        for item in row[col]:
+                            error_str += f"Row {ind}\t{item}\n"
+                    else:                                                           
+                        error_str += f"Row {ind}\t{row[col]}\n"
             if num_errors_total > start:    num_rows_w_errors += 1
             ind += 1
 
         # Append to the top of the string a summary of the number of errors in total and a breakdown of the number of rows with an error.
-        error_str = f"{'='*10}\nSummary\n{'='*10}\nInput # of Rows (with header): {len( self.df )+1}\nTotal # of Errors: {num_errors_total}\nRows w/ Errors: {num_rows_w_errors}/{len( self.df )}\n\n" + error_str
+        str_header = f"{'='*50}\nSummary for '{self.ffn.name}'\n{'='*50}\n"
+        error_str = str_header + f"Input # of Rows (with header): {len(self.df)+1}\nTotal # of Errors: {num_errors_total}\nRows w/ Errors: {num_rows_w_errors}/{len(self.df)}\n\n" + error_str
         return error_str
     
     def print_warnings_list( self ) -> str:

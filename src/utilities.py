@@ -1294,7 +1294,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
             self._log_issue( idx=idx, column='# of Participating Performing Surgeons', message="'Performer HawkID-Task' cannot be empty if '# of Participating Performing Surgeons' is not 1.", issue_type='error' )
 
         # Additional checks for consistency between columns
-        if not self._col_is_empty(performing_surgeon_hawkid) and not self._col_is_empty(row['Performer HawkID-Task']):
+        if not self._col_is_empty(performing_surgeon_hawkid) and not self._col_is_empty( row['Performer HawkID-Task'] ):
             if performing_surgeon_hawkid not in performer_hawk_id_task.keys() and performing_surgeon_hawkid != 'unknown' and performing_surgeon_hawkid != 'not-applicable':
                 self._log_issue(
                     idx=idx,
@@ -1303,12 +1303,13 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
                     issue_type='error'
                 )
 
-        if not self._col_is_empty(supervising_surgeon_hawkid) and not self._col_is_empty(row['Performer HawkID-Task']):
-            if supervising_surgeon_hawkid not in row['Performer HawkID-Task'] and supervising_surgeon_hawkid != 'unknown' and supervising_surgeon_hawkid != 'not-applicable':
+        if not self._col_is_empty( supervising_surgeon_hawkid ) and not self._col_is_empty( row['Performer HawkID-Task'] ):
+            performer_tasks_lower = [str(key).lower() for key in performer_hawk_id_task.keys()]
+            if supervising_surgeon_hawkid not in performer_tasks_lower and supervising_surgeon_hawkid != 'unknown' and supervising_surgeon_hawkid != 'not-applicable':
                 self._log_issue(
                     idx=idx,
                     column='Performer HawkID-Task',
-                    message=f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID'].upper()}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}');\n\t--make sure you specify any role they had outside of supervising.",
+                    message=f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID']}') specified but not found in 'Performer HawkID-Task'; you entered: ('{row['Performer HawkID-Task']}').\n\t--\tMake sure you specify any role they had outside of supervising.",
                     issue_type='warning'
                 )
 

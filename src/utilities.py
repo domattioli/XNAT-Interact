@@ -1308,7 +1308,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
                 self._log_issue(
                     idx=idx,
                     column='Performer HawkID-Task',
-                    message=f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID'].upper()}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}'); make sure you specify any role they had outside of supervising.",
+                    message=f"'Supervising Surgeon HawkID' ('{row['Supervising Surgeon HawkID'].upper()}') specified but not found in 'Performer HawkID-Task' ('{row['Performer HawkID-Task']}');\n\t--make sure you specify any role they had outside of supervising.",
                     issue_type='warning'
                 )
 
@@ -1452,20 +1452,30 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
             ind += 1
 
         # Append to the top of the string a summary of the number of errors in total and a breakdown of the number of rows with an error.
-        str_header = f"{'='*50}\nSummary for '{self.ffn.name}'\n{'='*50}\n"
+        str_header = f"{'='*50}\nError Summary for '{self.ffn.name}'\n{'='*50}\n"
         error_str = str_header + f"Input # of Rows (with header): {len(self.df)+1}\nTotal # of Errors: {num_errors_total}\nRows w/ Errors: {num_rows_w_errors}/{len(self.df)}\n\n" + error_str
         return error_str
     
     def print_warnings_list( self ) -> str:
         '''Walk through each warning in the table, printing out a new line in the following format: row # -- column name: warning message'''
         warning_str, ind = "", 2 # Start at 2 to account for the header row
+        num_warns_total, num_rows_w_warns = 0, 0
         for _, row in self._warnings.iterrows():
+            start = num_warns_total
             for col in self._warnings.columns:
                 if row[col]:
+                    num_warns_total += 1
                     if isinstance( row[col], list ):
-                        for item in row[col]:       warning_str += f"Row {ind}\t{item}\n"
-                    else:                           warning_str += f"Row {ind}\t{row[col]}\n"
+                        for item in row[col]:
+                            warning_str += f"Row {ind}\t{item}\n"
+                    else:
+                        warning_str += f"Row {ind}\t{row[col]}\n"
+            if num_warns_total > start:    num_rows_w_warns += 1
             ind += 1
+
+        # Append to the top of the string a summary of the number of errors in total and a breakdown of the number of rows with an error.
+        str_header = f"{'='*50}\nWarning Summary for '{self.ffn.name}'\n{'='*50}\n"
+        warning_str = str_header + f"Input # of Rows (with header): {len(self.df)+1}\nTotal # of Warnings: {num_warns_total}\nRows w/ Warnings: {num_rows_w_warns}/{len(self.df)}\n\n" + warning_str
         return warning_str
     
 

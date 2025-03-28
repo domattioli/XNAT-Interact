@@ -1,5 +1,6 @@
 # Ignore everything
 /.venv
+/.my_venv
 /.vscode
 /__pycache__
 /src/__pycache__

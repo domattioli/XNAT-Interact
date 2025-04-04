@@ -12,6 +12,7 @@ import pandas as pd
 from pathlib import Path
 import pytz
 import string
+import difflib
 
 from src.utilities import UIDandMetaInfo, ConfigTables, USCentralDateTime, XNATLogin, USCentralDateTime
 
@@ -136,12 +137,13 @@ class ORDataIntakeForm( ResourceFile ):
         if verbose:                             print( f'\n...Processing OR Data Intake Form...' )
         if isinstance( input_data, pd.Series ): self._read_from_series( data_row=input_data, config=config, verbose=verbose )
         elif isinstance( input_data, Path ):    self._read_from_file( parent_folder=input_data, verbose=verbose )
-        else:                                   # User must define intake form from a set of prompts.
+        elif input_data is None:                # User must define intake form from a set of prompts.
             self._prompt_user_for_filer_name_and_operation_date( config=config )
             self._prompt_user_for_scan_quality()
             self._prompt_user_for_surgical_procedure_info( config=config )
             self._prompt_user_for_skills_assessment_info( config=config )
             self._prompt_user_for_storage_device_info()
+        else: raise ValueError( f'input_data must be a Path, a Pandas Series, or None; you provided {type(input_data)}.' )
 
         # Need to identify the save-to location for the json file; if successfully read from file, use that, else, use the generated uid.
         self._saved_ffn = config.tmp_data_dir / Path( self.uid ) / self.filename
@@ -159,6 +161,7 @@ class ORDataIntakeForm( ResourceFile ):
             verbose (Optional[bool], optional): Whether to enable verbose output. Defaults to False.
         """
         # Define the expected columns
+        print(f'\tHELLO!')
         expected_columns = [
             f'Filer\nHawkID', f'Operation\nDate', f'Quality', f'Institution\nName', f'Procedure\nName',
             f'Epic\nStart\nTime', f'Epic\nEnd\nTime', f'Side of\nPatient\nBody', f'OR Room\nName/\nLocation',
@@ -168,18 +171,19 @@ class ORDataIntakeForm( ResourceFile ):
             f'Diagnotistic\nNotes', f'Additional\nComments', f'Skills\nAssessment\nRequested', f'Assessor\nHawkID',
             f'Additional\nAssessment\nDetails', f'Name/\nType of\nStorage\nDevice', f'Full Path to Data',
             f'Was\nRadiology\nContacted', f'Radiology\nContact\nDate', f'Radiology\nContact\nTime']
+        
+        # Verify incoming data's columns match the expected columns
+        # Map the column names from the data to the expected column names
+        incoming_col_names = data_row.index.tolist()[1:]  # Exclude the first column (index) -- 'Case Name [Optional]'
+        column_mapping_dict = self.map_column_names( expected_col_names=expected_columns, current_col_names=incoming_col_names )
+        assert self.verify_perfect_mapping( column_mapping_dict=column_mapping_dict,
+                                           expected_col_names=expected_columns,
+                                           current_col_names=incoming_col_names ), f"Column names in the data do not match the expected column names;\nMapped columns:\n\t{column_mapping_dict}"
 
-        # Verify that all expected columns exist within the actual columns for the series
-        actual_columns = set( data_row.index )
-        missing_columns = set( expected_columns ) - actual_columns
-        if not missing_columns:
-            print("The Excel file has all the expected columns.")
-        else:
-            print("The Excel file is missing some expected columns.")
-            print(f"Missing columns: {missing_columns}")
-            print(f"Expected columns: {expected_columns}")
-            print(f"Actual columns: {list(actual_columns)}")
-
+        # Assuming perfect mapping, need to conver the column names of the data_row to the expected column names
+        # Convert the column names of the data_row to the expected column names using column_mapping_dict
+        data_row = data_row.rename( index=column_mapping_dict )
+        
         # Begin assigning information, building list of issues, if any, as feedback to user.
         self._form_available = False
         issues = {}
@@ -197,7 +201,7 @@ class ORDataIntakeForm( ResourceFile ):
         self._institution_name = data_row['Institution\nName']
         if self.institution_name not in config.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ):        issues[f'Institution\nName'] = f'Institution name "{self.institution_name}"is not registered w/ the database.'
         
-        self._ortho_procedure_name = data_row['Procedure\nName'.upper()]
+        self._ortho_procedure_name = data_row['Procedure\nName']
         if self.ortho_procedure_name not in config.list_of_all_items_in_table( table_name='Groups' ):
             issues[f'Procedure\nName'] = f'Procedure name "{self.ortho_procedure_name}"is not registered w/ the database.'
             issues[f'Procedure\nType'] = f'Procedure type cannot reliably be discerned because the inputted procedure name is not registed w the database and we currently dont ask the user to explicitly declare it.'
@@ -253,7 +257,7 @@ class ORDataIntakeForm( ResourceFile ):
         self._assessment_details = data_row['Additional\nAssessment\nDetails']
 
         self._storage_device_name_and_type = data_row['Name/\nType of\nStorage\nDevice']
-        self._relevant_folder = Path( data_row['Full\nPath\nto\nData'] )
+        self._relevant_folder = Path( data_row['Full Path to Data'] )
 
         if data_row['Was\nRadiology\nContacted'] == 'Y':
             self._radiology_contact_date = data_row['Radiology\nContact\nDate']
@@ -330,7 +334,40 @@ class ORDataIntakeForm( ResourceFile ):
         self._running_text_file = OrderedDict( ( k, acceptable_ortho_procedure_names[k]) for k in ordered_keys_of_intake_text_file if k in acceptable_ortho_procedure_names )
         self._running_text_file['FORM_LAST_MODIFIED'] = datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
 
-
+    
+    def get_time_input( self, prompt ) -> str:
+        for _ in range(2):  # Gives the user 1 opportunity to try again
+            # Replace hyphens and spaces with colons as applicable
+            user_input = input( prompt )
+            user_input = re.sub( r'[-\s]', ':', user_input )
+            
+            try: return parser.parse( user_input ).time().strftime( '%H:%M' )
+            except ValueError: print( f"\t\t --- Invalid time provided; you entered: {user_input}{indent_str}Please use the HH:MM format.\n" )
+        raise ValueError( "Failed to provide a valid time after 2 attempts." )
+    
+    @staticmethod
+    def map_column_names( expected_col_names: list, current_col_names: list ) -> dict:
+        """
+        Map the column names from the data to the expected column names.
+        :param expected_cols: The list of expected column names.
+        :return: A dictionary mapping current column names to expected column names.
+        """
+        column_mapping_dict = {}
+        for col in current_col_names:
+            closest_match = difflib.get_close_matches( col, expected_col_names, n=1, cutoff=0.25 )  # n=1 for one closest match, cutoff=0.6 for similarity threshold
+            if closest_match:   column_mapping_dict[col] = closest_match[0]
+            else:               column_mapping_dict[col] = None  # No close match found
+        return column_mapping_dict
+    
+    @staticmethod
+    def verify_perfect_mapping( column_mapping_dict: dict, expected_col_names: list, current_col_names: list ) -> bool:
+        """
+        Verify that all current column names have a perfect match in the expected column names.
+        :param mapped_columns: The dictionary mapping current column names to expected column names.
+        :return: True if all current column names have a perfect match, False otherwise.
+        """
+        return len( expected_col_names ) == len( current_col_names ) and all( column_mapping_dict[col] is not None for col in current_col_names )
+    
     @staticmethod
     def prompt_until_valid_answer_given( selection_name: str, acceptable_options: list, max_num_attempts: int=2 ) -> str:
         num_attempts = 0
@@ -340,7 +377,6 @@ class ORDataIntakeForm( ResourceFile ):
             else:                                           print( f'\t--- Invalid entry for {selection_name}! Please enter one of the options listed above.' )
         raise InvalidInputError( f'Failed to provide a valid entry for {selection_name} after {max_num_attempts} attempts.' )
     
-
     def _prompt_user_for_filer_name_and_operation_date( self, config: ConfigTables ) -> None:
         acceptable_registered_users_options_encoded = {str(i+1): reg_user for i, reg_user in enumerate( config.list_of_all_items_in_table( table_name='REGISTERED_USERS' ) )}
         options_str = "\n".join( [f"\t\tEnter '{code}' for {name.replace('_', ' ')}" for code, name in acceptable_registered_users_options_encoded.items()] )
@@ -374,18 +410,6 @@ class ORDataIntakeForm( ResourceFile ):
         self._running_text_file['OPERATION_DATE'] = str( self.operation_date )
         self._running_text_file['SUBJECT_UID'] = str( self.uid )
     
-    
-    def get_time_input( self, prompt ) -> str:
-        for _ in range(2):  # Gives the user 1 opportunity to try again
-            # Replace hyphens and spaces with colons as applicable
-            user_input = input( prompt )
-            user_input = re.sub( r'[-\s]', ':', user_input )
-            
-            try: return parser.parse( user_input ).time().strftime( '%H:%M' )
-            except ValueError: print( f"\t\t --- Invalid time provided; you entered: {user_input}{indent_str}Please use the HH:MM format.\n" )
-        raise ValueError( "Failed to provide a valid time after 2 attempts." )
-
-
     def _prompt_user_for_scan_quality( self ):
         print( f'\n\n--- Quality/Usability of the OR Image Data ---' )
         print( f'\t(4a/34)\tDo you know the quality of the OR image data?{indent_str}-- Please enter "1" for Yes or "2" for No.' )
@@ -402,7 +426,6 @@ class ORDataIntakeForm( ResourceFile ):
             elif scan_quality == '3':   self._scan_quality = 'questionable'
         else: scan_quality = '' # Unknown, but xnat doesnt except that as an input.
         self._running_text_file['SCAN_QUALITY'] = self.scan_quality # type: ignore -- not sure why this is giving a type error. runs fine in spite of it.
-
 
     def _prompt_user_for_surgical_procedure_info( self, config: ConfigTables ): # Make sure fields that might be stored in the config are all completely capitalized
         print( f'\n--- Surgical Procedure Information ---' )

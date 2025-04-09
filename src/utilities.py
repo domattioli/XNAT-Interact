@@ -220,7 +220,6 @@ class UIDandMetaInfo:
 
     def convert_all_kwarg_strings_to_uppercase( **kwargs ):             return {k: v.upper() if isinstance(v, str) else v for k, v in kwargs.items()}
 
-
     def generate_uid( self )                    -> str:
         """
         Generate a unique identifier for the instance.
@@ -230,7 +229,7 @@ class UIDandMetaInfo:
         """
         return str( generate_pydicomUID( prefix=None, entropy_srcs=[self.now_datetime] ) ).replace( '.', '_' )
     
-    
+
     def is_valid_pydcom_uid( self, uid_str: str )   -> bool:
         """
         Validate the format of the given UID.
@@ -410,15 +409,12 @@ class XNATConnection( UIDandMetaInfo ):
         # if all tests pass, set is_verified to True
         self._is_verified = True
 
-
     def _establish_connection( self ) -> Interface:     return Interface( server=self.xnat_project_url, user=self.get_user, password=self.get_password )
-
 
     def _grab_project_handle( self ):
         self._project_query_str = '/project/' + self.xnat_project_name
         project_handle = self.server.select( self.project_query_str )
         if project_handle.exists():                 self._project_handle = project_handle       # type: ignore
-
 
     def close( self ):
         if hasattr( self, '_server' ):  # Delete the local copy of the ConfigTables.
@@ -426,7 +422,6 @@ class XNATConnection( UIDandMetaInfo ):
             if os.path.exists( self.config_ffn ):       os.remove( self.config_ffn )
         self._open = False
         print( f"\n\t*Prior connection to XNAT server, '{self.uid}', has been closed -- local config data will be deleted!\n" )
-
 
     def __del__( self ):
         self.close() # Close the server connection ***AND*** delete the config local data to enforce user to always pull it from the server first.
@@ -530,7 +525,6 @@ class ConfigTables( UIDandMetaInfo ):
         data_librarians = [item for item in self.project_owner if item != 'domattioli']
         return all( self.item_exists( table_name='registered_users', item_name=owner ) for owner in data_librarians )
             
-
     def _reinitialize_tables_with_extra_columns( self ) -> None:
         # iterate through each table in self._tables and ensure that all columns denoted in self.metadata['TABLE_EXTRA_COLUMNS'] are present.
         for table_name, table in self._tables.items():
@@ -559,7 +553,6 @@ class ConfigTables( UIDandMetaInfo ):
                             'CREATED_BY': self.accessor_uid,
                             'TABLE_EXTRA_COLUMNS': {} }
             
-
     def _initialize_tables( self ) -> None:
         self.add_new_table( 'AcquisitioN_sites' )
         self.add_new_item( 'acquisitIon_sites', 'UNIVERSITY_OF_IOWA_HOSPITALS_AND_CLINICS' )
@@ -685,15 +678,12 @@ class ConfigTables( UIDandMetaInfo ):
                 assert k not in self.metadata['TABLE_EXTRA_COLUMNS'], f'Cannot add Table "{k}" more than once.'
                 self._metadata['TABLE_EXTRA_COLUMNS'][k] = [c.upper() for c in v]
     
-
     def _init_table_w_default_cols( self ) -> pd.DataFrame: return pd.DataFrame( columns=self.default_meta_table_columns ).assign( CREATED_DATE_TIME=self.now_datetime, CREATED_BY=self.accessor_uid )
     
-
     def _validate_login_for_important_functions( self, assert_librarian: Opt[bool]=False ) ->  None:
         assert self.login_info.is_valid, f"Provided login info must be validated before accessing config file: {self.login_info}"
         if hasattr( self, '_tables' ):      assert self.is_user_registered(), f'User {self.accessor_uid} must first be registed before saving config file.'
         if assert_librarian:                assert self.accessor_username.lower() in [owner.lower() for owner in self.project_owner], f'Only user(s) {self.project_owner} can push config file to the xnat server.'
-    
     
     def _custom_json_serializer( self, data, indent=4 ):
         def serialize( obj, depth=0 ):
@@ -717,20 +707,20 @@ class ConfigTables( UIDandMetaInfo ):
         write_fn = write_fn.split( '.' )
         write_fn = write_fn[0] + datetime.today().strftime( '%Y_%m_%d_%H_%M_%S' ) + '.' + write_fn[1]
         
-        # # Depracated Need to check if a file with today's date exists in the backup folder. If it does, do not create a new backup.
-        # def remove_hidden_characters( s ):  return re.sub(r'[^\x20-\x7E]', '', s)
-        # list_of_backup_fns = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_connection.xnat_backups_folder_name ).files().get()
-        # if remove_hidden_characters( write_fn ) in list_of_backup_fns:
-        #     if verbose:             print( f'\tNOTE -- A backup of the config file for today already exists in the XNAT backups folder: {write_fn}\n' )
-        #     return None
+        # Read in current config file
+        with open( self.config_ffn, 'r' ) as f:     data = json.load( f )
 
+        # Write data to a temporary filename
+        with open( write_fn, 'w' ) as f:            json.dump( data, f, indent=2, separators=( ',', ':' ) )
+
+        # Push that to xnat.
         self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_backups_folder_name ).file( write_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
         if write_pn is not None:
             shutil.copy( self.config_ffn, write_pn )
             if verbose:             print( f'\tSUCCESS! -- Created backup of config file at:\t{write_pn}\n' )
             return write_pn, write_fn
-        else: return None, write_fn
-        
+        else:
+            return None, write_fn
     
     def pull_from_xnat( self, write_ffn: Opt[Path]=None, verbose: Opt[bool]=True ) -> Opt[Path]:
         if write_ffn is None:   write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( self.config_ffn )

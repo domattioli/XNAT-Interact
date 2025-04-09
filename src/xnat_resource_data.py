@@ -151,6 +151,26 @@ class ORDataIntakeForm( ResourceFile ):
         if write_file:                          self.construct_digital_file( verbose=verbose )
 
 
+    def _init_all_fields( self, config: ConfigTables ) -> None:
+        # Required inputs -- user must at the very least acknowledge that they do not have the information
+        self._filer_name, self._operation_date, self._form_available = '', '', False
+        self._institution_name, self._ortho_procedure_type, self._ortho_procedure_name, self._epic_start_time = '', '', '', ''
+        self._storage_device_name_and_type, self._radiology_contact_date, self._radiology_contact_time, self._relevant_folder = None, None, None, Path('') # While required, it would be good to show a "null" value in the json file if this is truly unknown.
+        self._scan_quality = ''
+
+        # Information that may not be knowable if the data is older, so we will allow for None values
+        self._epic_end_time, self._side_of_patient_body, self._OR_location = None, None, None
+        self._supervising_surgeon_hawk_id, self._supervising_surgeon_presence, self._performing_surgeon_hawk_id, self._performer_year_in_residency = None, None, None, None
+        self._performer_was_assisted, self._performer_num_of_similar_logged_cases, self._performance_enumerated_task_performer = None, None, None
+        self._list_unusual_features_of_performance, self._diagnostic_notes, self._misc_surgical_performance_comments = None, None, None
+        self._assessment_title, self._assessor_hawk_id, self._assessment_details = None, None, None
+
+        # Create a dict to represent all imported ortho procedure names
+        acceptable_ortho_procedure_names = self._construct_dict_of_ortho_procedure_names( config=config )
+        self._running_text_file = OrderedDict( ( k, acceptable_ortho_procedure_names[k]) for k in ordered_keys_of_intake_text_file if k in acceptable_ortho_procedure_names )
+        self._running_text_file['FORM_LAST_MODIFIED'] = datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
+
+
     def _read_from_series( self, data_row: pd.Series, config: ConfigTables, verbose: Opt[bool]=False ) -> None:
         """
         Read data from a Pandas Series and populate the intake form fields.
@@ -161,7 +181,6 @@ class ORDataIntakeForm( ResourceFile ):
             verbose (Optional[bool], optional): Whether to enable verbose output. Defaults to False.
         """
         # Define the expected columns
-        print(f'\tHELLO!')
         expected_columns = [
             f'Filer\nHawkID', f'Operation\nDate', f'Quality', f'Institution\nName', f'Procedure\nName',
             f'Epic\nStart\nTime', f'Epic\nEnd\nTime', f'Side of\nPatient\nBody', f'OR Room\nName/\nLocation',
@@ -172,8 +191,7 @@ class ORDataIntakeForm( ResourceFile ):
             f'Additional\nAssessment\nDetails', f'Name/\nType of\nStorage\nDevice', f'Full Path to Data',
             f'Was\nRadiology\nContacted', f'Radiology\nContact\nDate', f'Radiology\nContact\nTime']
         
-        # Verify incoming data's columns match the expected columns
-        # Map the column names from the data to the expected column names
+        # Verify incoming data's columns match the expected columns; Map the column names from the data to the expected column names
         incoming_col_names = data_row.index.tolist()[1:]  # Exclude the first column (index) -- 'Case Name [Optional]'
         column_mapping_dict = self.map_column_names( expected_col_names=expected_columns, current_col_names=incoming_col_names )
         assert self.verify_perfect_mapping( column_mapping_dict=column_mapping_dict,
@@ -183,7 +201,7 @@ class ORDataIntakeForm( ResourceFile ):
         # Assuming perfect mapping, need to conver the column names of the data_row to the expected column names
         # Convert the column names of the data_row to the expected column names using column_mapping_dict
         data_row = data_row.rename( index=column_mapping_dict )
-        
+
         # Begin assigning information, building list of issues, if any, as feedback to user.
         self._form_available = False
         issues = {}
@@ -263,6 +281,41 @@ class ORDataIntakeForm( ResourceFile ):
             self._radiology_contact_date = data_row['Radiology\nContact\nDate']
             self._radiology_contact_time = data_row['Radiology\nContact\nTime']
 
+        # Need to construct the running_text_file to mimic the format of _read_from_file()
+        self._running_text_file = OrderedDict( ( k, self.running_text_file[k]) for k in ordered_keys_of_intake_text_file if k in self.running_text_file )
+        self._running_text_file['SUBJECT_UID'] = str( self.uid )
+        self._running_text_file['FILER_HAWKID'] = str( self.filer_name )
+        self._running_text_file['FORM_AVAILABLE_FOR_PERFORMANCE'] = str( self.form_is_available )
+        self._running_text_file['OPERATION_DATE'] = str( self.operation_date )
+        self._running_text_file['SCAN_QUALITY'] = str( self.scan_quality )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO'] = OrderedDict()
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['INSTITUTION_NAME'] = str( self.institution_name )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['PROCEDURE_TYPE'] = str( self.ortho_procedure_type )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['PROCEDURE_NAME'] = str( self.ortho_procedure_name )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['EPIC_START_TIME'] = str( self.epic_start_time )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['EPIC_END_TIME'] = str( self.epic_end_time )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['PATIENT_SIDE'] = str( self.side_of_patient_body )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['OR_LOCATION'] = str( self.OR_location )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['SUPERVISING_SURGEON_UID'] = str( self.supervising_surgeon_hawk_id )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['SUPERVISING_SURGEON_PRESENCE'] = str( self.supervising_surgeon_presence )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['PERFORMING_SURGEON_UID'] = str( self.performing_surgeon_hawk_id )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['PERFORMER_YEAR_IN_RESIDENCY'] = str( self.performer_year_in_residency )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['PERFORMER_WAS_ASSISTED'] = str( self.performer_was_assisted )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['PERFORMER_NUM_OF_SIMILAR_LOGGED_CASES'] = str( self.performer_num_of_similar_logged_cases )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['PERFORMANCE_ENUMERATED_TASK_PER_PERFORMER'] = str( self.performance_enumerated_task_performer )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['LIST_UNUSUAL_FEATURES'] = str( self.list_unusual_features_of_performance )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['DIAGNOSTIC_NOTES'] = str( self.diagnostic_notes )
+        self._running_text_file['SURGICAL_PROCEDURE_INFO']['MISC_PROCEDURE_COMMENTS'] = str( self.misc_surgical_performance_comments )
+        self._running_text_file['SKILLS_ASSESSMENT_INFO'] = OrderedDict()
+        self._running_text_file['SKILLS_ASSESSMENT_INFO']['ASSESSMENT_TITLE'] = str( self.assessment_title )
+        self._running_text_file['SKILLS_ASSESSMENT_INFO']['ASSESSOR_UID'] = str( self.assessor_hawk_id )
+        self._running_text_file['SKILLS_ASSESSMENT_INFO']['ASSESSMENT_DETAILS'] = str( self.assessment_details )
+        self._running_text_file['STORAGE_DEVICE_INFO'] = OrderedDict()
+        self._running_text_file['STORAGE_DEVICE_INFO']['STORAGE_DEVICE_NAME_AND_TYPE'] = str( self.name_of_storage_device )
+        self._running_text_file['STORAGE_DEVICE_INFO']['RELEVANT_FOLDER'] = str( self.relevant_folder )
+        self._running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_DATE'] = str( self.radiology_contact_date )
+        self._running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_TIME'] = str( self.radiology_contact_time )
+        
 
     def _read_from_file( self, parent_folder: Path, verbose: Opt[bool]=False ) -> None:
         """
@@ -313,26 +366,6 @@ class ORDataIntakeForm( ResourceFile ):
             self._assessment_details = self.running_text_file['SKILLS_ASSESSMENT_INFO']['ASSESSMENT_DETAILS']
         except Exception as e:
             if verbose:     print( f'\t--- Only minimally required fields were found in the inputted form.' )
-
-
-    def _init_all_fields( self, config: ConfigTables ) -> None:
-        # Required inputs -- user must at the very least acknowledge that they do not have the information
-        self._filer_name, self._operation_date, self._form_available = '', '', False
-        self._institution_name, self._ortho_procedure_type, self._ortho_procedure_name, self._epic_start_time = '', '', '', ''
-        self._storage_device_name_and_type, self._radiology_contact_date, self._radiology_contact_time, self._relevant_folder = None, None, None, Path('') # While required, it would be good to show a "null" value in the json file if this is truly unknown.
-        self._scan_quality = ''
-
-        # Information that may not be knowable if the data is older, so we will allow for None values
-        self._epic_end_time, self._side_of_patient_body, self._OR_location = None, None, None
-        self._supervising_surgeon_hawk_id, self._supervising_surgeon_presence, self._performing_surgeon_hawk_id, self._performer_year_in_residency = None, None, None, None
-        self._performer_was_assisted, self._performer_num_of_similar_logged_cases, self._performance_enumerated_task_performer = None, None, None
-        self._list_unusual_features_of_performance, self._diagnostic_notes, self._misc_surgical_performance_comments = None, None, None
-        self._assessment_title, self._assessor_hawk_id, self._assessment_details = None, None, None
-
-        # Create a dict to represent all imported ortho procedure names
-        acceptable_ortho_procedure_names = self._construct_dict_of_ortho_procedure_names( config=config )
-        self._running_text_file = OrderedDict( ( k, acceptable_ortho_procedure_names[k]) for k in ordered_keys_of_intake_text_file if k in acceptable_ortho_procedure_names )
-        self._running_text_file['FORM_LAST_MODIFIED'] = datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
 
     
     def get_time_input( self, prompt ) -> str:
@@ -601,6 +634,7 @@ class ORDataIntakeForm( ResourceFile ):
         # Need to save info to the running text file regardless of if the form is available
         self._running_text_file['SURGICAL_PROCEDURE_INFO'] = local_dict # type: ignore
     
+
     def _prompt_user_for_integer_input( self, prompt: str, acceptable_range: Tuple[int, int], max_num_attempts: int=3 ) -> int:
         num_attempts = 0
         help_str = f'\tPlease enter an integer between {acceptable_range[0]} and {acceptable_range[1]}.'
@@ -631,7 +665,6 @@ class ORDataIntakeForm( ResourceFile ):
             hawkid = acceptable_performing_surgeon_options_encoded[hawkid_encoding]
             task_performers[config.get_uid( table_name='SURGEONS', item_name=hawkid )] = input( f"\t\t\tPlease detail the task(s) performed by '{hawkid_encoding}'', i.e., {hawkid.upper()}: " ).replace( '"', "'" )
         return task_performers
-
 
     def _prompt_user_for_skills_assessment_info( self, config: ConfigTables ):
         print( f'\n\n--- Skills Assessment Information ---' )
@@ -665,7 +698,6 @@ class ORDataIntakeForm( ResourceFile ):
                                                                 'ASSESSOR_UID': self.assessor_hawk_id,
                                                                 'ASSESSMENT_DETAILS': self.assessment_details}
 
-
     def _prompt_user_for_storage_device_info( self ):
         print( f'\n\n--- Storage Device Information ---' )
         
@@ -691,20 +723,21 @@ class ORDataIntakeForm( ResourceFile ):
                                                             'RELEVANT_FOLDER': self.relevant_folder}
         
 
-    def construct_digital_file( self, verbose: Opt[bool]=False ) -> None:
+    def construct_digital_file( self, write_ffn: Opt[Path]=None, verbose: Opt[bool]=False ) -> None:
         assert self._uid, 'UID must be set before calling the IntakeForm saved full file name.'
         self._running_text_file['FORM_LAST_MODIFIED'] = datetime.now( pytz.timezone( 'America/Chicago' ) ).isoformat()
         json_str = json.dumps( self.running_text_file, indent=4, default=ORDataIntakeForm._custom_serializer )
+        if write_ffn is None:    write_ffn = Path( self._saved_ffn )
         with open( self.saved_ffn, 'w' ) as f:
             f.write( json_str )
             if verbose:     print( f'\t-- SUCCESS -- OR Data Intake Form saved to:\t{self.saved_ffn}\n' )
         
-        # Copy the file to the inputted parent folder of the data.
-        # if the file exists already, save it with a different name
+        # Copy the file to the inputted parent folder of the data -- if the file exists already, save it with a different name
         dest_ffn = self.relevant_folder / self.filename
         if os.path.exists( dest_ffn ):
             if verbose:     print( f'\t-- WARNING -- File already exists in the destination folder. Saving with a different name (appending "-copy").' )
             dest_ffn = self.relevant_folder / f'{self.filename.stem}-copy{self.filename.suffix}'
+            print( dest_ffn)
         shutil.copy( self.saved_ffn, dest_ffn )
 
 

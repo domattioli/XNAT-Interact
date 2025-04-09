@@ -419,7 +419,6 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         warning_str = str_header + f"Input # of Rows (with header): {len(self.df)+1}\nTotal # of Warnings: {num_warns_total}\nRows w/ Warnings: {num_rows_w_warns}/{len(self.df)}\n\n" + warning_str
         return warning_str
     
-
     def _build_issue_details( self ) -> Tuple[List[Dict[str, Any]],List[int]]:
         failed_details, counts = [], [0, 0]  # counts[0] = total errors, counts[1] = total warnings
         ind = 2  # Start at 2 to account for the header row
@@ -464,7 +463,6 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
             ind += 1  # Increment the row index for the next iteration
         return failed_details, counts
     
-
     def generate_summary( self, write_to_file: Opt[bool] = False ) -> Tuple[bool, Opt[str], Opt[str], Opt[str], Opt[str]]:
         '''
         Generate a summary of the mass data upload process, including a detailed report of errors and warnings.
@@ -530,7 +528,6 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         # Verify the data is contains only valid rows that are ready for upload.
         permitted_to_upload, _, _, _, _ = self.generate_summary( write_to_file=True )
         assert permitted_to_upload, "Cannot upload sessions if there are any errors with the imported data\n\t--\tRemove or fix the problematic rows from the spreadsheet; see generate_summary()\n{'---'*10}\nSummary of imported spreadsheet is:\n{out_str}"
-        assert 1==0, "This function is not yet implemented."
         
         # Change the column names of the dataframe such that spaces are replaced with \n
         df_copy = self.df.copy()

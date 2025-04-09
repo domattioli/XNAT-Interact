@@ -11,11 +11,11 @@ import xml.etree.ElementTree as ET
 from pyxnat import Interface
 from pyxnat.core.jsonutil import JsonTable
 
-from src.utilities import ConfigTables, USCentralDateTime, XNATLogin, XNATConnection, ImageHash, BatchUploadRepresentation
+from src.utilities import ConfigTables, USCentralDateTime, XNATLogin, XNATConnection, ImageHash
 from src.xnat_experiment_data import *
 from src.xnat_scan_data import *
 from src.xnat_resource_data import ORDataIntakeForm
-
+from src.batch_upload import BatchUploadRepresentation
 
 def parse_args() -> Tuple[str, str, bool]:
     """
@@ -113,7 +113,7 @@ def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, 
         validated_login = XNATLogin( { 'Username': username, 'Password': password, 'Url': 'https://rpacs.iibi.uiowa.edu/xnat/' }, verbose=verbose )
         xnat_connection = XNATConnection( login_info=validated_login, stay_connected=True, verbose=verbose )
     else:
-        if verbose: print( f'Please enter your XNAT login credentials to connect to the server:' )
+        if verbose: print( f'\n\tPlease enter your XNAT login credentials to connect to the server:' )
         username, password = prompt_login( username=username, password=password )
         if verbose: print( f'\n...logging in and trying to connect to the server...\n' )
         validated_login = XNATLogin( { 'Username': username, 'Password': password, 'Url': 'https://rpacs.iibi.uiowa.edu/xnat/' }, verbose=verbose )
@@ -156,14 +156,14 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
             print( f"\t\tThe provided path either (1) does not exist or (2) does not contain a 'RECONSTRUCTED_OR_DATA_INTAKE_FORM' in it. Please try again." )
             form_pn = input( f"\n\tPlease enter the full path to the *parent folder* of the intake form:\t" )
         try:
-            intake_form = ORDataIntakeForm( config=config, login=validated_login, input_data=Path( form_pn ), verbose=verbose )
+            intake_form = ORDataIntakeForm( config=config, validated_login=validated_login, input_data=Path( form_pn ), verbose=verbose )
             while True:
                 print( f'\n\tPlease review the created intake form:\n{intake_form}' )
                 print( f'\n\t--- Is everything correct?\n\t\t-- Please enter "1" for Yes or "2" for No (re-create the intake form).' )
                 accept_form = ORDataIntakeForm.prompt_until_valid_answer_given( 'Accept Intake Form As-Is', acceptable_options=['1', '2'] )
                 if accept_form == '2':
                     print( f'\n\tRe-doing the form...' )
-                    intake_form = ORDataIntakeForm( config=config, login=validated_login, verbose=verbose ) #to-do: causes an error and the above try block fails.
+                    intake_form = ORDataIntakeForm( config=config, validated_login=validated_login, verbose=verbose ) #to-do: causes an error and the above try block fails.
                 else:            break
         except KeyboardInterrupt:
             print( f'\n\n...User cancelled task via Ctrl+C...' )
@@ -171,7 +171,7 @@ def upload_new_case( validated_login: XNATLogin, xnat_connection: XNATConnection
         except:                 raise ValueError( f"\t\tThe provided path did not lead to a successful intake form. Please try again, or contact the Data Librarian for help." )
     else: # Prompt user to create a new intake form; then print it to confirm
         while True:
-            intake_form = ORDataIntakeForm( config=config, login=validated_login, verbose=verbose )
+            intake_form = ORDataIntakeForm( config=config, validated_login=validated_login, verbose=verbose )
             print( f'\n\tPlease review the created intake form:\n{intake_form}' )
             print( f'\n\tIs everything correct?\n\t\t-- Please enter "1" for Yes or "2" for No (re-create the intake form).' )
             accept_form = ORDataIntakeForm.prompt_until_valid_answer_given( 'Accept Intake Form As-Is', acceptable_options=['1', '2'] )
@@ -446,12 +446,10 @@ def main():
                     config = upload_new_case( validated_login=validated_login, xnat_connection=xnat_connection, config=config, verbose=verbose )
                 elif upload_type == '2':
                     # Prompt user to input the location of the batch_upload file.
-                    print( f'\tPlease enter the full path to the batch upload file:\t' )
+                    print( "\t\t-- Please enter the full path to the batch upload file; do not use apostrophes (') or quotes (\"):\t" )
                     batch_upload_file = input( f'\tAnswer:\t' )
                     data = BatchUploadRepresentation( xls_ffn=Path( batch_upload_file ), config=config, verbose=verbose )
-                    out = data.print_rows( rows='errors' )
-                    print( out )
-                    return
+                    data.upload_sessions( config=config, validated_login=validated_login, xnat_connection=xnat_connection, verbose=verbose )
             elif choice == '3':
                 download_queried_data( validated_login=validated_login, xnat_connection=xnat_connection, config=config, verbose=verbose ) 
             # # elif choice == 2:

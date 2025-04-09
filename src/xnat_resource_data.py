@@ -30,7 +30,7 @@ class ResourceFile( UIDandMetaInfo ):
 
     Attributes:
         config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
-        login (XNATLogin): Validated login object for XNAT.
+        validated_login (XNATLogin): Validated login object for XNAT.
     
     Methods:
         _init_all_fields(): Placeholder to initialize all fields, must be implemented in subclasses.
@@ -39,18 +39,18 @@ class ResourceFile( UIDandMetaInfo ):
     Example Usage:
     None -- abstract class intended to be subclassed.
     """
-    def __init__( self, config: ConfigTables, login: XNATLogin ):
+    def __init__( self, config: ConfigTables, validated_login: XNATLogin ):
         """
         Initialize the ResourceFile with given config data and login credentials.
 
         Args:
             config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
-            login (XNATLogin): Validated login object for XNAT.
+            validated_login (XNATLogin): Validated login object for XNAT.
         
         Raises:
             AssertionError: If the user is not registered in the system.
         """
-        assert config.is_user_registered( login.validated_username ), f'User with HAWKID {login.validated_username} is not registered in the system!'
+        assert config.is_user_registered( validated_login.validated_username ), f'User with HAWKID {validated_login.validated_username} is not registered in the system!'
         super().__init__() # Call the __init__ method of the base class to create a uid for this instance
         
 
@@ -100,7 +100,7 @@ class ORDataIntakeForm( ResourceFile ):
     
     Attributes:
         config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
-        login (XNATLogin): Validated login object for XNAT.
+        validated_login (XNATLogin): Validated login object for XNAT.
         input_data (Union[None, Path, pd.Series]): Input data for the intake form.
         verbose (Optional[bool]): Whether to enable verbose output.
         write_tmp_file (Optional[bool]): Whether to write a temporary file.
@@ -112,22 +112,22 @@ class ORDataIntakeForm( ResourceFile ):
     push_to_xnat(): Push the intake form to XNAT.
 
     Example Usage:
-    ORDataIntakeForm( config=..., login=., input_data=..., verbose=True, write_tmp_file=True )
+    ORDataIntakeForm( config=..., validated_login=., input_data=..., verbose=True, write_tmp_file=True )
     """
 
     
-    def __init__( self, config: ConfigTables, login: XNATLogin, input_data: Union[None, Path, pd.Series]=None, verbose: Opt[bool]=False, write_file: Opt[bool]=True ):
+    def __init__( self, config: ConfigTables, validated_login: XNATLogin, input_data: Union[None, Path, pd.Series]=None, verbose: Opt[bool]=False, write_file: Opt[bool]=True ):
         """
         Initialize the ORDataIntakeForm with given config data, login credentials, and input data.
 
         Args:
             config (ConfigTables): Psuedo database tables for cross-referencing and managing server data.
-            login (XNATLogin): Validated login object for XNAT.
+            validated_login (XNATLogin): Validated login object for XNAT.
             input_data (Union[None, Path, pd.Series], optional): Input data for the intake form. Defaults to None.
             verbose (Optional[bool], optional): Whether to enable verbose output. Defaults to False.
             write_file (Optional[bool], optional): Whether to write a digital (.json) file. Defaults to True.
         """
-        super().__init__( config=config, login=login ) # Call the __init__ method of the base class -- bug:? goes all the way to our utility class and generates a uid.
+        super().__init__( config=config, validated_login=validated_login ) # Call the __init__ method of the base class -- bug:? goes all the way to our utility class and generates a uid.
         
         # Init dict (and future json-formatted text file) with required keys.
         self._init_all_fields( config=config )

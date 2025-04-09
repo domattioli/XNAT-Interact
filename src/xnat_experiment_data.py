@@ -14,7 +14,7 @@ from src.xnat_scan_data import *
 from src.xnat_resource_data import *
 
 # Define list for allowable imports from this module -- do not want to import _local_variables.
-__all__ = ['SourceRFSession', 'SourceESVSession']
+__all__ = ['SourceRFSession', 'SourceESVSession'] # Each time you add a new class that inherits from ExperimentData, add it to this list.
 
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -161,6 +161,7 @@ class ExperimentData():
         subj_qs, exp_qs, scan_qs, files_qs, _ = self._generate_queries( xnat_connection=xnat_connection )
         subj_inst, _, _ = self._select_objects( xnat_connection=xnat_connection, subj_qs=subj_qs, exp_qs=exp_qs, scan_qs=scan_qs, files_qs=files_qs )
 
+        # Need a staging check on backup against the proposed new config
         # Try to publish the data to xnat; if it fails, delete the subject instance
         status_text = f'\t...Attempting to publish {self.schema_prefix_str} session to XNAT...'
         try:

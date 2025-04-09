@@ -465,18 +465,20 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         return failed_details, counts
     
 
-    def generate_summary( self, write_to_file: Opt[bool] = False ) -> Tuple[str, Opt[bool], Opt[str], Opt[str], Opt[str]]:
+    def generate_summary( self, write_to_file: Opt[bool] = False ) -> Tuple[bool, Opt[str], Opt[str], Opt[str], Opt[str]]:
         '''
         Generate a summary of the mass data upload process, including a detailed report of errors and warnings.
         The summary includes the filename, date, total rows processed, rows with fatal errors, total errors, rows with warnings, and total warnings.
         It also provides details for each failed row, including the row number, errors, and warnings.
         The summary can be written to a file if specified.
         Outputs include:
-        - output: The summary string.
         - permission_to_upload: A boolean indicating whether the upload can proceed (True if no errors, False otherwise).
+        - output: The summary string.
         - table_summary: A string containing the details of the inputted rows' errors and/or warnings.
         - errors: A string containing the error details.
         - warnings: A string containing the warning details.
+
+        NOTE: If any errors found, this batch is NOT permitted to upload, i.e., permission_to_upload = False and the num_failed > 0
         '''
         # Create the details for failed rows
         failed_details, counts = self._build_issue_details()
@@ -512,13 +514,12 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
 
         """ )
 
-
         # Create the footer & Combine all parts
         output = header + failed_rows_details  + "\n===========================\nEnd of Summary\n"
         if write_to_file:
             with open( self._ffn.with_name( self._ffn.stem + '-summary.txt' ), 'w' ) as f:
                 f.write( output )
-        return output, num_errors == 0, self.print_rows(), self.print_errors_list(), self.print_warnings_list()
+        return num_errors == 0, output, self.print_rows(), self.print_errors_list(), self.print_warnings_list()
     
 
     def upload_sessions( self, config:ConfigTables, validated_login: XNATLogin, xnat_connection: XNATConnection, write_to_file: Opt[bool]=False, verbose: bool = True ) -> None:
@@ -527,8 +528,8 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         assert xnat_connection.is_verified, "XNAT connection must be open and valid.\n\t--\tPlease check your connection and try again."
 
         # Verify the data is contains only valid rows that are ready for upload.
-        out_str, permitted_to_upload, _, _, _ = self.generate_summary( write_to_file=True )
-        assert permitted_to_upload, "Cannot upload sessions if there are any errors with the imported data\n\t--\tRemove or fix the problematic rows from the spreadsheet; see generate_summary()\nSummary is:\n{out_str}"
+        permitted_to_upload, _, _, _, _ = self.generate_summary( write_to_file=True )
+        assert permitted_to_upload, "Cannot upload sessions if there are any errors with the imported data\n\t--\tRemove or fix the problematic rows from the spreadsheet; see generate_summary()\n{'---'*10}\nSummary of imported spreadsheet is:\n{out_str}"
         assert 1==0, "This function is not yet implemented."
         
         # Change the column names of the dataframe such that spaces are replaced with \n
@@ -536,18 +537,16 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         df_copy.columns = [ col.replace( ' ', '\n' ) for col in df_copy.columns ]
 
         # Walk through each row, check what type of data it is, instantiate appropriately (eg rfSession, esvSession, etc), then write and publish.
-        ind, failed_rows = 0, {}
         for idx, row in df_copy.iterrows():
-            if ind > 0: break
             # Create the digital form for uploading.
             procedure_name = row['Procedure\nName']
             if 'ARTHROSCOPY' in procedure_name.upper(): # Get the procedure name, if it contains 'Arthroscopy' then use ESVSession, otherwise use RFSession.
                 intake_form = ORDataIntakeForm( validated_login=validated_login, config=config, input_data=row, verbose=verbose )
                 session = SourceESVSession( intake_form=intake_form, config=config  )
-                session.write( config=config, verbose=True )
                 session.write_publish_catalog_subroutine( config=config, xnat_connection=xnat_connection, validated_login=validated_login, verbose=True )
             else:
-                print( f'!!!! Assuming that {procedure_name} is a trauma case -- attempting to upload as a SourceRFsession\n\t--\tIf this is incorrect, hit Ctrl-C now and consult the Data Librarian with this note.' )
+                print( f'!!!! Assuming that {procedure_name} is a trauma case -- attempting to upload as a SourceRFsession\n\t--\tIf this is incorrect, consult the Data Librarian with this note.' )
+                raise NotImplementedError( f"This part of the function is not yet implemented\n\t-- If you have a trauma case you need to upload, contact the data librarian to get this implemented." )
                 # session = SourceRFSession( xnat_connection=xnat_connection, config=config, row=row, verbose=True )
 
     def __str__( self ) -> str:                             return self.print_rows( rows='all' )

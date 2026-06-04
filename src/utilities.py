@@ -272,10 +272,53 @@ class XNATLogin( UIDandMetaInfo ):
         if verbose:                             print( self )
 
     def _validate_login( self, input_info ): # If all checks pass, set _is_valid to True and deal login info
-        assert len( input_info ) == 3, f"Provided login info dictionary must only have the following three key-value pairs: {self.required_login_keys}"
+        if len( input_info ) != 3:
+            from src.services.errors import FriendlyError
+            fe = FriendlyError(
+                title="Login dictionary has wrong number of keys",
+                message=(
+                    f"Your login dictionary must have exactly three keys: "
+                    f"{self.required_login_keys}. You provided {len(input_info)} key(s)."
+                ),
+                recourse=[
+                    "Make sure your login dictionary has exactly the keys: URL, USERNAME, PASSWORD.",
+                    "Check for typos in your key names.",
+                    "Contact the Data Librarian if the problem persists.",
+                ],
+            )
+            raise ValueError(f"{fe.title}: {fe.message}")
         self._provided_info, validated_info = input_info, {k.upper(): v for k, v in input_info.items()}
-        assert validated_info['URL'].lower() == self.local_variables.xnat_project_url, f"Provided server URL is invalid: {validated_info['URL']}"
-        assert all( k in validated_info for k in self.required_login_keys ), f"Missing login info: {set( self.required_login_keys ) - set( validated_info.keys() )}"
+        if validated_info['URL'].lower() != self.local_variables.xnat_project_url:
+            from src.services.errors import FriendlyError
+            fe = FriendlyError(
+                title="Invalid server URL",
+                message=(
+                    f"The server URL you provided ('{validated_info['URL']}') is not the correct XNAT server. "
+                    f"The URL must be exactly: {self.local_variables.xnat_project_url}"
+                ),
+                recourse=[
+                    f"Set the URL to exactly: {self.local_variables.xnat_project_url}",
+                    "Check for extra spaces or http vs https.",
+                    "Contact the Data Librarian if the problem persists.",
+                ],
+            )
+            raise ValueError(f"{fe.title}: {fe.message}")
+        if not all( k in validated_info for k in self.required_login_keys ):
+            missing = set( self.required_login_keys ) - set( validated_info.keys() )
+            from src.services.errors import FriendlyError
+            fe = FriendlyError(
+                title="Missing login keys",
+                message=(
+                    f"Your login dictionary is missing the following required key(s): {missing}. "
+                    f"Required keys are: {self.required_login_keys}."
+                ),
+                recourse=[
+                    "Make sure your login dictionary has exactly the keys: URL, USERNAME, PASSWORD.",
+                    "Keys are case-insensitive (auto-uppercased).",
+                    "Contact the Data Librarian if the problem persists.",
+                ],
+            )
+            raise ValueError(f"{fe.title}: {fe.message}")
         self._is_valid, self._validated_username, self._validated_password = True , validated_info['USERNAME'], validated_info['PASSWORD']
 
     @property
@@ -336,7 +379,21 @@ class XNATConnection( UIDandMetaInfo ):
         return cls._instance
 
     def __init__( self, login_info: XNATLogin, stay_connected: bool = False, verbose: Opt[bool] = True ):
-        assert login_info.is_valid, f"Provided login info must be validated before accessing xnat server: {login_info}"
+        if not login_info.is_valid:
+            from src.services.errors import FriendlyError
+            fe = FriendlyError(
+                title="Login information is not valid",
+                message=(
+                    "The login information you provided has not been validated. "
+                    "Make sure you created an XNATLogin object with a correct URL, username, and password."
+                ),
+                recourse=[
+                    "Create a valid XNATLogin with the correct URL, USERNAME, and PASSWORD keys.",
+                    "Check that the server URL is exactly: https://rpacs.iibi.uiowa.edu/xnat/",
+                    "Contact the Data Librarian if the problem persists.",
+                ],
+            )
+            raise ValueError(f"{fe.title}: {fe.message}")
         super().__init__()  # Call the __init__ method of the base class
         self._login_info, self._project_handle, self._is_verified, self._is_open, self._failed_tests = login_info, None, False, stay_connected, {}
         self._verify_login()
@@ -382,7 +439,25 @@ class XNATConnection( UIDandMetaInfo ):
         self._grab_project_handle() # If more tests in the future, separate as its own function.
         self._is_verified = False
         try:    self.server.get('/')
-        except (ssl.SSLCertVerificationError, SSLError, MaxRetryError) as e:
+        except ssl.SSLCertVerificationError as e:
+            from src.services.errors import handle, render
+            _fe = handle(
+                e,
+                title="XNAT server certificate has expired",
+                message=(
+                    "The XNAT server's security certificate has expired. "
+                    "You cannot connect until it is renewed. "
+                    "Contact the Data Librarian (dmattioli / stelong) to renew it."
+                ),
+                recourse=[
+                    "Contact the Data Librarian to report the expired certificate.",
+                    "Do not attempt to upload data until the certificate is renewed.",
+                    "Copy this message and email it to the Data Librarian.",
+                ],
+                context="_verify_login, server.get('/')",
+            )
+            print(render(_fe))
+        except (SSLError, MaxRetryError) as e:
             print( f"\t-- SSL Certificate is expired! -- Contact IIBI staff to renew; you cannot use XNAT until this is done!" )
         if self.project_handle is None:
             self._failed_tests['Project Handle is None'] = True
@@ -484,9 +559,61 @@ class ConfigTables( UIDandMetaInfo ):
         - If any error occurs, we delete the backup file that was created at the start of the push_to_xnat method call.
     '''
     def __init__( self, login_info: XNATLogin, xnat_connection: XNATConnection, verbose: Opt[bool]=True ):
-        assert login_info.is_valid, f"Cannot access CongifTables without valid login_info. You provided the following login information:\n{login_info}"
-        assert xnat_connection.is_open, f"Cannot access ConfigTables without an open connection to the XNAT server. Your xnat_connection data is:\n{xnat_connection}"
-        assert xnat_connection.is_verified, f"Cannot access ConfigTables without a verified connection to the XNAT server\n\t-- Make sure that the URL and login info is correct.\n\t-- If problem persists, make sure that the SSL certificate has not expired.\n\nYour xnat_connection data is:\n{xnat_connection}"
+        if not login_info.is_valid:
+            from src.services.errors import FriendlyError
+            fe = FriendlyError(
+                title="Invalid login information",
+                message=(
+                    "The login information provided is not valid. "
+                    "Check that your XNAT username, password, and server URL are correct."
+                ),
+                recourse=[
+                    "Re-enter your XNAT username and password.",
+                    "Make sure the server URL is exactly: https://rpacs.iibi.uiowa.edu/xnat/",
+                    "Contact the Data Librarian if the problem persists.",
+                ],
+            )
+            raise ValueError(
+                f"Cannot access ConfigTables without valid login_info.\n{fe.title}: {fe.message}"
+            )
+        if not xnat_connection.is_open:
+            from src.services.errors import FriendlyError
+            fe = FriendlyError(
+                title="XNAT connection is not open",
+                message=(
+                    "Cannot access the project configuration because the XNAT "
+                    "connection is closed. Make sure you are connected to the "
+                    "UIowa VPN and that your credentials are correct."
+                ),
+                recourse=[
+                    "Make sure you are connected to the UIowa VPN.",
+                    "Re-open the XNAT connection and retry.",
+                    "Contact the Data Librarian if the problem persists.",
+                ],
+            )
+            raise ConnectionError(
+                f"Cannot access ConfigTables without an open connection.\n{fe.title}: {fe.message}"
+            )
+        if not xnat_connection.is_verified:
+            from src.services.errors import FriendlyError
+            fe = FriendlyError(
+                title="XNAT connection is not verified",
+                message=(
+                    "Your XNAT connection could not be verified. "
+                    "Check that your username and password are correct, and that you "
+                    "are on the UIowa VPN. If the SSL certificate has expired, "
+                    "contact the Data Librarian to renew it."
+                ),
+                recourse=[
+                    "Verify your XNAT username and password.",
+                    "Make sure you are connected to the UIowa VPN.",
+                    "If you see an SSL warning, contact the Data Librarian.",
+                    "Contact the Data Librarian if the problem persists.",
+                ],
+            )
+            raise ConnectionError(
+                f"Cannot access ConfigTables without a verified connection.\n{fe.title}: {fe.message}"
+            )
         
         super().__init__()  # Call the __init__ method of the base class to ensure that we inherit all those local variables
         self._login_info, self._xnat_connection = login_info, xnat_connection
@@ -494,7 +621,37 @@ class ConfigTables( UIDandMetaInfo ):
         try: # Need to try to pull it from the xnat server if it exists, otherwise create it from scratch.
             self.pull_from_xnat( verbose=verbose )
             self._verify_project_owners_are_registered()
-        except: # This should only ever happen one time -- when the XNAT database is first created.
+        except (FileNotFoundError, KeyError, ValueError, Exception) as _ct_init_exc:
+            # Guard: only treat as first-time setup when the error is clearly
+            # a missing-resource / parse error.  Any unexpected error (network
+            # outage, permission failure, etc.) is re-raised with a plain-
+            # language message so it is not silently swallowed as "first-run".
+            _is_first_run_error = isinstance(
+                _ct_init_exc, (FileNotFoundError, KeyError, ValueError)
+            )
+            if not _is_first_run_error:
+                # Surface the real error instead of masking it as first-time DB setup.
+                from src.services.errors import handle, render
+                _fe = handle(
+                    _ct_init_exc,
+                    title="Could not load the XNAT configuration database",
+                    message=(
+                        "An unexpected error occurred while loading the project "
+                        "configuration from XNAT. This is not a first-time setup "
+                        "issue. Check your VPN connection and XNAT credentials, "
+                        "then retry."
+                    ),
+                    recourse=[
+                        "Make sure you are connected to the UIowa VPN.",
+                        "Verify your XNAT username and password.",
+                        "Retry the operation.",
+                        "Copy this message and email the Data Librarian if the problem persists.",
+                    ],
+                    context="ConfigTables.__init__, pull_from_xnat",
+                )
+                print(render(_fe))
+                raise
+            # First-time setup: build the database from scratch.
             self._instantiate_json_file()
             self._initialize_tables()
             self.push_to_xnat( verbose=verbose )

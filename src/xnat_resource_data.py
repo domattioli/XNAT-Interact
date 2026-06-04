@@ -50,7 +50,21 @@ class ResourceFile( UIDandMetaInfo ):
         Raises:
             AssertionError: If the user is not registered in the system.
         """
-        assert config.is_user_registered( validated_login.validated_username ), f'User with HAWKID {validated_login.validated_username} is not registered in the system!'
+        if not config.is_user_registered( validated_login.validated_username ):
+            from src.services.errors import FriendlyError
+            fe = FriendlyError(
+                title="User not registered in the XNAT system",
+                message=(
+                    "Your HawkID is not registered in the XNAT project. "
+                    "You must be registered before you can upload or access data."
+                ),
+                recourse=[
+                    "Contact the Data Librarian to register your HawkID.",
+                    "Make sure you are using the correct HawkID (all lowercase).",
+                    "Contact the Data Librarian if the problem persists.",
+                ],
+            )
+            raise PermissionError(f"{fe.title}: {fe.message}")
         super().__init__() # Call the __init__ method of the base class to create a uid for this instance
         
 
@@ -326,7 +340,22 @@ class ORDataIntakeForm( ResourceFile ):
             verbose (Optional[bool], optional): Whether to enable verbose output. Defaults to False.
         """
         ffn = os.path.join( parent_folder, self.filename_str )
-        assert os.path.exists( ffn ), f'File "{ffn}" does not exist; check your provided path and try again.'
+        if not os.path.exists( ffn ):
+            from src.services.errors import FriendlyError
+            fe = FriendlyError(
+                title="Intake form file not found",
+                message=(
+                    f"The intake form file could not be found at: {ffn}. "
+                    "Check that the folder path is correct and that the file has not been moved or deleted."
+                ),
+                recourse=[
+                    "Check that the folder path is correct.",
+                    "Make sure the drive containing your data is connected and mounted.",
+                    "Re-enter the path and retry.",
+                    "Contact the Data Librarian if the file is unexpectedly missing.",
+                ],
+            )
+            raise FileNotFoundError(f"{fe.title}: {fe.message}")
         if verbose:         print( f"\n\t...Initializing Digital OR Intake Form from '{ffn}'..." )
         with open( ffn, 'r', encoding='utf-8' ) as jf:
             self._running_text_file = json.loads( jf.read() ) # might need to read with encoding='cp1252'
@@ -429,7 +458,7 @@ class ORDataIntakeForm( ResourceFile ):
             except KeyboardInterrupt:
                 print( f'\n\n...User cancelled task via Ctrl+C...' )
                 sys.exit( 0 )
-            except:
+            except (ValueError, OverflowError) as e:
                 num_attempts += 1
                 print( "Invalid date format. Please enter the date in YYYY-MM-DD format." )
         if num_attempts == max_num_attempts:

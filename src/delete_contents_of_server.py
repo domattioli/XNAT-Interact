@@ -12,16 +12,16 @@ def delete_subjects( server: Interface ) -> None:
         si = server.select( '/projects/{project_name}/subjects/' + s )
         try:
             si.delete() # type: ignore
-        except:
-            print( f'\t!!!\tFailed to delete subject: ', s )
+        except Exception as e:
+            print( f'\t!!!\tFailed to delete subject: {s} — {type(e).__name__}: {e}' )
 
 
 def delete_metatables( server: Interface ) -> None:
     project_instance = server.select.project( project_name )
     try:
         f = project_instance.resource('MetaTables').file( 'MetaTables.json' ).delete()
-    except:
-        print( f'\t!!!\tFailed to delete MetaTables.json file.' )
+    except Exception as e:
+        print( f'\t!!!\tFailed to delete MetaTables.json file — {type(e).__name__}: {e}' )
 
 
 if __name__ == "__main__":

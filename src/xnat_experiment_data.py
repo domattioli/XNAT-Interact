@@ -187,7 +187,7 @@ class ExperimentData():
                     status_text += f'\n\t...Subject exists; attempting to delete subject...'
                     subj_inst.delete() # type: ignore
                     status_text += f'\n\t...Subject deleted.'
-        except:
+        except Exception as e:
             self._write_error_log_file( config=config, validated_login=validated_login, status_text=status_text, error_message=e )
             raise
 

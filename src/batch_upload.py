@@ -188,7 +188,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
                 performer_hawk_id_task = ast.literal_eval( formatted_str )
                 performer_hawk_id_task = {k.lower(): v for k, v in performer_hawk_id_task.items()}
                 assert isinstance( performer_hawk_id_task, dict ), "The input string was not in a valid format, e.g., {k1: v1; ...; kn: vn}."
-            except:
+            except (ValueError, SyntaxError, KeyError, AssertionError) as e:
                 self._log_issue(
                     idx=idx,
                     column='Performer HawkID-Task',
@@ -272,7 +272,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
                 self._log_issue( idx=idx, column='Radiology Contact Date', message="'Radiology Contact Date' is blank but 'Was Radiology Contacted' is specified; if you have the date, please input it.", issue_type='warning' )
             else:   # ensure that the text provided corresponds to a date                                                                
                 try:    datetime.strptime( row['Radiology Contact Date'], '%Y-%m-%d' )
-                except: self._log_issue( idx=idx, column='Radiology Contact Date', message=f"'Radiology Contact Date' ('{row['Radiology Contact Date']}') is not a valid date format.", issue_type='error' )    
+                except ValueError: self._log_issue( idx=idx, column='Radiology Contact Date', message=f"'Radiology Contact Date' ('{row['Radiology Contact Date']}') is not a valid date format.", issue_type='error' )
          
     def _check_optional_columns( self, idx: Hashable, row: pd.Series ) -> None:
         surgeon_hawkids = self.config.list_of_all_items_in_table( table_name='Surgeons' )
@@ -523,11 +523,39 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
     def upload_sessions( self, config:ConfigTables, validated_login: XNATLogin, xnat_connection: XNATConnection, write_to_file: Opt[bool]=False, verbose: bool = True ) -> None:
         """ Upload the sessions to XNAT. """
         # Verify an open and valid XNAT connection is provided.
-        assert xnat_connection.is_verified, "XNAT connection must be open and valid.\n\t--\tPlease check your connection and try again."
+        if not xnat_connection.is_verified:
+            from src.services.errors import FriendlyError, render
+            fe = FriendlyError(
+                title="XNAT connection is not verified",
+                message=(
+                    "The XNAT connection must be open and verified before uploading. "
+                    "Check that you are on the UIowa VPN and that your credentials are correct."
+                ),
+                recourse=[
+                    "Make sure you are connected to the UIowa VPN.",
+                    "Re-open the XNAT connection and retry.",
+                    "Contact the Data Librarian if the problem persists.",
+                ],
+            )
+            raise ConnectionError(render(fe))
 
         # Verify the data is contains only valid rows that are ready for upload.
-        permitted_to_upload, _, _, _, _ = self.generate_summary( write_to_file=True )
-        assert permitted_to_upload, "Cannot upload sessions if there are any errors with the imported data\n\t--\tRemove or fix the problematic rows from the spreadsheet; see generate_summary()\n{'---'*10}\nSummary of imported spreadsheet is:\n{out_str}"
+        permitted_to_upload, out_str, _, _, _ = self.generate_summary( write_to_file=True )
+        if not permitted_to_upload:
+            from src.services.errors import FriendlyError, render
+            fe = FriendlyError(
+                title="Spreadsheet has errors — upload blocked",
+                message=(
+                    "One or more rows in your upload spreadsheet have errors that must be "
+                    "fixed before uploading. See the summary below for details."
+                ),
+                recourse=[
+                    "Open the spreadsheet and fix the rows marked with errors.",
+                    "Re-run generate_summary() to confirm all errors are resolved.",
+                    "Contact the Data Librarian if you are unsure how to fix an error.",
+                ],
+            )
+            raise ValueError(render(fe) + f"\n\n{'---'*10}\n{out_str}")
         
         # Change the column names of the dataframe such that spaces are replaced with \n
         df_copy = self.df.copy()

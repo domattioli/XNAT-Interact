@@ -1,3 +1,6 @@
+# streamlit: Streamlit web UI framework (Phase 2 app layer).
+# No strict version pin — any recent stable release works; pin in environment.yml for reproducibility.
+streamlit
 certifi
 charset-normalizer
 contourpy

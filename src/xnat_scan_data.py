@@ -11,6 +11,7 @@ from pathlib import Path
 
 from src.utilities import UIDandMetaInfo, ConfigTables, USCentralDateTime, ImageHash
 from src.xnat_resource_data import ORDataIntakeForm
+from src.services.deidentify import deidentify_dataset
 
 
 # Define list for allowable imports from this module -- do not want to import _local_variables.
@@ -282,28 +283,12 @@ class SourceDicomDeIdentified( ScanFile ):
         self._derived_metadata['UID_INFO'] = str( self._derived_metadata['UID_INFO'] )
 
 
-    def _person_names_callback( self, dcm_data, data_element ) -> None:
-        if data_element.VR == "PN":                     data_element.value = self.redacted_string
-
-    def _curves_callback( self, dcm_data, data_element ) -> None:
-        if data_element.tag.group & 0xFF00 == 0x5000:   del dcm_data[data_element.tag]
-
     def _deidentify_dicom( self ) -> None:
-         # remove all sensitive metadata info
+        # Delegate all metadata scrubbing to the pure function in deidentify.py.
+        # Behaviour is byte-identical to the previous inline implementation.
         assert self._metadata is not None, f'BUG: cannot be calling the _deidentify_metadata method for {type(self).__name__} prior to defining it.'
-        self._metadata.walk( self._person_names_callback )
-        self._metadata.walk( self._curves_callback )
-        self._metadata.remove_private_tags()
-        for i in range( 0x6000, 0x60FF, 2 ):
-            tag = (i, 0x3000)
-            if tag in self.metadata:                    del self._metadata[tag]
-    
-        # Redact AccessionNumber and StudyID fields
-        if hasattr(self._metadata, 'AccessionNumber'):  self._metadata.AccessionNumber = 'REDACTED 4 XNAT'
-        if hasattr( self._metadata, 'StudyID' ):        self._metadata.StudyID = 'REDACTED 4 XNAT'
-
-        # De-identify embedded pixel data
-        # to-do: with a gpu we could use a more advanced approach like ocr and simply blur the text within the image.
+        deidentify_dataset( self._metadata, self.redacted_string )
+        # Pixel-PHI review / redaction is handled separately (see T014 / T013).
     
 
 #--------------------------------------------------------------------------------------------------------------------------

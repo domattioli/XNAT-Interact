@@ -1,22 +1,23 @@
 """
-Tests for DICOM de-identification (src.xnat_scan_data.SourceDicomDeIdentified).
+Tests for DICOM de-identification (src.xnat_scan_data.SourceDicomDeIdentified
+and src.services.deidentify.deidentify_dataset).
 
 This is the safety-critical path: before any trauma/fluoroscopic image leaves a
-student's machine, identifying metadata must be scrubbed. We exercise the REAL
-`_deidentify_dicom` method against a synthetic dataset full of fake PHI.
+student's machine, identifying metadata must be scrubbed. We exercise both the
+class method (`_deidentify_dicom`) and the extracted pure function
+(`deidentify_dataset`) against a synthetic dataset full of fake PHI.
 
-Because `SourceDicomDeIdentified.__init__` needs a live ConfigTables + intake
-form, we construct a bare instance via __new__ and drive just the de-id method.
-The improvement plan calls for extracting this into a standalone
-`deidentify_dataset(ds, redacted_string)` function so this becomes trivial to
-test directly — these tests are written to survive that refactor.
+NOTE (T014): the upload-flow confirmation gate that blocks upload until a human
+confirms pixel-PHI review is complete is wired in a later task and is NOT part
+of this test file.
 """
 from __future__ import annotations
 
 import pytest
 
+from src.services.deidentify import apply_redaction, deidentify_dataset
 from src.xnat_scan_data import SourceDicomDeIdentified
-from tests.synthetic_data import make_phi_dicom_dataset
+from tests.synthetic_data import make_burned_in_phi_pixel_array, make_phi_dicom_dataset
 
 REDACTED = "REDACTED PYTHON-TO-XNAT UPLOAD SCRIPT"
 
@@ -77,28 +78,74 @@ def test_pixel_data_is_preserved(deidentified_dataset):
     assert len(deidentified_dataset.PixelData) > 0
 
 
-@pytest.mark.known_issue
-def test_burned_in_pixel_phi_is_not_removed(monkeypatch):
+def test_redaction_masks_burned_in_phi():
     """
-    SAFETY GAP (Finding D in docs/IMPROVEMENT_PLAN.md): de-identification only
-    scrubs metadata — it does NOT touch the pixels. Fluoroscopy/OR images can
-    have the patient name/date *burned into the image*, and that survives upload.
+    `apply_redaction` must zero out the pixel region containing burned-in PHI.
 
-    This test pins the current behavior: the pixel bytes are byte-for-byte
-    identical before and after de-identification. When the plan adds a
-    pixel-PHI review/redaction step, this test should be updated to assert the
-    redaction actually happened.
+    Verifies the interim pixel-redaction path (T013): the reviewer identifies
+    the bounding box of burned-in text and `apply_redaction` blacks it out.
+
+    NOTE: the upload-flow confirmation gate (T014) — which blocks upload until a
+    human confirms all PHI regions have been reviewed and redacted — is wired in
+    a later task and is NOT asserted here.
     """
-    ds = make_phi_dicom_dataset()
-    before = bytes(ds.PixelData)
+    arr = make_burned_in_phi_pixel_array(text="DOE^JOHN 01/01/1970")
 
-    obj = SourceDicomDeIdentified.__new__(SourceDicomDeIdentified)
-    obj._metadata = ds
-    obj._image = 0
-    monkeypatch.setattr(
-        SourceDicomDeIdentified, "redacted_string", REDACTED, raising=False
+    # Confirm the simulated burned-in PHI is actually present before redaction.
+    assert arr.max() > 0, (
+        "Synthetic burned-in array should have non-zero pixels (text not rendered?)"
     )
-    obj._deidentify_dicom()
 
-    # Unchanged pixels == any burned-in PHI is still there.
-    assert bytes(ds.PixelData) == before
+    # Redact the full image (worst-case: operator blanks everything).
+    x, y, w, h = 0, 0, arr.shape[1], arr.shape[0]
+    result = apply_redaction(arr, [(x, y, w, h)])
+
+    # After redaction the PHI region must be zeroed.
+    assert result[y : y + h, x : x + w].max() == 0
+
+
+# --------------------------------------------------------------------------- #
+# Direct tests for deidentify_dataset (pure function, parametrized over tags)
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("attr,expected", [
+    ("PatientName",           REDACTED),
+    ("ReferringPhysicianName", REDACTED),
+    ("AccessionNumber",       "REDACTED 4 XNAT"),
+    ("StudyID",               "REDACTED 4 XNAT"),
+])
+def test_deidentify_dataset_scrubs_tag(attr, expected):
+    """deidentify_dataset scrubs each PHI tag to the correct placeholder value."""
+    ds = make_phi_dicom_dataset()
+    deidentify_dataset(ds, REDACTED)
+    assert str(getattr(ds, attr)) == expected
+
+
+def test_deidentify_dataset_removes_private_tags():
+    """deidentify_dataset removes all private tags."""
+    ds = make_phi_dicom_dataset()
+    deidentify_dataset(ds, REDACTED)
+    private_tags = [el for el in ds if el.tag.is_private]
+    assert private_tags == []
+
+
+def test_deidentify_dataset_removes_overlay():
+    """deidentify_dataset removes overlay group (0x6000, 0x3000)."""
+    ds = make_phi_dicom_dataset()
+    deidentify_dataset(ds, REDACTED)
+    assert (0x6000, 0x3000) not in ds
+
+
+def test_deidentify_dataset_removes_curve_group():
+    """deidentify_dataset removes curve group (0x5000 family)."""
+    ds = make_phi_dicom_dataset()
+    deidentify_dataset(ds, REDACTED)
+    assert (0x5000, 0x0005) not in ds
+
+
+def test_deidentify_dataset_preserves_pixel_data():
+    """deidentify_dataset must not destroy the actual image pixels."""
+    ds = make_phi_dicom_dataset()
+    pixel_before = bytes(ds.PixelData)
+    deidentify_dataset(ds, REDACTED)
+    assert bytes(ds.PixelData) == pixel_before

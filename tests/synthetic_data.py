@@ -116,6 +116,59 @@ def make_synthetic_dicom(
 
 
 # --------------------------------------------------------------------------- #
+# Burned-in PHI pixel arrays (pixel-review tests)
+# --------------------------------------------------------------------------- #
+def make_burned_in_phi_pixel_array(
+    text: str = "PATIENT NAME 01/02/1980",
+    *,
+    rows: int = 64,
+    cols: int = 256,
+    dtype=None,
+) -> "np.ndarray":
+    """
+    Return a numpy array (uint8 by default) with ``text`` rendered into the
+    pixel data using cv2.putText — simulating the kind of burned-in PHI that
+    fluoroscopy / OR acquisition systems write directly onto the image.
+
+    The rendered text region will contain non-zero pixel values; the surrounding
+    area is black (zero).  Tests that use this array can:
+      1. Confirm that non-zero pixels exist inside the text bounding box before
+         any redaction (proving the "PHI" is present).
+      2. Call ``apply_redaction`` with the bounding box and assert those pixels
+         are zeroed afterward.
+
+    Parameters
+    ----------
+    text:
+        The string to render (fake PHI for testing — never real patient data).
+    rows, cols:
+        Pixel dimensions of the output array.
+    dtype:
+        numpy dtype for the output array.  Defaults to ``np.uint8``.  Pass
+        ``np.uint16`` to simulate 16-bit DICOM pixel data.
+
+    Returns
+    -------
+    np.ndarray of shape (rows, cols) with dtype ``dtype``.
+    """
+    import cv2
+
+    if dtype is None:
+        dtype = np.uint8
+
+    arr = np.zeros((rows, cols), dtype=np.uint8)  # cv2.putText needs uint8
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.5
+    thickness = 1
+    color = 200  # near-white on black background
+    origin = (4, rows // 2)  # (x, y) — left-aligned, vertically centred
+
+    cv2.putText(arr, text, origin, font, font_scale, color, thickness, cv2.LINE_AA)
+
+    return arr.astype(dtype)
+
+
+# --------------------------------------------------------------------------- #
 # JPG / MP4 (arthroscopy)
 # --------------------------------------------------------------------------- #
 def make_synthetic_jpg(path: Path, *, size: int = 64, seed: int = 0) -> Path:

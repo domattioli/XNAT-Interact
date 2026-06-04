@@ -7,6 +7,22 @@ Check each item before attempting a release. Items are grouped by the order in w
 
 ---
 
+## Decide your scope first (this determines which items you actually need)
+
+Most of the signing items below are **conditional** — they only apply to the optional *self-served installer* path. Answer these first:
+
+| If you... | You need |
+|---|---|
+| Ship via **ITS Software Center only** (recommended primary path) | **Only item (a).** ITS handles signing/trust/deployment. Skip (b), (c), (d). |
+| Also offer a **self-served Windows `.exe`** (BYOD / unmanaged) | (a) + **(b)** Windows cert + (d) app-control check |
+| Also offer a **self-served macOS app** (BYOD / unmanaged Macs) | (a) + **(c)** Apple Developer ID + (d) app-control check |
+| Have **no macOS users** | Skip (c) entirely — Apple Developer ID is **not needed**. |
+| Have **no self-served path at all** | Skip (b), (c), (d) entirely. |
+
+> **Plain version:** if you go Software-Center-only, you need **none** of the personal signing certs — just the ITS packaging request (a). Items (b)/(c)/(d) exist only because the spec offered a self-served fallback for people on personal/unmanaged machines. (c) Apple Developer ID is only relevant if you decide to hand out a Mac app outside Software Center.
+
+---
+
 ## Before the first release
 
 ### (a) Request ITS to package and deploy in the Software Center
@@ -33,7 +49,7 @@ The Software Center (MECM on Windows, Jamf on macOS) is the primary delivery pat
 
 ---
 
-### (b) Procure a Windows code-signing certificate
+### (b) Procure a Windows code-signing certificate — *CONDITIONAL: only for a self-served Windows installer*
 
 > **Who:** Data Librarian or departmental IT (purchases or requests through university procurement).
 
@@ -53,11 +69,12 @@ An unsigned Windows executable will be blocked by SmartScreen and by UIowa app-c
 
 ---
 
-### (c) Enroll in the Apple Developer Program and set up notarization credentials
+### (c) Enroll in the Apple Developer Program and set up notarization credentials — *CONDITIONAL: only for a self-served macOS app*
 
 > **Who:** Data Librarian or designated university Apple Developer account holder.
+> **Skip this entirely if** you have no macOS users, or you distribute Macs only through ITS/Jamf (Software Center), or you ship no self-served path. You do **not** personally need an Apple Developer ID for the Software Center path.
 
-macOS Gatekeeper will block any app that is not both code-signed with a Developer ID certificate *and* notarized by Apple. This requires an Apple Developer Program enrollment.
+macOS Gatekeeper will block a *self-served* app that is not both code-signed with a Developer ID certificate *and* notarized by Apple — so this is required **only if you hand students a Mac app to download outside Software Center**. (Managed Macs delivered via Jamf are ITS's responsibility, not yours.)
 
 - [ ] Check whether the university or department already has an Apple Developer Program organization account. Contact ITS or the departmental IT coordinator before creating a new one — duplicate accounts are wasteful and complicate team management.
 - [ ] If no account exists: enroll at [developer.apple.com/programs](https://developer.apple.com/programs). An organization enrollment (not individual) is recommended for institutional software. Annual fee applies.
@@ -73,7 +90,7 @@ macOS Gatekeeper will block any app that is not both code-signed with a Develope
 
 ---
 
-### (d) Confirm the app-control policy allows the signed self-served installer
+### (d) Confirm the app-control policy allows the signed self-served installer — *CONDITIONAL: only if you ship a self-served installer*
 
 > **Who:** Data Librarian + ITS security team.
 

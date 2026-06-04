@@ -280,3 +280,70 @@ def make_synthetic_batch_xlsx(
     df = pd.DataFrame(rows, columns=list(columns))
     df.to_excel(path, index=False)
     return path
+
+
+def make_mixed_validity_batch_xlsx(
+    path: Path,
+    *,
+    n_good: int = 3,
+    n_bad: int = 2,
+) -> Path:
+    """
+    Write a batch-upload xlsx whose rows alternate good/bad entries.
+
+    The file has the minimal column set understood by the continue-on-error
+    tests.  Rows labelled "bad" have an intentionally blank ``Procedure Name``
+    so the pre-upload validation marks them as errors.
+
+    Parameters
+    ----------
+    path
+        Destination .xlsx file path.
+    n_good
+        Number of rows that should pass validation (no errors).
+    n_bad
+        Number of rows that should fail validation (blank Procedure Name).
+
+    Returns
+    -------
+    Path
+        The written file path.
+    """
+    import pandas as pd
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    good_row = {
+        "Filer HawkID": "TESTUSER",
+        "Operation Date": "2024-01-01",
+        "Institution Name": "UNIVERSITY_OF_IOWA",
+        "Procedure Type": "ARTHROSCOPY",
+        "Procedure Name": "1A_KNEE_ARTHROSCOPY",
+        "Performer HawkID-Task": "{testuser: lead}",
+        "Quality": "usable",
+    }
+    bad_row = {
+        "Filer HawkID": "TESTUSER",
+        "Operation Date": "2024-01-01",
+        "Institution Name": "UNIVERSITY_OF_IOWA",
+        "Procedure Type": "ARTHROSCOPY",
+        "Procedure Name": "",           # intentionally blank — triggers validation error
+        "Performer HawkID-Task": "{testuser: lead}",
+        "Quality": "usable",
+    }
+
+    # Interleave good and bad rows deterministically
+    rows: List[Dict[str, str]] = []
+    g, b = 0, 0
+    for i in range(n_good + n_bad):
+        if g < n_good and (b >= n_bad or i % 2 == 0):
+            rows.append(dict(good_row))
+            g += 1
+        else:
+            rows.append(dict(bad_row))
+            b += 1
+
+    df = pd.DataFrame(rows, columns=list(good_row.keys()))
+    df.to_excel(path, index=False)
+    return path

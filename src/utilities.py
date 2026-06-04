@@ -19,6 +19,9 @@ import ssl
 from requests.exceptions import SSLError
 from urllib3.exceptions import MaxRetryError
 
+from src.services.config import AppConfig as _AppConfig
+_app_config = _AppConfig.load()
+
 # Define list for allowable imports from this module -- do not want to import _local_variables. As more classes are added you will need to update this list.
 __all__ = ['UIDandMetaInfo', 'XNATLogin', 'ConfigTables', 'XNATConnection', 'USCentralDateTime', 'ImageHash']
 
@@ -82,8 +85,9 @@ class _local_variables:
         NOTE: if you add any new local variables, make sure to add a corresponding getter property method to the UIDandMetaInfo.'''
         # xnat_project_name = 'domSandBox' # original corrupted project.
         # xnat_project_name = 'GROK_AHRQ_main' # another corrupted project -- added a user who wasnt registered, lost ability to do anything except add new data.
-        xnat_project_name = 'GROK_AHRQ_Data'
-        xnat_url = r'https://rpacs.iibi.uiowa.edu/xnat/'
+        # Server URL and project name resolved via AppConfig (env > config file > default).
+        xnat_project_name = _app_config.project_name
+        xnat_url = _app_config.server_url
         xnat_config_folder_name, config_fn = 'config', 'database_config.json'
         xnat_backups_folder_name, backup_fn = 'backups', 'database_config-backup-.json'
         template_img_dir = os.path.join( os.getcwd(), 'data', 'image_templates', 'unwanted_dcm_image_template.png' )

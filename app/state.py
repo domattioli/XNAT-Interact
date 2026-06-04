@@ -25,9 +25,12 @@ _KEY_SERVER          = "xnat_server_handle"
 _KEY_CURRENT_PAGE    = "xnat_current_page"
 
 # Valid page names used by the router
-PAGE_LOGIN  = "login"
-PAGE_BROWSE = "browse"
-PAGE_UPLOAD = "upload"
+PAGE_LOGIN    = "login"
+PAGE_BROWSE   = "browse"
+PAGE_UPLOAD   = "upload"
+PAGE_BATCH    = "batch"
+PAGE_DOWNLOAD = "download"
+PAGE_LEARN    = "learn"
 
 
 # ---------------------------------------------------------------------------

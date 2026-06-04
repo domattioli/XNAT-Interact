@@ -23,3 +23,8 @@
 
 # Ignore the main.ipynb file (for now, as of 11/11/2024) bc it is currently for sandboxing. when i pass it off to the team I will include examples in this file and push it.
 /main.ipynb
+# Python test cache
+__pycache__/
+*.pyc
+/tests/__pycache__
+.pytest_cache/

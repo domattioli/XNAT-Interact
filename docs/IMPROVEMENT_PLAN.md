@@ -113,14 +113,14 @@ before XNAT-Interact is even downloaded:
 
 On a **school IT-managed machine**, items 1–3 are the catch:
 
-- Many managed machines **don't let users install software** (no admin rights),
-  so `git`/Python may need to be provisioned by IT, or come from a software
-  portal (e.g. UIowa "Software Center"/self-service).
-- A **one-click installer is technically possible** — tools like *PyInstaller*
-  bundle Python *inside* the app, so the student wouldn't need to install Python
-  or git separately. **But** managed machines often block running unsigned
-  downloaded `.exe` files (SmartScreen / execution policy), which can defeat the
-  point.
+- UIowa-managed machines run under **least privilege** — students generally
+  **lack local admin**, so they can't just download and install arbitrary tools.
+- The institution's intended channel is the **ITS Software Center** (MECM), but
+  software has to be **packaged/deployed by ITS** before it appears there.
+- A **one-click installer is technically possible** — *PyInstaller* bundles
+  Python *inside* the app — **but** managed machines may block running unsigned
+  downloaded `.exe` files (app-control / SmartScreen), which can defeat the
+  point. (Full policy detail + sources below.)
 
 **Maintainer's decision (2026-06-04): we cannot assume Python is installed on
 the student's machine.** That rules out a "guided setup script that needs Python
@@ -128,14 +128,45 @@ already there." Packaging (Phase 3) must therefore **bundle the Python runtime**
 so a student with *nothing* installed can still run the app — e.g. a PyInstaller
 one-file build, or an installer that ships its own Python.
 
-**Still to confirm with UIowa IT** (one open question, not a blocker for Phases
-0–2): can students **run a downloaded, unsigned executable**, or must apps be
-**code-signed / distributed through the campus software portal**? The answer
-decides only the *delivery mechanism* in Phase 3 (self-served `.exe` vs. signed
-build vs. software-portal package) — not whether we bundle Python (we will).
+**What UIowa's policy actually says** (researched 2026-06-04 — sources at the
+bottom of this doc):
 
-The plan below is structured so we **don't bet the project on that remaining
-answer**: the GUI (Phase 2) works whichever delivery mechanism we land on.
+- UIowa centrally manages Windows via **MECM/SCCM** and Macs via **Jamf**, under
+  a **least-privilege** policy. Students generally **do not have local admin
+  rights**.
+- The **Just-in-Time Admin (JTA)** self-elevation only applies to *Managed
+  Application Services servers*, **not** student/staff desktops — so it is not a
+  route for us.
+- The sanctioned way onto a managed machine is the **ITS Software Center**, but
+  an app must first be **packaged and deployed by ITS** (the user must be the
+  device's primary user and in the right security group). Some Software-Center
+  apps then install **without** admin.
+
+**Consequence for us:** a self-served, unsigned `.exe` *may* run from the user's
+profile without admin, but it is **not guaranteed** — app-control / SmartScreen /
+antivirus can block unsigned binaries on managed machines. The **reliable** path
+is therefore **distribution through ITS Software Center** (which avoids the
+admin-rights and signing problems by design). Self-served download is a fallback,
+and **code-signing materially improves its odds**.
+
+**Net recommendation (updated):**
+
+1. **Primary delivery = ITS Software Center package.** Have the Data Librarian /
+   departmental IT work with ITS to package the app. Most robust on managed
+   machines; needs lead time and an ITS relationship.
+2. **Bundle Python** so a machine with *nothing* installed still works (per the
+   maintainer's decision).
+3. **The installer/launcher must detect an existing Python first** (per the
+   maintainer): if a compatible interpreter is already present, *reuse it* (a
+   lighter, faster path); only fall back to the bundled runtime when none is
+   found. Avoids forcing a heavy install when Python already exists, and avoids
+   assuming it when it doesn't.
+4. **Fallback delivery = signed self-served installer** for non-managed / BYOD
+   machines or where Software Center isn't an option.
+
+The plan below is structured so we **don't bet the project on the delivery
+mechanism**: the GUI (Phase 2) works whether it's launched from a Software-Center
+install, a signed installer, or a dev's `pip` setup.
 
 ---
 
@@ -238,17 +269,23 @@ desktop (PySide/Tkinter) was considered but costs more UI code to maintain.
 
 ### Phase 3 — Remove the install cliff
 *Goal: a student goes from "nothing" to "uploading" with as few steps as
-possible. Exact approach decided by the IT answer above.*
+possible. Delivery channel informed by the UIowa policy research above.*
 
-- **Bundle Python — always.** Per the maintainer, we cannot assume Python is on
-  the machine, so the deliverable must include its own runtime (PyInstaller
-  one-file build, or an installer that ships Python). A student with nothing
-  installed should be able to run it.
-- **Delivery mechanism depends on the IT answer:**
-  - *If students can run downloaded apps:* a **one-click launcher** (double-click
-    → opens the Streamlit app in their browser).
-  - *If managed-machine policy blocks unsigned apps:* a **code-signed build**
-    and/or distribution through the **campus software portal**.
+- **Primary delivery = ITS Software Center** (MECM/Jamf package). Most reliable
+  on UIowa-managed machines because it sidesteps admin-rights and code-signing
+  blocks. Requires the Data Librarian / departmental IT to work with ITS to
+  package it; budget lead time.
+- **Bundle Python — but detect it first.** Per the maintainer:
+  - We **cannot assume Python is installed**, so the deliverable must be able to
+    ship its own runtime.
+  - The installer/launcher must **check for an existing compatible Python**
+    (correct major/minor version) and **reuse it when present** — only falling
+    back to the bundled runtime when none is found. (Detection: look on PATH /
+    Windows registry / common install locations; verify version; verify it can
+    import the app's deps or create a venv.)
+- **Fallback delivery = signed self-served installer** for BYOD / non-managed
+  machines, or where Software Center isn't available. Code-signing materially
+  improves the odds of an unsigned-binary block.
 - Either way: **rewrite the README** down to a short, friendly quick-start, and
   retire the misleading `update_and_test.py` (or fix it to do what its name and
   README claim, against the correct default branch).
@@ -282,11 +319,37 @@ terminal, which is exactly what makes Phase 2's GUI feasible.
 ## Decisions on file (resolved 2026-06-04)
 
 1. **Python is NOT assumed installed** on student machines → Phase 3 packaging
-   must bundle the Python runtime. *Remaining sub-question for IT:* may students
-   run an unsigned downloaded app, or is signing / the software portal required?
-   (Decides only the Phase 3 delivery mechanism.)
+   must be able to bundle the Python runtime, **and the installer must detect an
+   existing Python and reuse it when present** (maintainer instruction). Policy
+   research (below) shows UIowa-managed machines are least-privilege (no student
+   admin) and that the **ITS Software Center** is the reliable delivery channel →
+   Software Center is now the **primary** Phase 3 path, signed self-served
+   installer the fallback. The only thing left to do is *operational*: have the
+   Data Librarian / departmental IT open the ITS packaging request.
 2. **Trauma batch upload is out of scope** for now → tracked for future speckit
    development in **issue #24** (`batch_upload.py:546`).
 3. **The destructive delete script is run only by the maintainer / Data
    Librarian** → guard rails = clear confirmation + dry-run, not multi-user
    lockdown.
+
+---
+
+## Sources (UIowa IT policy research, 2026-06-04)
+
+- ITS — Access Management Software Delivery (Software Center model, primary-user
+  + security-group requirement):
+  https://its.uiowa.edu/services/software-and-technology-tool-licensing-and-acquisition/access-management-software-delivery
+- IT Security — Device Security Standard (managed-device / least-privilege
+  expectations):
+  https://itsecurity.uiowa.edu/device-security-standard
+- ITS — Just-in-Time Admin (JTA) (self-elevation is for *managed app servers*,
+  not desktops):
+  https://its.uiowa.edu/services/managed-application-services/just-time-admin-jta-feature
+- ITS — Installing software via Software Center / Self Service (example KB):
+  https://its.uiowa.edu/support/article/117336
+- ITS — Available Software / Software portal:
+  https://its.uiowa.edu/available-software
+
+*Note:* the Device Security Standard and JTA pages block automated fetching;
+their contents above are summarized from ITS search results and should be
+confirmed with ITS / departmental IT before the Phase 3 packaging request.

@@ -16,7 +16,7 @@ from __future__ import annotations
 import streamlit as st
 
 from app import state
-from app.pages import browse, login, upload, batch, download, terminal
+from app.pages import browse, login, upload, batch, download, terminal, onboarding
 
 # ---------------------------------------------------------------------------
 # Page configuration — must be the FIRST streamlit call
@@ -35,20 +35,29 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 
 _NAV_PAGES = [
-    (state.PAGE_BROWSE,   "Browse"),
-    (state.PAGE_UPLOAD,   "Upload"),
-    (state.PAGE_BATCH,    "Batch Upload"),
-    (state.PAGE_DOWNLOAD, "Download"),
-    (state.PAGE_LEARN,    "Learn (CLI ref)"),
+    (state.PAGE_BROWSE,      "Browse"),
+    (state.PAGE_UPLOAD,      "Upload"),
+    (state.PAGE_BATCH,       "Batch Upload"),
+    (state.PAGE_DOWNLOAD,    "Download"),
+    (state.PAGE_LEARN,       "Learn (CLI ref)"),
+    (state.PAGE_ONBOARDING,  "Onboarding / Access"),
 ]
 
 
 def _render_sidebar() -> None:
-    """Render the navigation sidebar for authenticated users."""
-    if not state.is_authenticated():
-        return
-
+    """Render the navigation sidebar for authenticated users (and onboarding pre-login)."""
     with st.sidebar:
+        if not state.is_authenticated():
+            # Pre-login: only the onboarding page is accessible.
+            current = state.get_current_page()
+            if st.button(
+                "Onboarding / Access",
+                key="nav_onboarding_pre",
+                type="primary" if current == state.PAGE_ONBOARDING else "secondary",
+            ):
+                state.set_current_page(state.PAGE_ONBOARDING)
+                st.rerun()
+            return
         st.markdown(f"**Logged in as:** `{state.get_username()}`")
         st.markdown("---")
 
@@ -74,11 +83,12 @@ def _render_sidebar() -> None:
 # ---------------------------------------------------------------------------
 
 _PAGE_RENDERERS = {
-    state.PAGE_BROWSE:   browse.render,
-    state.PAGE_UPLOAD:   upload.render,
-    state.PAGE_BATCH:    batch.render,
-    state.PAGE_DOWNLOAD: download.render,
-    state.PAGE_LEARN:    terminal.render,
+    state.PAGE_BROWSE:      browse.render,
+    state.PAGE_UPLOAD:      upload.render,
+    state.PAGE_BATCH:       batch.render,
+    state.PAGE_DOWNLOAD:    download.render,
+    state.PAGE_LEARN:       terminal.render,
+    state.PAGE_ONBOARDING:  onboarding.render,
 }
 
 
@@ -87,7 +97,12 @@ def main() -> None:
     _render_sidebar()
 
     if not state.is_authenticated():
-        # Always show login when not authenticated, regardless of requested page.
+        current_page = state.get_current_page()
+        # Onboarding page is accessible pre-login (no data exposure risk).
+        if current_page == state.PAGE_ONBOARDING:
+            onboarding.render()
+            return
+        # All other pages require authentication → show login.
         login.render()
         return
 

@@ -122,19 +122,20 @@ On a **school IT-managed machine**, items 1–3 are the catch:
   downloaded `.exe` files (SmartScreen / execution policy), which can defeat the
   point.
 
-**Honest recommendation:** before committing to "one-click," confirm two things
-with UIowa IT (or a current team member):
+**Maintainer's decision (2026-06-04): we cannot assume Python is installed on
+the student's machine.** That rules out a "guided setup script that needs Python
+already there." Packaging (Phase 3) must therefore **bundle the Python runtime**
+so a student with *nothing* installed can still run the app — e.g. a PyInstaller
+one-file build, or an installer that ships its own Python.
 
-- Can students **run a downloaded, unsigned executable**, or must apps be
-  code-signed / distributed through the campus software portal?
-- Is **Python already provisioned** on these machines (common for research
-  groups)? If so, a *guided setup script* is far less work than a signed
-  installer and may be all you need.
+**Still to confirm with UIowa IT** (one open question, not a blocker for Phases
+0–2): can students **run a downloaded, unsigned executable**, or must apps be
+**code-signed / distributed through the campus software portal**? The answer
+decides only the *delivery mechanism* in Phase 3 (self-served `.exe` vs. signed
+build vs. software-portal package) — not whether we bundle Python (we will).
 
-The plan below is structured so we **don't bet the project on the answer**: the
-GUI (Phase 2) works whether it's launched by a one-click bundle *or* a simple
-"double-click this script" launcher. We pick the packaging in Phase 3 once the
-IT answer is known.
+The plan below is structured so we **don't bet the project on that remaining
+answer**: the GUI (Phase 2) works whichever delivery mechanism we land on.
 
 ---
 
@@ -184,7 +185,9 @@ future GUI will sit on top of.*
    one cell (`batch_upload.py:530`).
 4. **Guard the destructive script.** `delete_contents_of_server.py` must require
    an explicit typed confirmation (and ideally a `--dry-run`), and must stop
-   swallowing deletion failures.
+   swallowing deletion failures. (Run only by the maintainer / Data Librarian,
+   per the maintainer — so the goal is a clear "are you sure?" + a dry-run, not
+   heavy multi-user lockdown.)
 5. **Replace asserts on the user path** with friendly `raise`/messages so
    students never see a raw traceback for a foreseeable problem (wrong password,
    no VPN, bad path).
@@ -237,11 +240,15 @@ desktop (PySide/Tkinter) was considered but costs more UI code to maintain.
 *Goal: a student goes from "nothing" to "uploading" with as few steps as
 possible. Exact approach decided by the IT answer above.*
 
-- **If students can run downloaded apps:** package the Streamlit app into a
-  **one-click launcher** (bundles Python; double-click → opens in browser).
-- **If managed-machine policy blocks that:** ship a **single guided setup
-  script** + a drastically shorter README (one screen, with screenshots), and/or
-  pursue distribution through the campus software portal.
+- **Bundle Python — always.** Per the maintainer, we cannot assume Python is on
+  the machine, so the deliverable must include its own runtime (PyInstaller
+  one-file build, or an installer that ships Python). A student with nothing
+  installed should be able to run it.
+- **Delivery mechanism depends on the IT answer:**
+  - *If students can run downloaded apps:* a **one-click launcher** (double-click
+    → opens the Streamlit app in their browser).
+  - *If managed-machine policy blocks unsigned apps:* a **code-signed build**
+    and/or distribution through the **campus software portal**.
 - Either way: **rewrite the README** down to a short, friendly quick-start, and
   retire the misleading `update_and_test.py` (or fix it to do what its name and
   README claim, against the correct default branch).
@@ -272,11 +279,14 @@ terminal, which is exactly what makes Phase 2's GUI feasible.
 
 ---
 
-## Open questions for you (whenever convenient)
+## Decisions on file (resolved 2026-06-04)
 
-1. **IT policy:** can students run a downloaded/unsigned app, or is Python
-   already provisioned on the managed machines? (Decides Phase 3.)
-2. **Trauma uploads:** `batch_upload.py:546` raises `NotImplementedError` for
-   trauma cases. Is finishing that in scope, or intentionally Data-Librarian-only?
-3. **Who runs the destructive `delete_contents_of_server.py`** — only you/the
-   librarian? (Affects how loud the guard rails need to be.)
+1. **Python is NOT assumed installed** on student machines → Phase 3 packaging
+   must bundle the Python runtime. *Remaining sub-question for IT:* may students
+   run an unsigned downloaded app, or is signing / the software portal required?
+   (Decides only the Phase 3 delivery mechanism.)
+2. **Trauma batch upload is out of scope** for now → tracked for future speckit
+   development in **issue #24** (`batch_upload.py:546`).
+3. **The destructive delete script is run only by the maintainer / Data
+   Librarian** → guard rails = clear confirmation + dry-run, not multi-user
+   lockdown.

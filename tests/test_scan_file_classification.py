@@ -22,20 +22,45 @@ def scan_stub():
     return stub
 
 
-def test_dcm_extension_is_recognized(scan_stub):
-    assert scan_stub.is_dicom(Path("image.dcm")) is True
+def test_dcm_extension_is_recognized(scan_stub, tmp_path):
+    """A .dcm file with proper DICOM content is recognized as DICOM."""
+    from tests.synthetic_data import make_synthetic_dicom
+
+    dcm_file = tmp_path / "image.dcm"
+    make_synthetic_dicom(dcm_file)
+    assert scan_stub.is_dicom(dcm_file) is True
 
 
-def test_jpg_extension_is_not_dicom(scan_stub):
-    assert scan_stub.is_dicom(Path("photo.jpg")) is False
+def test_jpg_extension_is_not_dicom(scan_stub, tmp_path):
+    """A .jpg file without DICM marker is not recognized as DICOM."""
+    from tests.synthetic_data import make_synthetic_jpg
+
+    jpg_file = tmp_path / "photo.jpg"
+    make_synthetic_jpg(jpg_file)
+    assert scan_stub.is_dicom(jpg_file) is False
 
 
-@pytest.mark.known_issue
-def test_extensionless_file_is_treated_as_dicom_footgun(scan_stub):
+def test_extensionless_non_dicom_file_is_not_dicom(scan_stub, tmp_path):
     """
-    CURRENT (risky) behavior: a file with no extension is classified as DICOM,
-    purely from its name, without inspecting its bytes. A stray 'notes' or
-    '.DS_Store'-style file could be mistaken for imaging data. The plan replaces
-    this with content-based detection.
+    FIXED behavior: a file with no extension and no DICM marker is NOT classified
+    as DICOM. An extensionless 'notes' file (or any non-DICOM bytes) must fail the
+    content-based check.
     """
-    assert scan_stub.is_dicom(Path("some_random_file")) is True
+    # Create a non-DICOM extensionless file (e.g., plain text)
+    notes_file = tmp_path / "notes"
+    notes_file.write_text("This is just notes, not DICOM data")
+    assert scan_stub.is_dicom(notes_file) is False
+
+
+def test_extensionless_dicom_file_is_dicom(scan_stub, tmp_path):
+    """
+    FIXED behavior: a file with no extension but WITH the DICM magic bytes at
+    offset 128 IS classified as DICOM. Content-based detection catches DICOMs
+    regardless of extension.
+    """
+    from tests.synthetic_data import make_synthetic_dicom
+
+    # Create a real DICOM file (no extension)
+    dicom_file = tmp_path / "no_extension_dicom"
+    make_synthetic_dicom(dicom_file)
+    assert scan_stub.is_dicom(dicom_file) is True

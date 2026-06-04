@@ -65,7 +65,18 @@ class ScanFile( UIDandMetaInfo ):
     def is_valid( self )            -> bool:                return self._is_valid
     
     def set_new_ffn( self, new_ffn: str ) -> None:           self._new_ffn = new_ffn
-    def is_dicom(self, ffn: Path)   -> bool:                return os.path.splitext( ffn )[1] in ( '', '.dcm' )
+    def is_dicom(self, ffn: Path)   -> bool:
+        """
+        Detect DICOM by content (magic bytes DICM at offset 128), not extension.
+        DICOM Part-10 files have 128-byte preamble + b"DICM" marker.
+        Returns False if file is < 132 bytes, unreadable, or missing DICM marker.
+        """
+        try:
+            with open(ffn, 'rb') as f:
+                f.seek(128)
+                return f.read(4) == b'DICM'
+        except (OSError, IOError):
+            return False
     def is_jpg( self, ffn: Path )   -> bool:                return ffn.suffix in ['.jpg', '.jpeg']
     def is_s3_url( self, ffn: Path )-> bool:                return str( ffn ).startswith( 'https://' ) and '.s3.amazonaws.com/' in str(ffn)
     def is_mp4( self, ffn: Path )   -> bool:                return ffn.suffix == '.mp4'

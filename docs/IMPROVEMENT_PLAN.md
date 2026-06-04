@@ -96,6 +96,26 @@ These aren't guesses — each points at a real line of code.
 - `environment.yml` pins Python 3.8 while CI uses 3.10 — drift.
 - A `testing 123.txt` file and a large sandbox notebook are committed in `src/`.
 
+### D. Safety & security gaps (found while writing this plan)
+- **🔴 Burned-in pixel PHI is NOT removed.** De-identification
+  (`xnat_scan_data.py:291`) scrubs *metadata* only. Fluoroscopy/OR images often
+  have the **patient name and date burned into the image pixels**, and the code
+  knows it — there's an unfinished `to-do` at `xnat_scan_data.py:305-306`
+  ("De-identify embedded pixel data… OCR and blur"). Today that PHI is uploaded.
+  This is the single most important thing to address.
+- **Password accepted as a plaintext CLI argument** (`main.py:29`, `--password`)
+  — visible in process listings and shell history.
+- **The config "database" has a lost-update race.** `ConfigTables` works by
+  download → edit locally → re-upload-and-overwrite `MetaTables.json`. Two
+  students uploading at once can silently clobber each other's registrations and
+  image-hashes.
+- **The download path is under-built and buggy** — hardcoded Windows `\` paths,
+  a stray `print('hello')`, and it only queries one session type
+  (`main.py:388-404`). The plan was upload-heavy; download needs its own rework.
+- **Annual SSL-cert expiry is a recurring failure.** The server cert needs
+  yearly renewal (README); `XNATConnection` catches it but surfaces it
+  generically instead of "the cert expired — contact the Data Librarian."
+
 ---
 
 ## Your install question, answered
@@ -170,6 +190,83 @@ install, a signed installer, or a dev's `pip` setup.
 
 ---
 
+## Safety first: PHI handling (must-address, threads through every phase)
+
+This is a medical tool; getting de-identification *right* outranks every UX
+goal. Three concrete commitments:
+
+1. **Burned-in pixel PHI.** Metadata scrubbing is not enough (see Finding D).
+   - *Phase 1 (interim, no new infra):* before any upload, show the student each
+     image and require a **"these images contain no visible patient
+     name/date" confirmation**, with a simple manual redaction (draw a black box)
+     option. A human-in-the-loop check is far better than today's silent pass.
+   - *Later:* OCR-assisted detection to auto-flag/blur suspected text regions.
+   - Tracked as a `known_issue` test now (`tests/test_dicom_deidentification.py`)
+     so the gap is visible and can't be forgotten.
+2. **"Here's exactly what will be uploaded" review.** A pre-flight summary
+   (which subject, how many images, PHI-removed preview) before data leaves the
+   machine — the student confirms, then it sends.
+3. **Local PHI cleanup.** Intake forms, zips, and the downloaded
+   `MetaTables.json` are written to temp/Downloads. Ensure local PHI artifacts
+   are deleted after a successful upload (and document where they live until
+   then).
+
+## Cross-cutting refinements (added 2026-06-04)
+
+These attach to the phases below rather than being phases of their own.
+
+**Security & access** *(Phase 1)*
+- Remove the `--password` CLI flag; never accept the password as an argument.
+  Use a session-only prompt / GUI field; consider the OS keychain later, never a
+  plaintext file.
+- Make the **annual SSL-cert expiry** a first-class, dated, actionable error
+  ("server certificate expired on <date> — contact the Data Librarian"), and add
+  a renewal reminder to the maintainer runbook.
+
+**Reliability & data integrity** *(Phase 1–2)*
+- **Add a fake/mock XNAT layer for tests.** Phase 0 only covers pure logic; as
+  soon as we touch upload/download we need a stand-in for `pyxnat` (a fake
+  object, or recorded request/response fixtures) so networked paths are testable
+  without the live server. This is the bridge that makes Phases 1–2 safe.
+- **Fix the config lost-update race.** Treat `MetaTables.json` edits as a
+  critical section: at minimum re-download-merge-reupload with a check, ideally a
+  server-side lock or moving this metadata into XNAT-native fields. Flag clearly
+  if concurrent edits are detected.
+- **Rework the download path** (its own mini-project): cross-platform paths,
+  remove debug code, query all relevant session types, progress + verification.
+- **Resumable single uploads + post-upload verification.** A dropped VPN
+  mid-upload should be recoverable, and the tool should confirm the server
+  received exactly what was sent (counts / hashes) before declaring success.
+
+**Adoption & process** *(Phases 2–4)*
+- **Onboarding checklist.** Before code runs, a student needs an XNAT account
+  (HawkID), to be added to the project by the Librarian, and VPN. Add a guided
+  "are you set up? ① account ② added to project ③ VPN" status screen, and
+  optionally auto-draft the access-request email to the Librarian. This first-week
+  friction is a real adoption killer.
+- **Update mechanism.** Once packaged, `git reset --hard` (today's
+  `update_and_test.py`) is gone. Software Center handles updates for a packaged
+  app; for the self-served build, add an in-app "a new version is available"
+  check. State the chosen path explicitly.
+- **Phase 2 "walking skeleton."** De-risk the big GUI phase: ship a thin slice
+  first — **login → browse your data → single upload** — validate it with one
+  real student, *then* add batch, download, and the terminal panel.
+
+## Success metrics (how we'll know it worked)
+
+The mission is adoption. Pick a small number and watch them before/after:
+
+- **Time-to-first-upload** for a new student (from "I have access" to "data is
+  on the server").
+- **Upload error rate** (failed/aborted attempts ÷ attempts).
+- **Active student uploaders** per term.
+- **Support tickets to the Data Librarian** per student (should drop).
+
+A lightweight, **non-PHI** local log of these events (opt-in, aggregate only) is
+enough to start; no analytics service required.
+
+---
+
 ## The plan (phased, lowest-risk first)
 
 > **This round delivers Phase 0 only** (the plan you're reading + a real test
@@ -226,8 +323,18 @@ future GUI will sit on top of.*
    trusting the file extension.
 7. **Externalize the server URL / project name** into a tiny config file so
    test vs. production needs no code edit.
+8. **Remove the `--password` CLI flag** and stop accepting credentials as
+   arguments (see Security & access above).
+9. **Make SSL-cert expiry a clear, dated error** with a "contact the Data
+   Librarian" recourse.
+10. **Build the fake/mock XNAT test layer** so items 1–9 that touch the server
+    are testable offline — this is the prerequisite that makes the rest of
+    Phase 1 verifiable.
+11. **Burned-in pixel-PHI confirmation step** (interim, human-in-the-loop) and
+    **local PHI cleanup** after upload (see "Safety first" above).
 
-*Each item ships with tests using the Phase 0 harness.*
+*Each item ships with tests using the Phase 0 harness (plus the new fake-XNAT
+layer for the networked ones).*
 
 ### Phase 2 — The Streamlit app: a "human-factors view of XNAT"
 *Goal: students see and manage their data in a browser-like UI; the terminal
@@ -236,6 +343,12 @@ becomes optional.*
 This is the big skill-reduction win, and matches your vision: a friendly local
 app where students can **see the data**, with an **optional embedded terminal**
 for those who want to learn the command-line way.
+
+> **Build it as a walking skeleton.** Ship the thin slice first — **login →
+> browse your data → single upload (with the PHI-review step)** — and validate it
+> with one real student before adding batch, download, and the terminal panel.
+> The onboarding checklist (account / project access / VPN) belongs on the login
+> screen.
 
 - **Runs locally** (on the student's VPN-connected machine), opens in their
   browser. PHI never goes anywhere except your XNAT server.
@@ -305,14 +418,16 @@ possible. Delivery channel informed by the UIowa policy research above.*
 | Phase | Outcome | Effort | Risk |
 |---|---|---|---|
 | 0 ✅ | Testable code + synthetic data | done | none (no behavior change) |
-| 1 | No more unhelpful crashes; safe batch; guarded delete | medium | low–med (backend, well-tested) |
-| 2 | Streamlit "see-your-data" app + optional terminal | large | medium (new UI, reuses tested core) |
-| 3 | Easy install (decided by IT answer) | small–med | low (mostly packaging/docs) |
+| 1 | No unhelpful crashes; safe batch; guarded delete; **no plaintext password; SSL-cert error; fake-XNAT test layer; PHI-review + cleanup; config-race fix** | medium–large | low–med (backend, well-tested) |
+| 2 | Streamlit "see-your-data" app + optional terminal (**walking skeleton first**) | large | medium (new UI, reuses tested core) |
+| 3 | Easy install (bundle-or-detect Python; Software Center primary) | small–med | low (mostly packaging/docs) |
 | 4 | Static onboarding page | small | none |
 
-**Recommended next step after this PR:** Phase 1. It delivers immediate
-day-to-day relief for current students *and* untangles the app logic from the
-terminal, which is exactly what makes Phase 2's GUI feasible.
+**Recommended next step after this PR:** Phase 1, **starting with the fake-XNAT
+test layer and the burned-in-PHI review step.** Phase 1 delivers immediate
+day-to-day relief for current students, closes the most important safety gap,
+*and* untangles the app logic from the terminal — exactly what makes Phase 2's
+GUI feasible.
 
 ---
 
@@ -331,6 +446,14 @@ terminal, which is exactly what makes Phase 2's GUI feasible.
 3. **The destructive delete script is run only by the maintainer / Data
    Librarian** → guard rails = clear confirmation + dry-run, not multi-user
    lockdown.
+4. **All four refinement bundles folded in** (maintainer, 2026-06-04): PHI
+   safety (burned-in pixel PHI — now a `known_issue` test, plus pre-upload review
+   + local cleanup), security & access (no plaintext password; SSL-cert error),
+   reliability & integrity (fake-XNAT test layer; config lost-update race;
+   download rework; resumable uploads + verification), and adoption & process
+   (onboarding checklist; success metrics; update mechanism; walking-skeleton
+   sequencing). See "Safety first", "Cross-cutting refinements", and "Success
+   metrics" above.
 
 ---
 

@@ -75,3 +75,30 @@ def test_pixel_data_is_preserved(deidentified_dataset):
     # De-identification must NOT destroy the actual image.
     assert "PixelData" in deidentified_dataset
     assert len(deidentified_dataset.PixelData) > 0
+
+
+@pytest.mark.known_issue
+def test_burned_in_pixel_phi_is_not_removed(monkeypatch):
+    """
+    SAFETY GAP (Finding D in docs/IMPROVEMENT_PLAN.md): de-identification only
+    scrubs metadata — it does NOT touch the pixels. Fluoroscopy/OR images can
+    have the patient name/date *burned into the image*, and that survives upload.
+
+    This test pins the current behavior: the pixel bytes are byte-for-byte
+    identical before and after de-identification. When the plan adds a
+    pixel-PHI review/redaction step, this test should be updated to assert the
+    redaction actually happened.
+    """
+    ds = make_phi_dicom_dataset()
+    before = bytes(ds.PixelData)
+
+    obj = SourceDicomDeIdentified.__new__(SourceDicomDeIdentified)
+    obj._metadata = ds
+    obj._image = 0
+    monkeypatch.setattr(
+        SourceDicomDeIdentified, "redacted_string", REDACTED, raising=False
+    )
+    obj._deidentify_dicom()
+
+    # Unchanged pixels == any burned-in PHI is still there.
+    assert bytes(ds.PixelData) == before

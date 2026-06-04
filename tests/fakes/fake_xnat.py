@@ -80,7 +80,12 @@ class FakeFile(_CallLog):
         self._maybe_raise(self._root)
         dest = Path(dest)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(f"[FakeXNAT placeholder for {self._filename}]", encoding="utf-8")
+        # Use canned content if set on the root fake, otherwise write a placeholder.
+        canned: Optional[bytes] = self._root._file_contents.get(self._filename)
+        if canned is not None:
+            dest.write_bytes(canned)
+        else:
+            dest.write_text(f"[FakeXNAT placeholder for {self._filename}]", encoding="utf-8")
         self._record(self._root, "file.get_copy", (str(dest),), {"_filename": self._filename})
         return dest
 
@@ -234,6 +239,7 @@ class FakeXNAT:
         self.project_users: List[str] = project_users if project_users is not None else ["testuser"]
         self.calls: List[Dict[str, Any]] = []
         self._next_failure: Optional[BaseException] = None
+        self._file_contents: Dict[str, bytes] = {}
         self.select = FakeSelector(root=self)
 
     # ------------------------------------------------------------------
@@ -243,6 +249,18 @@ class FakeXNAT:
     def set_next_failure(self, exc: BaseException) -> None:
         """Next file/resource operation will raise *exc* (cleared after one use)."""
         self._next_failure = exc
+
+    def set_file_content(self, filename: str, content: bytes) -> None:
+        """
+        Prime the content that ``file.get_copy(dest)`` will write for *filename*.
+
+        Call this before the ``get_copy`` that should return the canned bytes.
+        Passing ``None`` removes a previously-set override.
+        """
+        if content is None:
+            self._file_contents.pop(filename, None)
+        else:
+            self._file_contents[filename] = content
 
     # ------------------------------------------------------------------
     # Connection lifecycle (no-ops for offline use)

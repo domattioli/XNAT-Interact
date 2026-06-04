@@ -883,6 +883,10 @@ class ConfigTables( UIDandMetaInfo ):
         else:
             return None, write_fn
     
+    def _fingerprint_file( self, ffn ) -> str:
+        """Return hex-encoded sha256 of the bytes at *ffn* (str or Path)."""
+        with open( ffn, 'rb' ) as _f:   return hashlib.sha256( _f.read() ).hexdigest()
+
     def pull_from_xnat( self, write_ffn: Opt[Path]=None, verbose: Opt[bool]=True ) -> Opt[Path]:
         if write_ffn is None:   write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( self.config_ffn )
         else:
@@ -891,7 +895,11 @@ class ConfigTables( UIDandMetaInfo ):
             write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( write_ffn )
         self._load( write_ffn, verbose )
         if verbose:                     print( f'\t...ConfigTables successfully populated from XNAT data.\n' )
-        
+
+        # Capture a fingerprint of the downloaded bytes so push_to_xnat can
+        # detect if the server copy changed between our download and our upload.
+        self._server_fingerprint_at_load = self._fingerprint_file( write_ffn )
+
         self._reinitialize_tables_with_extra_columns()
         return write_ffn
 
@@ -908,12 +916,67 @@ class ConfigTables( UIDandMetaInfo ):
         pass
 
 
+    def _check_for_lost_update( self ) -> None:
+        """
+        Re-fetch the current server copy and compare its fingerprint to the one
+        captured when we last called pull_from_xnat.  If they differ, someone
+        else has modified the shared catalog since we loaded it, and we MUST NOT
+        silently overwrite their work.
+
+        Raises
+        ------
+        FriendlyError  (as ValueError)
+            When the server copy has changed since our download, preventing a
+            silent lost-update clobber.
+
+        TODO (follow-up issue): implement true optimistic locking or an
+        interactive merge helper so users can reconcile concurrent edits instead
+        of having to discard their own changes and re-apply them manually.
+        """
+        baseline = getattr( self, '_server_fingerprint_at_load', None )
+        if baseline is None:
+            # No fingerprint recorded (e.g. first-time init path that never
+            # called pull_from_xnat).  Skip the check — nothing to compare.
+            return
+
+        # Download the current server copy to a temporary file.
+        import tempfile as _tempfile
+        with _tempfile.NamedTemporaryFile( suffix='.json', delete=False ) as _tmp:
+            _tmp_path = _tmp.name
+        try:
+            self.xnat_connection.server.select.project(
+                self.xnat_connection.xnat_project_name
+            ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( _tmp_path )
+            current_fingerprint = self._fingerprint_file( _tmp_path )
+        finally:
+            if os.path.exists( _tmp_path ):     os.remove( _tmp_path )
+
+        if current_fingerprint != baseline:
+            from src.services.errors import FriendlyError
+            fe = FriendlyError(
+                title="Shared catalog changed since you loaded it",
+                message=(
+                    "The shared catalog (MetaTables.json) was modified by someone else "
+                    "after you downloaded it. Saving now would silently overwrite their "
+                    "work. Your local changes have NOT been saved to the server."
+                ),
+                recourse=[
+                    "Call pull_from_xnat() to reload the latest version from the server.",
+                    "Re-apply your edits on top of the freshly-loaded copy.",
+                    "Then call push_to_xnat() again.",
+                    "Contact the Data Librarian if you need help merging concurrent edits.",
+                ],
+            )
+            raise ValueError( f"{fe.title}: {fe.message}" )
+
     def push_to_xnat( self, verbose: Opt[bool]=True ) -> bool:
         # Create a backup before we do anything.
         _, out = self.create_backup( verbose=verbose )
         try:
             self.ensure_primary_keys_validity()
             if self.save( verbose ) is False:   return False
+            # T029: detect-and-refuse lost-update before overwriting the server copy.
+            self._check_for_lost_update()
             #
             self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
             if verbose:                     print( f'\t...ConfigTables (config.json) successfully updated on XNAT!\n' )

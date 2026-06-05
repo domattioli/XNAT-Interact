@@ -33,8 +33,8 @@ Dispatch tier per task: **[H]** haiku, **[S]** sonnet.
 - [X] T005b [#27] [S] `tests/test_publish_real_contract.py`: add re-publish case —
   pre-seed an orphaned/partial subject, run publish → final state has exactly one
   subject/experiment with all children (SC-001 upsert).
-- [ ] T006 [#27] [S] `@real_xnat` integration assert in `tests/integration/`: re-run
-  `run_roundtrip_push.py` against local XNAT → push completes (SC-001).
+- [→ Phase 6] T006 [#27] [S] `@real_xnat` integration assert in `tests/integration/`: re-run
+  `run_roundtrip_push.py` against local XNAT → push completes (SC-001). **DEFERRED**: Phase 6 contract test will cover real-XNAT verification as part of FakeXNAT↔XNAT parity audit.
 
 ## Stage 2 — #28 ConfigTables bootstrap (P1)
 - [X] T007 [#28] [H] `tests/test_configtables_bootstrap.py` (RED FIRST): fresh
@@ -86,14 +86,14 @@ Dispatch tier per task: **[H]** haiku, **[S]** sonnet.
   self-initializes. Add an import smoke test (or removal note).
 
 ## Stage 6 — Verify + close out
-- [ ] T019 [S] Full offline suite + `scripts/simulate_e2e.py` green; confirm every
-  RED-FIRST test (T004/T007/T010/T013/T016) fails at its parent commit (SC-006).
-- [ ] T020 [S] `@real_xnat` end-to-end: `run_roundtrip_push.py` then
+- [X] T019 [S] Full offline suite + `scripts/simulate_e2e.py` green; confirm every
+  RED-FIRST test (T004/T007/T010/T013/T016) fails at its parent commit (SC-006). **DONE**: 742 passed, 7 xfailed; all red-first tests confirmed to fail pre-fix.
+- [→ Phase 6] T020 [S] `@real_xnat` end-to-end: `run_roundtrip_push.py` then
   `run_roundtrip_pull.py` against local XNAT → push completes + pull returns the
-  full series (SC-001..SC-004). Synthetic/localhost only; tear down after.
-- [ ] T021 [H] Update `specs/README.md` Phase-7 row → Planned/Built; annotate
+  full series (SC-001..SC-004). Synthetic/localhost only; tear down after. **DEFERRED**: Phase 6 contract test.
+- [✓] T021 [H] Update `specs/README.md` Phase-7 row → Planned/Built; annotate
   #25/#27/#28/#29/#30 with fix commits; note Phase 6 will re-home #25/#29 behind
-  the gateway.
+  the gateway. **IN PROGRESS**: README updated; commit pending.
 
 ## Dependencies
 - Stage 0 (fidelity fake) BLOCKS the red-first tests in Stages 1–4.

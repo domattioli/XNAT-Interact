@@ -2,11 +2,13 @@
 
 **Feature Branch**: `007-real-xnat-roundtrip-correctness`
 **Created**: 2026-06-05
-**Status**: Draft (planning only — not yet built)
+**Status**: ✅ Complete (all five defects fixed, 742 tests green, offline verified; real-XNAT fidelity verification deferred to Phase 6 contract test)
 **Input**: Real-XNAT integration round-trip (PR #23 harness,
 `tests/integration/run_roundtrip_{push,pull}.py` + logs) run against a live XNAT
 1.9.3 with synthetic no-PHI data. Surfaced five correctness defects invisible to
 the 523-test offline FakeXNAT suite. Issues: **#27, #28, #29, #25, #30**.
+
+**Completed**: Commit d0d80ae. All five defects fixed in `src/xnat_experiment_data.py`, `src/utilities.py`, and `app/logic/download.py`. FakeXNAT fidelity extended (post-create datatype cache, N-file resources, label vs ID). Offline suite: 742 passed, 7 xfailed.
 
 ## Overview
 

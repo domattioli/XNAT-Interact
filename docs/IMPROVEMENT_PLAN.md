@@ -23,6 +23,11 @@ Two concrete goals drive every recommendation below:
 
 ---
 
+> **For builders:** the technical data-model reference — the XNAT hierarchy, the
+> exact pyxnat surface this repo uses, the resource-label extension table, and
+> recommendations for modular future work — lives in
+> [`docs/XNAT_MODEL.md`](XNAT_MODEL.md). This section is the plain-language version.
+
 ## How the tool works today (plain-language map)
 
 ```

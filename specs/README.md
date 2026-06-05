@@ -10,6 +10,9 @@ with the trio:
 
 Gates: [`.specify/memory/constitution.md`](../.specify/memory/constitution.md).
 Agent delegation + token rules: [`../AGENTS.md`](../AGENTS.md).
+Data model we build on (XNAT hierarchy, pyxnat surface, seams, extension points):
+[`../docs/XNAT_MODEL.md`](../docs/XNAT_MODEL.md) — read before adding a new data
+type, file kind, or download mode.
 
 | # | Phase | Folder | Status |
 |---|---|---|---|

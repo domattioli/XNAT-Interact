@@ -22,6 +22,7 @@ type, file kind, or download mode.
 | 3 | Packaging & install (detect-or-bundle Python; Software Center) | [`003-phase-3-packaging-and-install`](003-phase-3-packaging-and-install/) | ✅ Built (`installer/`) — OPS items deferred¹ |
 | 4 | Onboarding checklist & static site | [`004-phase-4-onboarding-and-docs`](004-phase-4-onboarding-and-docs/) | ✅ Built — enable Pages² |
 | 5 | Annotations & segmentations (multi-user, extensible, RLE storage; aggregator seam) | [`005-annotations-segmentations`](005-annotations-segmentations/) | ✅ Built (`src/annotations/`) — STAPLE deferred to aggregator seam |
+| 6 | XNAT alignment (gateway ABC, conventions module, download fix #25, assessor seam, xnatpy spike) | [`006-xnat-alignment`](006-xnat-alignment/) | 📋 Planned (spec+plan+tasks) — refactor, not yet built |
 
 ¹ Code + build specs + runbooks shipped. Operator/ITS-only items tracked in [`docs/OPS_CHECKLIST.md`](../docs/OPS_CHECKLIST.md): ITS Software Center packaging request, Windows code-signing cert, Apple Developer ID + notarization, app-control allowlisting.
 ² Static site + Pages workflow shipped; operator must enable Pages (Settings → Pages → Source = GitHub Actions).

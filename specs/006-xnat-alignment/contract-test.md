@@ -160,13 +160,16 @@ Track divergences between FakeXNAT and real XNAT.
 
 | Behavior | FakeXNAT | Real XNAT | Design Choice or Bug | Notes |
 |----------|----------|-----------|----------------------|-------|
-| Post-`create()` datatype cache | Filled (Phase 7 fix) | Empty until set | FakeXNAT reproduction | Phase 7 #27 |
-| Resource `# Files` endpoint | Reports count | Reports count | Aligned | Verified Phase 7 #25 |
+| Post-`create()` datatype cache | Filled (Phase 7 fix) | Empty until set | FakeXNAT reproduction | Phase 7 #27; verified T001 |
+| Resource `# Files` endpoint | Reports count | Reports count | Aligned | Phase 7 #25; verified T002 |
 | Subject label resolution | Returns label + internal ID | Returns both | Aligned | Phase 7 #29 |
 | Experiment enumeration (type-agnostic) | Filters xsiType | Lists all types | Aligned | Phase 7 #29 |
-| Idempotent `create()` on existing | Reuses handle | Reuses handle | Aligned | Phase 7 #27 |
-| Assessor vs. Resource | (TBD by gateway design) | (TBD by gateway design) | Design choice | Phase 6 scope |
-| Versioning overwrite (no dupes) | (TBD) | (TBD) | Design choice | Phase 6 scope |
+| Idempotent `create()` on existing | Reuses handle | Reuses handle | Aligned | Phase 7 #27; verified T006 |
+| Resource registry lookup (plural/singular QS) | Unified registry (Phase 6 Stage 1) | N/A (real XNAT) | FakeXNAT enhancement | Contract tests use both `/project/` and `/projects/` formats; FakeXNAT now normalizes both via _parse_resource_qs |
+| Multi-file resource enumeration | list_files() returns all N | enumerate endpoint lists N | Aligned | Phase 7 #25; verified T002 |
+| Assessor vs. Resource | Resource API tested (T003) | Assessor API deferred | Design choice | Phase 6 gateway will clarify (assessor or resource for derived) |
+| Versioning overwrite (no dupes) | put_zip(..., overwrite=True) → same resource | Same | Aligned | T004 verified idempotent overwrite |
+| Missing-tag guard (InstanceNumber) | No crash, default used | No crash, default used | Aligned | Phase 7 #30; verified T007 |
 
 ---
 

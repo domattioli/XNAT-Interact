@@ -211,6 +211,21 @@ class FakeSelectable(_CallLog):
         self._record(self._root, "selectable.create", (), {"_qs": self._qs, **kwargs})
 
     def resource(self, label: str) -> FakeResource:
+        # Registry lookup: if this resource was pre-seeded via seed_resource_files(),
+        # return the same FakeResource instance so the seeded files are accessible.
+        # Parse the QS to extract subject/experiment/scan.
+        parsed = self._root.select._parse_resource_qs(self._qs)
+        if parsed:
+            subj, exp, scan, _ = parsed
+            key = (subj, exp, scan, label)
+            if key in self._root._resources:
+                return self._root._resources[key]
+            # No pre-seeded resource; create a new one and register it.
+            resource = FakeResource(root=self._root, label=label)
+            self._root._resources[key] = resource
+            return resource
+
+        # Fallback: create a new resource without registry (backward-compatible).
         return FakeResource(root=self._root, label=label)
 
 
@@ -265,6 +280,47 @@ class FakeSelector:
                 root=self._root, querystring=querystring
             )
         return self._root._selectables[querystring]
+
+    def _parse_resource_qs(self, qs: str) -> Optional[tuple]:
+        """
+        Parse a querystring like:
+            /projects/P/subjects/S/experiments/E/scans/SCAN/resources/RES
+        or: /project/P/subject/S/experiment/E/scan/SCAN
+        and return (subject, experiment, scan, resource_label) or None.
+
+        This enables resource registry lookup for both singular and plural
+        XNAT path formats.
+        """
+        parts = [p for p in qs.split("/") if p]
+        try:
+            # Try plural format: projects/subjects/experiments/scans/resources
+            if "subjects" in parts and "experiments" in parts and "scans" in parts:
+                idx_sub = parts.index("subjects")
+                idx_exp = parts.index("experiments")
+                idx_scan = parts.index("scans")
+                subj = parts[idx_sub + 1] if idx_sub + 1 < len(parts) else None
+                exp = parts[idx_exp + 1] if idx_exp + 1 < len(parts) else None
+                scan = parts[idx_scan + 1] if idx_scan + 1 < len(parts) else None
+                # Resource label may be in the QS or provided separately
+                resource_label = None
+                if "resources" in parts:
+                    idx_res = parts.index("resources")
+                    resource_label = parts[idx_res + 1] if idx_res + 1 < len(parts) else None
+                if subj and exp and scan:
+                    return (subj, exp, scan, resource_label)
+            # Try singular format: project/subject/experiment/scan (no resources)
+            elif "subject" in parts and "experiment" in parts and "scan" in parts:
+                idx_sub = parts.index("subject")
+                idx_exp = parts.index("experiment")
+                idx_scan = parts.index("scan")
+                subj = parts[idx_sub + 1] if idx_sub + 1 < len(parts) else None
+                exp = parts[idx_exp + 1] if idx_exp + 1 < len(parts) else None
+                scan = parts[idx_scan + 1] if idx_scan + 1 < len(parts) else None
+                if subj and exp and scan:
+                    return (subj, exp, scan, None)
+        except (ValueError, IndexError):
+            pass
+        return None
 
     def project(self, name: str) -> FakeProject:
         return FakeProject(root=self._root, name=name)

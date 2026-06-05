@@ -28,3 +28,6 @@ __pycache__/
 *.pyc
 /tests/__pycache__
 .pytest_cache/
+
+# batch run artifacts (generated)
+*-batch-result.json

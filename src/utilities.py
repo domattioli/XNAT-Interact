@@ -630,8 +630,13 @@ class ConfigTables( UIDandMetaInfo ):
             # a missing-resource / parse error.  Any unexpected error (network
             # outage, permission failure, etc.) is re-raised with a plain-
             # language message so it is not silently swallowed as "first-run".
+            # T008 (#28): also treat pyxnat DataError ("does not exist") as
+            # first-run — real pyxnat raises this when the config file has
+            # never been pushed to a brand-new project.
+            import pyxnat.core.errors as _pyxnat_errors
             _is_first_run_error = isinstance(
-                _ct_init_exc, (FileNotFoundError, KeyError, ValueError)
+                _ct_init_exc,
+                (FileNotFoundError, KeyError, ValueError, _pyxnat_errors.DataError),
             )
             if not _is_first_run_error:
                 # Surface the real error instead of masking it as first-time DB setup.
@@ -844,7 +849,37 @@ class ConfigTables( UIDandMetaInfo ):
     def _validate_login_for_important_functions( self, assert_librarian: Opt[bool]=False ) ->  None:
         assert self.login_info.is_valid, f"Provided login info must be validated before accessing config file: {self.login_info}"
         if hasattr( self, '_tables' ):      assert self.is_user_registered(), f'User {self.accessor_uid} must first be registed before saving config file.'
-        if assert_librarian:                assert self.accessor_username.lower() in [owner.lower() for owner in self.project_owner], f'Only user(s) {self.project_owner} can push config file to the xnat server.'
+        if assert_librarian:
+            # T009 (#28): replace hardcoded username list with project-membership
+            # lookup.  Authorization passes when ANY of the following is true:
+            #   (a) accessor_username is a project owner/librarian (project_owner list
+            #       populated from local_variables.data_librarian — kept as fallback).
+            #   (b) accessor_username is a current project member via XNAT's
+            #       project_handle.users() (reuses _verify_login's membership path).
+            #   (c) accessor_username appears in XNAT_CONFIG_ALLOWLIST env var
+            #       (comma-separated; escape hatch for CI/service accounts).
+            # No identities hardcoded here — remove this comment for prod cleanup.
+            _uname = self.accessor_username.lower()
+            _authorized = _uname in [owner.lower() for owner in self.project_owner]
+            if not _authorized:
+                # (b) project membership via XNAT handle
+                try:
+                    _ph = self._xnat_connection.project_handle
+                    if _ph is not None and hasattr(_ph, "users"):
+                        _authorized = _uname in [u.lower() for u in (_ph.users() or [])]
+                except Exception:  # noqa: BLE001
+                    pass  # membership lookup best-effort; fall through to env check
+            if not _authorized:
+                # (c) config/env allowlist (CI / service accounts)
+                import os as _os
+                _allowlist_raw = _os.environ.get("XNAT_CONFIG_ALLOWLIST", "")
+                _allowlist = [s.strip().lower() for s in _allowlist_raw.split(",") if s.strip()]
+                _authorized = _uname in _allowlist
+            assert _authorized, (
+                f"User '{self.accessor_username}' is not authorized to initialize the "
+                f"config file.  Must be a project member/owner or listed in the "
+                f"XNAT_CONFIG_ALLOWLIST environment variable."
+            )
     
     def _custom_json_serializer( self, data, indent=4 ):
         def serialize( obj, depth=0 ):

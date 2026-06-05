@@ -53,26 +53,46 @@ def _safe_int(value: Any, default: int = -1) -> int:
 
 def _subject_names(server: Any, project_name: str) -> List[str]:
     """
-    Return list of subject labels in *project_name*.
+    Return list of subject **labels** in *project_name*.
 
-    Real pyxnat path:  server.select("/projects/<name>/subjects/*").get()
-    FakeXNAT path:     server.list_subjects(project_name)  (injected by test subclass)
+    T011 fix (#29): real pyxnat's wildcard-select returns internal IDs
+    (e.g. PROJ_S00001) rather than human-readable labels.  After a subject
+    list is obtained we resolve each entry to its label via
+    label_for_subject() when the server supports it.  Downstream queries
+    then use labels — not internal IDs — so experiment lookups succeed.
 
-    Falls back to empty list if neither surface is available.
+    Resolution priority:
+      1. server.list_subjects_with_labels(project_name) → [(internal_id, label), ...]
+      2. Internal IDs from select().get() or list_subjects(), then resolved
+         individually via server.label_for_subject(id).
+      3. Raw IDs unchanged (backward-compatible fallback).
     """
+    # T011: prefer the dedicated label-aware listing hook when available.
+    if hasattr(server, "list_subjects_with_labels") and callable(server.list_subjects_with_labels):
+        pairs = server.list_subjects_with_labels(project_name)
+        return [label for _, label in pairs] if pairs else []
+
     # Primary path — real pyxnat wildcard select
+    raw_ids: List[str] = []
     if hasattr(server, "select") and callable(server.select):
         qs = f"/projects/{project_name}/subjects/*"
         selected = server.select(qs)
         if hasattr(selected, "get") and callable(selected.get):
             raw = selected.get()
-            return list(raw) if raw else []
+            raw_ids = list(raw) if raw else []
 
     # Fallback for test doubles that expose list_subjects directly
-    if hasattr(server, "list_subjects") and callable(server.list_subjects):
-        return list(server.list_subjects(project_name))
+    if not raw_ids and hasattr(server, "list_subjects") and callable(server.list_subjects):
+        raw_ids = list(server.list_subjects(project_name))
 
-    return []
+    if not raw_ids:
+        return []
+
+    # T011: resolve internal IDs → labels when the server supports it.
+    if hasattr(server, "label_for_subject") and callable(server.label_for_subject):
+        return [server.label_for_subject(iid) for iid in raw_ids]
+
+    return raw_ids
 
 
 def _experiment_labels(server: Any, project_name: str, subject: str) -> List[str]:

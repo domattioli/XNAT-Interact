@@ -89,12 +89,18 @@ class FakeFile(_CallLog):
         self._maybe_raise(self._root)
         dest = Path(dest)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        # Use canned content if set on the root fake, otherwise write a placeholder.
+        # Priority 1: root-level canned content (set_file_content).
+        # Priority 2: T003 staged bytes in the parent resource.
+        # Priority 3: placeholder text.
         canned: Optional[bytes] = self._root._file_contents.get(self._filename)
         if canned is not None:
             dest.write_bytes(canned)
         else:
-            dest.write_text(f"[FakeXNAT placeholder for {self._filename}]", encoding="utf-8")
+            staged = self._resource.get_file_bytes(self._filename)
+            if staged is not None:
+                dest.write_bytes(staged)
+            else:
+                dest.write_text(f"[FakeXNAT placeholder for {self._filename}]", encoding="utf-8")
         self._record(self._root, "file.get_copy", (str(dest),), {"_filename": self._filename})
         return dest
 
@@ -115,6 +121,11 @@ class FakeResource(_CallLog):
     def __init__(self, root: "FakeXNAT", label: str) -> None:
         self._root = root
         self._label = label
+        # T003: ordered list of (filename, bytes) representing real staged files.
+        # Populated by seed_resource_files(); list_files() enumerates them and
+        # file(fn).get_copy() returns the real bytes.  Empty by default so all
+        # existing tests that never call seed_resource_files() are unaffected.
+        self._staged_files: List[tuple] = []  # List[tuple[str, bytes]]
 
     def file(self, fn: str) -> FakeFile:
         return FakeFile(resource=self, filename=fn)
@@ -122,6 +133,23 @@ class FakeResource(_CallLog):
     def put_zip(self, ffn: Any, *, content: str = "", format: str = "", tags: str = "", overwrite: Optional[bool] = None) -> None:
         self._maybe_raise(self._root)
         self._record(self._root, "resource.put_zip", (ffn,), {"content": content, "format": format, "tags": tags, "overwrite": overwrite, "_label": self._label})
+
+    # --- T003: real-file enumeration ------------------------------------------
+
+    def list_files(self) -> List[str]:
+        """Return filenames of staged real files (T003 fidelity)."""
+        return [fn for fn, _ in self._staged_files]
+
+    def num_files(self) -> int:
+        """Return the server-reported '# Files' count (T003)."""
+        return len(self._staged_files)
+
+    def get_file_bytes(self, fn: str) -> Optional[bytes]:
+        """Return staged bytes for *fn*, or None if not found."""
+        for name, data in self._staged_files:
+            if name == fn:
+                return data
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -264,6 +292,18 @@ class FakeXNAT:
         with pytest.raises(TimeoutError):
             fake.select("/project/X/subject/S").resource("R").put_zip("/f.zip")
 
+    T002 — subject enumeration fidelity:
+        Real pyxnat returns internal IDs (``PROJ_S00001``) from wildcard selects;
+        human labels are separate attributes.  Use ``seed_subject_label`` to map an
+        internal ID to a label, then subclass and override ``list_subjects`` to
+        expose EITHER internal IDs (reproducing the bug) OR labels (post-fix).
+        ``_subject_labels`` maps internal_id → label for downstream lookup.
+
+    T003 — scan resource fidelity:
+        Use ``seed_resource_files(resource, filenames_and_bytes)`` to stage N real
+        files in a FakeResource so that ``resource.list_files()`` returns all names
+        and ``resource.file(fn).get_copy(dest)`` writes real bytes.
+
     """
 
     def __init__(
@@ -276,7 +316,7 @@ class FakeXNAT:
         self.project_users: List[str] = project_users if project_users is not None else ["testuser"]
         # fidelity_mode=True reproduces pyxnat behaviours invisible to the plain
         # offline double — specifically the post-create() empty datatype cache
-        # (#27).  Defaults to False so all 718 existing tests are unaffected.
+        # (#27).  Defaults to False so all 726 existing tests are unaffected.
         self.fidelity_mode: bool = fidelity_mode
         self.calls: List[Dict[str, Any]] = []
         self._next_failure: Optional[BaseException] = None
@@ -286,6 +326,16 @@ class FakeXNAT:
         # handle guarantee in FakeSelector.__call__.
         self._selectables: Dict[str, "FakeSelectable"] = {}
         self.select = FakeSelector(root=self)
+        # T002: internal_id → label mapping for subject-label fidelity tests.
+        # Populated by seed_subject_label(); looked up by label_for_subject().
+        self._subject_labels: Dict[str, str] = {}
+        # T002: RF experiment registry — list of dicts with keys:
+        #   subject_label, experiment_label, xsi_type
+        # Populated by seed_rf_experiment(); exposed by list_experiments_with_type().
+        self._experiments: List[Dict[str, Any]] = []
+        # T003: registry of FakeResource handles keyed by (subject, experiment, scan, resource_label)
+        # so seed_resource_files() can prime the same FakeResource that select() returns.
+        self._resources: Dict[tuple, "FakeResource"] = {}
 
     # ------------------------------------------------------------------
     # Failure injection
@@ -325,6 +375,77 @@ class FakeXNAT:
     def reset_calls(self) -> None:
         """Clear the recorded call log without rebuilding the object."""
         self.calls.clear()
+
+    # ------------------------------------------------------------------
+    # T002 helpers — subject label / experiment type fidelity
+    # ------------------------------------------------------------------
+
+    def seed_subject_label(self, internal_id: str, label: str) -> None:
+        """
+        Register a mapping from *internal_id* (e.g. ``PROJ_S00001``) to a
+        human-readable *label* (e.g. ``ITEST_SUBJ_0001``).
+
+        Used by tests that reproduce the bug where browse returns internal IDs
+        instead of labels.  Gate: no effect unless the test code explicitly calls
+        this helper, so all existing tests remain unaffected.
+        """
+        self._subject_labels[internal_id] = label
+
+    def label_for_subject(self, internal_id: str) -> str:
+        """Return the human label for *internal_id*, or *internal_id* if unmapped."""
+        return self._subject_labels.get(internal_id, internal_id)
+
+    def seed_rf_experiment(
+        self,
+        subject_label: str,
+        experiment_label: str,
+        xsi_type: str = "xnat:rfSessionData",
+    ) -> None:
+        """
+        Stage an RF (or any-type) experiment so that ``list_experiments_with_type``
+        returns it.  Subject *subject_label* and experiment *experiment_label* must
+        already be reachable via ``list_subjects`` / ``list_experiments`` in the
+        subclass; this helper only adds the xsiType metadata.
+        """
+        self._experiments.append(
+            {
+                "subject_label": subject_label,
+                "experiment_label": experiment_label,
+                "xsi_type": xsi_type,
+            }
+        )
+
+    def list_experiments_with_type(self, project_name: str) -> List[Dict[str, Any]]:
+        """
+        Return a list of experiment dicts with keys:
+          subject_label, experiment_label, xsi_type.
+
+        Mirrors real pyxnat's project-level experiment listing which includes an
+        xsiType column.  Used by the type-agnostic browse path (T012 fix).
+        Returns only seeded experiments; empty list when nothing seeded.
+        """
+        return list(self._experiments)
+
+    # ------------------------------------------------------------------
+    # T003 helper — scan resource file seeding
+    # ------------------------------------------------------------------
+
+    def seed_resource_files(
+        self,
+        resource: "FakeResource",
+        files: List[tuple],
+    ) -> None:
+        """
+        Prime *resource* with N real files for byte round-trip tests (T003).
+
+        Parameters
+        ----------
+        resource : FakeResource to populate.
+        files    : List of (filename: str, content: bytes) tuples.
+                   Filenames must be unique within the resource.
+        """
+        for fn, data in files:
+            resource._staged_files.append((fn, data))
 
     def seed_existing(self, querystring: str) -> "FakeSelectable":
         """

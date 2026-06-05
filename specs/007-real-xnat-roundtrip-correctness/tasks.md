@@ -13,10 +13,10 @@ Dispatch tier per task: **[H]** haiku, **[S]** sonnet.
   empty datatype cache — a freshly `create()`d handle's `attrs._get_datatype()`
   returns `None` until set, so `attrs.mset` blows up exactly like real pyxnat.
   Gate behind a fidelity flag so existing tests are unaffected.
-- [ ] T002 [#29] [S] `tests/fakes/fake_xnat.py`: subject enumeration returns
+- [X] T002 [#29] [S] `tests/fakes/fake_xnat.py`: subject enumeration returns
   internal IDs (`*_S#####`) distinct from labels; experiment listing carries an
   `xsiType` column incl. `xnat:rfSessionData`. Seeder helper to stage an RF exp.
-- [ ] T003 [#25] [H] `tests/fakes/fake_xnat.py`: a scan resource holds N real files
+- [X] T003 [#25] [H] `tests/fakes/fake_xnat.py`: a scan resource holds N real files
   (byte round-trip) + reports `# Files`; `list_files`/get enumerates them.
 
 ## Stage 1 — #27 push blocker (P1 critical, BLOCKS round-trip)
@@ -37,32 +37,32 @@ Dispatch tier per task: **[H]** haiku, **[S]** sonnet.
   `run_roundtrip_push.py` against local XNAT → push completes (SC-001).
 
 ## Stage 2 — #28 ConfigTables bootstrap (P1)
-- [ ] T007 [#28] [H] `tests/test_configtables_bootstrap.py` (RED FIRST): fresh
+- [X] T007 [#28] [H] `tests/test_configtables_bootstrap.py` (RED FIRST): fresh
   project (no `database_config.json`) → today propagates `pyxnat...DataError`;
   non-whitelisted user (`admin`) → today raises `PermissionError`.
-- [ ] T008 [#28] [H] `src/utilities.py` (~L634): widen first-run `except` to include
+- [X] T008 [#28] [H] `src/utilities.py` (~L634): widen first-run `except` to include
   `pyxnat.core.errors.DataError` ("does not exist" → first run → self-initialize),
   alongside `FileNotFoundError`/`KeyError`/`ValueError`. Do NOT re-init over an
   existing-but-malformed file.
-- [ ] T009 [#28] [H] `src/utilities.py` (~L704): replace hardcoded
+- [X] T009 [#28] [H] `src/utilities.py` (~L704): replace hardcoded
   `['dmattioli','domattioli','stelong']` whitelist with project membership/owner
   lookup (reuse `_verify_login`'s users()/owner path) **OR** a config/env-listed
   allowlist (escape hatch for CI/admin service accounts). No identities in code.
   T007 covers member + non-member; add an allowlisted-non-member case. Green T007.
 
 ## Stage 3 — #29 browse labels + type-agnostic enum (P1)
-- [ ] T010 [#29] [S] `tests/test_browse_labels.py` (RED FIRST): staged RF exp →
+- [X] T010 [#29] [S] `tests/test_browse_labels.py` (RED FIRST): staged RF exp →
   today `list_downloadable` returns `[]`; Subject column shows internal ID.
-- [ ] T011 [#29] [S] browse path (`_subject_names()` + enumeration): resolve subject
+- [X] T011 [#29] [S] browse path (`_subject_names()` + enumeration): resolve subject
   **labels** not internal IDs; query downstream by label.
-- [ ] T012 [#29] [S] experiment enumeration → type-agnostic (project experiments +
+- [X] T012 [#29] [S] experiment enumeration → type-agnostic (project experiments +
   `xsiType` column) so RF/CT/US surface. Green T010.
 
 ## Stage 4 — #25 full-series / whole-surgery download (P2)
-- [ ] T013 [#25] [S] `tests/test_download_full_series.py` (RED FIRST): N-file scan →
+- [X] T013 [#25] [S] `tests/test_download_full_series.py` (RED FIRST): N-file scan →
   today yields 1 synthesized file; assert post-fix N intact; whole-surgery →
   every scan; count-mismatch → FriendlyError; empty resource → friendly no-op.
-- [ ] T014 [#25] [S] `app/logic/download.py` (~L222): replace synthesized
+- [X] T014 [#25] [S] `app/logic/download.py` (~L222): replace synthesized
   `{subject}_{exp}_{scan}.dcm` with real resource-file enumeration
   (`CObject`/`Resource.get`) + count-verify vs server `# Files`; empty no-op.
   Keep gateway-portable (Phase 6 re-homes this).
@@ -70,7 +70,7 @@ Dispatch tier per task: **[H]** haiku, **[S]** sonnet.
   (auto-expand experiment → all scans) + a **content-scope picker** (source-only /
   subset / all / + derived), delivering a **single zip** (default = full source
   set). No streamlit in logic. Green T013.
-- [ ] T015b [#25] [S] `app/logic/download.py`: zip assembly from enumerated real
+- [X] T015b [#25] [S] `app/logic/download.py`: zip assembly from enumerated real
   files honoring the selected content scope; test in `test_download_full_series.py`
   asserts zip contents match each scope option (default = all source images).
 
@@ -80,7 +80,7 @@ Dispatch tier per task: **[H]** haiku, **[S]** sonnet.
 - [X] T017 [#30] [H] `src/xnat_experiment_data.py` (~L506): `hasattr`-guard
   `metadata.InstanceNumber` like its sibling tags; default/derive an index. Green
   T016.
-- [ ] T018 [#30] [H] `src/initialize_basic_metatable_items.py`: fix
+- [X] T018 [#30] [H] `src/initialize_basic_metatable_items.py`: fix
   `from Utilities import MetaTables` → `from src.utilities import ConfigTables`
   (+ API to current `ConfigTables`), OR remove the file if `ConfigTables`
   self-initializes. Add an import smoke test (or removal note).

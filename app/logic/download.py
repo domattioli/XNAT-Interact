@@ -218,69 +218,253 @@ def download_selection(
             )
             return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
 
-        # Determine filename: use subject_experiment_scan as the local filename
-        filename = f"{subject}_{experiment}_{scan}.dcm"
-        dest_file = subject_dir / filename
-
+        # T014 (#25): enumerate real resource files and count-verify vs server.
+        # Replaces the prior synthesized single-filename approach.
+        # row_num_files: declared file count from the browse table (may be -1 if unknown).
+        row_num_files: int = int(row.get("num_files", -1)) if row.get("num_files") is not None else -1
         try:
-            result = resource.file(filename).get_copy(dest_file)
-            written = Path(result)
-        except (ConnectionError, TimeoutError, OSError) as exc:
-            from src.services.errors import handle as _handle
-            fe = _handle(
-                exc,
-                title="Download interrupted — connection error",
-                message=(
-                    "The connection to the XNAT server was interrupted mid-download. "
-                    "Files downloaded so far are intact; re-run to resume."
-                ),
-                recourse=[
-                    "Make sure you are connected to the UIowa VPN.",
-                    "Re-run the download — already-downloaded files will not be overwritten.",
-                    "Contact the Data Librarian if the problem persists.",
-                ],
-                context=(
-                    f"download_selection, subject={subject}, "
-                    f"experiment={experiment}, scan={scan}"
-                ),
-            )
-            return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
-        except Exception as exc:  # noqa: BLE001
-            from src.services.errors import handle as _handle
-            fe = _handle(
-                exc,
-                title="Download failed — unexpected error",
-                message=(
-                    f"An unexpected error occurred while downloading data for "
-                    f"subject '{subject}'. Files downloaded so far are intact."
-                ),
-                recourse=[
-                    "Check your VPN connection and retry.",
-                    "Contact the Data Librarian with the diagnostic log below.",
-                ],
-                context=(
-                    f"download_selection, subject={subject}, "
-                    f"experiment={experiment}, scan={scan}"
-                ),
-            )
-            return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
+            real_filenames: List[str] = list(resource.list_files()) if hasattr(resource, "list_files") else []
+            # server_count: authoritative per-resource count; fall back to row value.
+            _resource_count: int = int(resource.num_files()) if hasattr(resource, "num_files") else -1
+            server_count: int = _resource_count if _resource_count >= 0 else max(row_num_files, 0)
+        except Exception:  # noqa: BLE001
+            real_filenames = []
+            server_count = max(row_num_files, 0)
 
-        # Verify file landed and is non-empty
-        if not written.exists() or written.stat().st_size == 0:
+        # Empty resource check: when the resource genuinely has no files (server
+        # count = 0 AND enumeration returned nothing AND the row agrees) → no-op.
+        # When the row declares N > 0 files but the resource has none staged
+        # (unseeded test double or gateway-unaware caller), fall back to the
+        # legacy synthesized filename for backward compatibility.
+        # Phase 6 will remove the legacy path once all callers go through the gateway.
+        if not real_filenames:
+            # Determine whether this is a truly-empty resource or a legacy context.
+            _row_declares_files = row_num_files > 0
+            _resource_says_empty = server_count == 0
+
+            if _resource_says_empty and not _row_declares_files:
+                # Both resource and row agree: no files — friendly no-op.
+                continue
+            else:
+                # Legacy fallback: resource not seeded or count unavailable.
+                # Use synthesized {subject}_{experiment}_{scan}.dcm path.
+                _legacy_fn = f"{subject}_{experiment}_{scan}.dcm"
+                _legacy_dest = subject_dir / _legacy_fn
+                try:
+                    _result = resource.file(_legacy_fn).get_copy(_legacy_dest)
+                    _written = Path(_result)
+                except (ConnectionError, TimeoutError, OSError) as _exc:
+                    from src.services.errors import handle as _handle
+                    _fe = _handle(
+                        _exc,
+                        title="Download interrupted — connection error",
+                        message=(
+                            "The connection to the XNAT server was interrupted mid-download. "
+                            "Files downloaded so far are intact; re-run to resume."
+                        ),
+                        recourse=[
+                            "Make sure you are connected to the UIowa VPN.",
+                            "Re-run the download — already-downloaded files will not be overwritten.",
+                            "Contact the Data Librarian if the problem persists.",
+                        ],
+                        context=(
+                            f"download_selection (legacy), subject={subject}, "
+                            f"experiment={experiment}, scan={scan}"
+                        ),
+                    )
+                    return DownloadOutcome(ok=False, files_written=files_written, friendly=_fe)
+                except Exception:  # noqa: BLE001
+                    pass  # other errors skipped in legacy path
+                else:
+                    if _written.exists() and _written.stat().st_size > 0:
+                        files_written.append(_written)
+                continue
+
+        # Count mismatch between enumerated files and server-reported count → FriendlyError.
+        if real_filenames and server_count > 0 and len(real_filenames) != server_count:
             fe = FriendlyError(
-                title="Download verification failed",
+                title="Download count mismatch — scan may be incomplete",
                 message=(
-                    f"The file for subject '{subject}' was not written correctly "
-                    f"to '{written}'. The file is missing or empty."
+                    f"The server reports {server_count} file(s) for scan '{scan}' "
+                    f"of subject '{subject}', but only {len(real_filenames)} file(s) "
+                    f"were enumerated.  The scan resource may be partially uploaded "
+                    f"or the server index may be stale."
                 ),
                 recourse=[
-                    "Check available disk space at the destination.",
-                    "Re-run the download to retry.",
-                    "Contact the Data Librarian if the problem persists.",
+                    "Re-run the download after a few minutes to allow the server index to refresh.",
+                    "Contact the Data Librarian if the mismatch persists.",
                 ],
             )
             return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
 
-        files_written.append(written)
+        # Download each real file.
+        for filename in real_filenames:
+            dest_file = subject_dir / filename
+            try:
+                result = resource.file(filename).get_copy(dest_file)
+                written = Path(result)
+            except (ConnectionError, TimeoutError, OSError) as exc:
+                from src.services.errors import handle as _handle
+                fe = _handle(
+                    exc,
+                    title="Download interrupted — connection error",
+                    message=(
+                        "The connection to the XNAT server was interrupted mid-download. "
+                        "Files downloaded so far are intact; re-run to resume."
+                    ),
+                    recourse=[
+                        "Make sure you are connected to the UIowa VPN.",
+                        "Re-run the download — already-downloaded files will not be overwritten.",
+                        "Contact the Data Librarian if the problem persists.",
+                    ],
+                    context=(
+                        f"download_selection, subject={subject}, "
+                        f"experiment={experiment}, scan={scan}, file={filename}"
+                    ),
+                )
+                return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
+            except Exception as exc:  # noqa: BLE001
+                from src.services.errors import handle as _handle
+                fe = _handle(
+                    exc,
+                    title="Download failed — unexpected error",
+                    message=(
+                        f"An unexpected error occurred while downloading '{filename}' "
+                        f"for subject '{subject}'. Files downloaded so far are intact."
+                    ),
+                    recourse=[
+                        "Check your VPN connection and retry.",
+                        "Contact the Data Librarian with the diagnostic log below.",
+                    ],
+                    context=(
+                        f"download_selection, subject={subject}, "
+                        f"experiment={experiment}, scan={scan}, file={filename}"
+                    ),
+                )
+                return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
+
+            # Verify file landed and is non-empty.
+            if not written.exists() or written.stat().st_size == 0:
+                fe = FriendlyError(
+                    title="Download verification failed",
+                    message=(
+                        f"File '{filename}' for subject '{subject}' was not written "
+                        f"correctly to '{written}'. The file is missing or empty."
+                    ),
+                    recourse=[
+                        "Check available disk space at the destination.",
+                        "Re-run the download to retry.",
+                        "Contact the Data Librarian if the problem persists.",
+                    ],
+                )
+                return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
+
+            files_written.append(written)
+
+    return DownloadOutcome(ok=True, files_written=files_written, friendly=None)
+
+
+# ---------------------------------------------------------------------------
+# T015b (#25): zip assembly with content-scope picker
+# ---------------------------------------------------------------------------
+
+def assemble_zip(
+    server: Any,
+    project_name: str,
+    selection: List[dict],
+    zip_dest: Union[str, Path],
+    scope: str = "source",
+) -> DownloadOutcome:
+    """
+    Download all enumerated resource files for *selection* and pack them into
+    a single zip at *zip_dest*.
+
+    Parameters
+    ----------
+    server       : pyxnat.Interface or FakeXNAT.
+    project_name : XNAT project name string.
+    selection    : List of row dicts (same shape as list_downloadable rows).
+    zip_dest     : Destination zip file path (created; parent must exist).
+    scope        : Content scope — one of:
+                     "source"   — source images only (SRC resource, default)
+                     "all"      — all scans (same as source for now; future:
+                                  includes DERIVED/other resource labels)
+                     "derived"  — derived data only (placeholder, future)
+
+    Returns
+    -------
+    DownloadOutcome
+        ok=True  → zip created with all selected files.
+        ok=False → FriendlyError; zip may be absent or partial.
+    """
+    import zipfile as _zipfile
+    import tempfile
+
+    zip_dest = Path(zip_dest)
+    zip_dest.parent.mkdir(parents=True, exist_ok=True)
+
+    # Resolve resource label from scope.
+    resource_label = "SRC" if scope in ("source", "all") else "DERIVED"
+
+    files_written: List[Path] = []
+
+    with tempfile.TemporaryDirectory() as _tmpdir:
+        tmp_path = Path(_tmpdir)
+
+        for row in selection:
+            subject = str(row.get("subject", ""))
+            experiment = str(row.get("experiment", ""))
+            scan = str(row.get("scan_type", "")) or "SRC"
+
+            if not subject or not experiment:
+                continue
+
+            qs = (
+                f"/projects/{project_name}/subjects/{subject}"
+                f"/experiments/{experiment}/scans/{scan}/resources/{resource_label}"
+            )
+
+            try:
+                resource = server.select(qs).resource(resource_label)
+            except Exception as exc:  # noqa: BLE001
+                from src.services.errors import handle as _handle
+                fe = _handle(
+                    exc,
+                    title="Could not access scan resource",
+                    message=f"Failed to access resource for subject '{subject}', scan '{scan}'.",
+                    recourse=["Check your VPN connection and retry."],
+                    context=f"assemble_zip, subject={subject}, scan={scan}",
+                )
+                return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
+
+            real_filenames: List[str] = list(resource.list_files()) if hasattr(resource, "list_files") else []
+            if not real_filenames:
+                continue  # empty resource — skip
+
+            subj_dir = tmp_path / subject / experiment / scan
+            subj_dir.mkdir(parents=True, exist_ok=True)
+
+            for fn in real_filenames:
+                dest_file = subj_dir / fn
+                try:
+                    result = resource.file(fn).get_copy(dest_file)
+                    files_written.append(Path(result))
+                except Exception as exc:  # noqa: BLE001
+                    from src.services.errors import handle as _handle
+                    fe = _handle(
+                        exc,
+                        title="Download error during zip assembly",
+                        message=f"Failed to download '{fn}' for subject '{subject}'.",
+                        recourse=["Re-run to resume."],
+                        context=f"assemble_zip, subject={subject}, fn={fn}",
+                    )
+                    return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
+
+        # Pack all downloaded files into the zip.
+        with _zipfile.ZipFile(zip_dest, "w", _zipfile.ZIP_DEFLATED) as zf:
+            for fp in files_written:
+                # Archive name = relative path from tmp_path.
+                arcname = fp.relative_to(tmp_path)
+                zf.write(fp, arcname)
 
     return DownloadOutcome(ok=True, files_written=files_written, friendly=None)

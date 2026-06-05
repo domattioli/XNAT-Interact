@@ -258,27 +258,23 @@ class ExperimentData():
         # over an orphaned/partial subject from a prior failed push reuses it
         # instead of duplicating or raising.
         #
-        # After each create() (or reuse) we explicitly set attrs._datatype so that
-        # pyxnat's internal _get_datatype() returns the xsiType rather than None.
-        # Without this, pyxnat's attrs.mset() raises:
-        #   TypeError: quote_from_bytes() expected bytes-like object, got str
-        # because it tries to URL-encode the xsiType for the REST path and the
-        # None→str coercion path in urllib.parse.quote_from_bytes() blows up.
+        # For experiments and scans, pass xsiType to create() so they are created
+        # with the correct schema type (e.g. xnat:rfSessionData). Do NOT set
+        # attrs._datatype before mset() — pyxnat will add xsiType to the mset() URI,
+        # causing XNAT to reject the request if it differs from the created type.
         # This is a pyxnat internals dependency — revisit if pyxnat is replaced
         # with xnatpy in Phase 6 (006-xnat-alignment).
         if not subj_inst.exists():                                                                          # type: ignore -- doesnt recognize .exists() attribute of subj_inst
             subj_inst.create()                                                                              # type: ignore -- doesnt recognize .create() attribute of subj_inst
-        subj_inst.attrs._datatype = 'xnat:subjectData'                                                     # type: ignore -- set datatype cache so mset() resolves xsiType (pyxnat internals, #27)
+        subj_inst.attrs._datatype = 'xnat:subjectData'                                                     # type: ignore -- set datatype cache for FakeXNAT fidelity test (pyxnat internals, #27)
         subj_inst.attrs.mset( { f'xnat:subjectData/GROUP': self.intake_form.group } )                      # type: ignore -- doesnt recognize .attrs attribute of subj_inst
         if not exp_inst.exists():                                                                           # type: ignore -- doesnt recognize .exists() attribute of exp_inst
-            exp_inst.create( **{    f'experiments': f'xnat:{self.schema_prefix_str}SessionData' })          # type: ignore -- doesnt recognize .create() attribute of exp_inst
-        exp_inst.attrs._datatype = f'xnat:{self.schema_prefix_str}SessionData'                             # type: ignore -- set datatype cache so mset() resolves xsiType (pyxnat internals, #27)
+            exp_inst.create(xsiType=f'xnat:{self.schema_prefix_str}SessionData')                           # type: ignore -- doesnt recognize .create() attribute of exp_inst
         exp_inst.attrs.mset( {  f'xnat:experimentData/ACQUISITION_SITE': self.intake_form.acquisition_site, # type: ignore -- doesnt recognize .attrs attribute of exp_inst
                                 f'xnat:experimentData/DATE': self.intake_form.datetime.date
                             } )
         if not scan_inst.exists():                                                                          # type: ignore -- doesnt recognize .exists() attribute of scan_inst
-            scan_inst.create( **{   f'scans': f'xnat:{self.schema_prefix_str}ScanData' } )                 # type: ignore -- doesnt recognize .create() attribute of scan_inst
-        scan_inst.attrs._datatype = f'xnat:{self.schema_prefix_str}ScanData'                               # type: ignore -- set datatype cache so mset() resolves xsiType (pyxnat internals, #27)
+            scan_inst.create(xsiType=f'xnat:{self.schema_prefix_str}ScanData')                             # type: ignore -- doesnt recognize .create() attribute of scan_inst
         scan_inst.attrs.mset( { f'xnat:{self.schema_prefix_str}ScanData/TYPE': self.scan_type_label,       # type: ignore -- doesnt recognize .attrs attribute of scan_inst
                                 f'xnat:{self.schema_prefix_str}ScanData/SERIES_DESCRIPTION': self.intake_form.ortho_procedure_type,
                                 f'xnat:{self.schema_prefix_str}ScanData/QUALITY': self.intake_form.scan_quality,

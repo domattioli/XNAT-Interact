@@ -1,190 +1,101 @@
-[02:55:04] ======================================================================
-[02:55:04] XNAT round-trip push harness
-[02:55:04]   URL:     http://localhost:8080
-[02:55:04]   Project: ITEST_RF
-[02:55:04]   User:    admin
-[02:55:04] ======================================================================
-[02:55:04] Synthetic DICOM dir: /tmp/xnat_it_dcm_es9l_s4z
-[02:55:04] 
+[04:10:23] ======================================================================
+[04:10:23] XNAT round-trip push harness
+[04:10:23]   URL:     http://localhost:8080
+[04:10:23]   Project: ITEST_RF
+[04:10:23]   User:    admin
+[04:10:23] ======================================================================
+[04:10:23] Synthetic DICOM dir: /tmp/xnat_it_dcm_u73b4aei
+[04:10:23] 
 --- STEP 0: create synthetic DICOMs ---
-[02:55:05]   wrote /tmp/xnat_it_dcm_es9l_s4z/frame_000.dcm (InstanceNumber=1)
-[02:55:05]   wrote /tmp/xnat_it_dcm_es9l_s4z/frame_001.dcm (InstanceNumber=2)
-[02:55:05]   wrote /tmp/xnat_it_dcm_es9l_s4z/frame_002.dcm (InstanceNumber=3)
-[02:55:05] STEP 0: OK
-[02:55:05] 
+[04:10:23]   wrote /tmp/xnat_it_dcm_u73b4aei/frame_000.dcm (InstanceNumber=1)
+[04:10:23]   wrote /tmp/xnat_it_dcm_u73b4aei/frame_001.dcm (InstanceNumber=2)
+[04:10:23]   wrote /tmp/xnat_it_dcm_u73b4aei/frame_002.dcm (InstanceNumber=3)
+[04:10:23] STEP 0: OK
+[04:10:23] 
 --- STEP 1: import src modules ---
-[02:55:05]   AppConfig.server_url (resolved xnat_project_url): 'http://localhost:8080'
-[02:55:05]   AppConfig.project_name: 'ITEST_RF'
-[02:55:05] STEP 1: OK
-[02:55:05] 
+[04:10:23]   AppConfig.server_url (resolved xnat_project_url): 'http://localhost:8080'
+[04:10:23]   AppConfig.project_name: 'ITEST_RF'
+[04:10:23] STEP 1: OK
+[04:10:23] 
 --- STEP 2: XNATLogin ---
-[02:55:05]   login.is_valid = True
-[02:55:05] STEP 2: OK
-[02:55:05] 
+[04:10:24]   login.is_valid = True
+[04:10:24] STEP 2: OK
+[04:10:24] 
 --- STEP 3: XNATConnection ---
-[02:55:06]   conn.is_verified = True
-[02:55:06]   conn.is_open     = True
-[02:55:06] STEP 3: OK
-[02:55:06] 
+[04:10:24]   conn.is_verified = False
+[04:10:24]   conn.is_open     = True
+[04:10:24] STEP 3: OK
+[04:10:24] 
 --- STEP 4-pre: bootstrap config on server if absent ---
-[02:55:06]   config/database_config.json exists on server: True
-[02:55:06]   config already present — no seeding needed
-[02:55:06] STEP 4-pre: OK
-[02:55:06] 
+[04:10:24] STEP 4-pre: SKIPPED (no open+verified connection)
+[04:10:24] 
 --- STEP 4: ConfigTables ---
-[02:55:06]   Tables loaded: ['REGISTERED_USERS', 'ACQUISITION_SITES', 'GROUPS', 'SUBJECTS', 'IMAGE_HASHES', 'SURGEONS']
-[02:55:06]   Registered users: ['DMATTIOLI', 'STELONG', 'ADMIN']
-[02:55:06] STEP 4: OK
-[02:55:06] 
---- STEP 4b: check/seed admin user registration ---
-[02:55:06]   is_user_registered('admin') = True
-[02:55:06] 
+[04:10:24] STEP 4: SKIPPED (config not seeded or connection not open)
+[04:10:24] 
 --- STEP 5: build intake-form pd.Series ---
-[02:55:06]   Series built with 28 entries
-[02:55:06]   Full Path to Data = /tmp/xnat_it_dcm_es9l_s4z
-[02:55:06] STEP 5: OK
-[02:55:06] 
+[04:10:24]   Series built with 28 entries
+[04:10:24]   Full Path to Data = /tmp/xnat_it_dcm_u73b4aei
+[04:10:24] STEP 5: OK
+[04:10:24] 
 --- STEP 6: ORDataIntakeForm ---
-[02:55:06]   form.uid              = 2_25_251605772842912512716785931522515206874
-[02:55:06]   form.institution_name = UNIVERSITY_OF_IOWA_HOSPITALS_AND_CLINICS
-[02:55:06]   form.group            = INTRAMEDULLARY_NAIL-TIBIA
-[02:55:06]   form.saved_ffn        = /tmp/XNAT_Interact/2_25_251605772842912512716785931522515206874/RECONSTRUCTED_OR_DATA_INTAKE_FORM.json
-[02:55:06] STEP 6: OK
-[02:55:06] 
+[04:10:24] STEP 6: SKIPPED (no ConfigTables)
+[04:10:24] 
 --- STEP 7: SourceRFSession ---
-[02:55:06]   rf.is_valid = True
-[02:55:06]   rf.df shape = (3, 12)
-[02:55:06]   valid rows  = 3
-[02:55:06] STEP 7: OK
-[02:55:06] 
+[04:10:24] STEP 7: SKIPPED (no form or config)
+[04:10:24] 
 --- STEP 8: rf.write() ---
-[02:55:06]   zipped_data keys: ['/tmp/XNAT_Interact/2_25_251605772842912512716785931522515206874/SOURCE_DATA/dicom_files.zip']
-[02:55:06] STEP 8: OK
-[02:55:06] 
+[04:10:24] STEP 8: SKIPPED
+[04:10:24] 
 --- STEP 9: rf.publish_to_xnat() ---
-[02:55:06]   [PHI gate] auto-confirming for: rf session (1 zip file(s))
-[02:55:06] EXCEPTION at 'step 9 — rf.publish_to_xnat()':
-Traceback (most recent call last):
-  File "/home/user/XNAT-Interact/tests/integration/run_roundtrip_push.py", line 504, in <module>
-    rf.publish_to_xnat(
-  File "/home/user/XNAT-Interact/src/xnat_experiment_data.py", line 258, in publish_to_xnat
-    exp_inst.attrs.mset( {  f'xnat:experimentData/ACQUISITION_SITE': self.intake_form.acquisition_site, # type: ignore -- doesnt recognize .attrs attribute of exp_inst
-  File "/usr/local/lib/python3.11/dist-packages/pyxnat/core/attributes.py", line 101, in mset
-    query_str = '?xsiType=%s' % quote(self._get_datatype()) + ''.join(t)
-                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.11/urllib/parse.py", line 915, in quote
-    return quote_from_bytes(string, safe)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.11/urllib/parse.py", line 945, in quote_from_bytes
-    raise TypeError("quote_from_bytes() expected bytes")
-TypeError: quote_from_bytes() expected bytes
-
-[02:55:06] STEP 9: FAILED
-[02:55:06] 
+[04:10:24] STEP 9: SKIPPED
+[04:10:24] 
 --- STEP 10: REST probe via curl ---
-[02:55:06] 
+[04:10:24] 
   [subjects]
-[02:55:06]   {
-  "ResultSet": {
-    "Result": [
-      {
-        "insert_date": "2026-06-05 02:54:04.471",
-        "project": "ITEST_RF",
-        "ID": "Xnat4Tests_S00001",
-        "label": "2_25_209710917797287941868467177698933420903",
-        "insert_user": "admin",
-        "URI": "/data/subjects/Xnat4Tests_S00001"
-      },
-      {
-        "insert_date": "2026-06-05 02:55:06.338",
-        "project": "ITEST_RF",
-        "ID": "Xnat4Tests_S00002",
-        "label": "2_25_251605772842912512716785931522515206874",
-        "insert_user": "admin",
-        "URI": "/data/subjects/Xnat4Tests_S00002"
-      }
-    ],
-    "totalRecords": "2"
-  }
-}
-[02:55:06]   subjects count: 2
-[02:55:06] 
+[04:10:24]   <html>
+<head>
+   <title>Status page</title>
+</head>
+<body>
+<h3>The server has not found anything matching the request URI</h3><p>You can get technical details <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.5">here</a>.<br>
+Please continue your visit at our <a href="/">home page</a>.
+</p>
+</body>
+</html>
+[04:10:24] 
   [experiments]
-[02:55:06]   {
-  "ResultSet": {
-    "Result": [],
-    "totalRecords": "0"
-  }
-}
-[02:55:06]   experiments count: 0
-[02:55:06] 
+[04:10:24]   <html>
+<head>
+   <title>Status page</title>
+</head>
+<body>
+<h3>Unable to identify project ITEST_RF</h3><p>You can get technical details <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.5">here</a>.<br>
+Please continue your visit at our <a href="/">home page</a>.
+</p>
+</body>
+</html>
+[04:10:24] 
   Probing config resource on project...
-[02:55:06] 
+[04:10:24] 
   [config resource files]
-[02:55:06]   {
-  "ResultSet": {
-    "Columns": [
-      {
-        "key": "URI",
-        "serverRoot": ""
-      }
-    ],
-    "Result": [
-      {
-        "file_content": "META_DATA",
-        "Size": "10374",
-        "file_tags": "DOC",
-        "cat_ID": "2",
-        "digest": "6ed12320e547b6a2156142186f321b2d",
-        "collection": "config",
-        "URI": "/data/projects/ITEST_RF/resources/2/files/database_config.json",
-        "file_format": "JSON",
-        "Name": "database_config.json"
-      }
-    ],
-    "title": "Files"
-  }
-}
-[02:55:06] 
+[04:10:24]   <html>
+<head>
+   <title>Status page</title>
+</head>
+<body>
+<h3>Unable to identify project</h3><p>You can get technical details <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.5">here</a>.<br>
+Please continue your visit at our <a href="/">home page</a>.
+</p>
+</body>
+</html>
+[04:10:24] 
   Probing subjects for intake-form resource...
-[02:55:06] 
-  Subject: 2_25_209710917797287941868467177698933420903 (Xnat4Tests_S00001)
-[02:55:06] 
-  [  intake-form files for Xnat4Tests_S00001]
-[02:55:06]   {
-  "ResultSet": {
-    "Columns": [
-      {
-        "key": "URI",
-        "serverRoot": ""
-      }
-    ],
-    "Result": [],
-    "title": "Files"
-  }
-}
-[02:55:06] 
-  Subject: 2_25_251605772842912512716785931522515206874 (Xnat4Tests_S00002)
-[02:55:06] 
-  [  intake-form files for Xnat4Tests_S00002]
-[02:55:06]   {
-  "ResultSet": {
-    "Columns": [
-      {
-        "key": "URI",
-        "serverRoot": ""
-      }
-    ],
-    "Result": [],
-    "title": "Files"
-  }
-}
-[02:55:06] 
+[04:10:24] 
 STEP 10: complete
-[02:55:06] 
+[04:10:24] 
 ======================================================================
-[02:55:06] HARNESS COMPLETE
-[02:55:06]   subjects on server:    2
-[02:55:06]   experiments on server: 0
-[02:55:06]   full log:              /home/user/XNAT-Interact/tests/integration/roundtrip_push.log
-[02:55:06] ======================================================================
+[04:10:24] HARNESS COMPLETE
+[04:10:24]   subjects on server:    0
+[04:10:24]   experiments on server: 0
+[04:10:24]   full log:              /home/user/XNAT-Interact/tests/integration/roundtrip_push.log
+[04:10:24] ======================================================================

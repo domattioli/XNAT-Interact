@@ -204,6 +204,10 @@ class FakeSelectable(_CallLog):
 
     def create(self, **kwargs: Any) -> None:
         self._exists = True
+        # If xsiType is passed, set it on attrs so datatype cache is populated
+        # (matches real pyxnat: create(xsiType='xnat:rfSessionData') sets the type).
+        if 'xsiType' in kwargs:
+            self.attrs._datatype = kwargs['xsiType']
         self._record(self._root, "selectable.create", (), {"_qs": self._qs, **kwargs})
 
     def resource(self, label: str) -> FakeResource:

@@ -38,5 +38,9 @@
   (`attrs._datatype`) as *evidence anchors*, not implementation mandates; the
   acceptance is behavioral (no `TypeError`, fresh-project self-init, no crash).
   Specific patch mechanism lives in plan.md, not the spec.
-- Items marked incomplete would require spec updates before `/speckit-clarify` or
-  `/speckit-plan`. None are incomplete → ready for planning (plan.md already drafted).
+- `/speckit-clarify` run 2026-06-05: 3 questions asked + answered (bootstrap auth
+  scope, whole-surgery download format, re-publish idempotency). Answers encoded in
+  spec `## Clarifications` and propagated to FR-002/FR-004/FR-008, US1/US4
+  acceptance, SC-001/SC-004, edge cases, plan.md + tasks.md. No outstanding markers.
+- Items marked incomplete would require spec updates before `/speckit-plan`. None
+  are incomplete → ready for planning (plan.md already drafted).

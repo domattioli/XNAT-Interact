@@ -28,6 +28,11 @@ Dispatch tier per task: **[H]** haiku, **[S]** sonnet.
   (exp/subj/scan) set the handle datatype so `_get_datatype()` returns the xsiType
   (e.g. `*_inst.attrs._datatype = f'xnat:{schema_prefix_str}SessionData'`) or pass
   attrs in the same `create(**{...})`. Comment rationale + pyxnat-version note.
+  Make create **idempotent-upsert**: reuse an existing/orphaned subject/experiment,
+  fill only missing children, never duplicate.
+- [ ] T005b [#27] [S] `tests/test_publish_real_contract.py`: add re-publish case —
+  pre-seed an orphaned/partial subject, run publish → final state has exactly one
+  subject/experiment with all children (SC-001 upsert).
 - [ ] T006 [#27] [S] `@real_xnat` integration assert in `tests/integration/`: re-run
   `run_roundtrip_push.py` against local XNAT → push completes (SC-001).
 
@@ -41,7 +46,9 @@ Dispatch tier per task: **[H]** haiku, **[S]** sonnet.
   existing-but-malformed file.
 - [ ] T009 [#28] [H] `src/utilities.py` (~L704): replace hardcoded
   `['dmattioli','domattioli','stelong']` whitelist with project membership/owner
-  lookup (reuse `_verify_login`'s users()/owner path). Green T007.
+  lookup (reuse `_verify_login`'s users()/owner path) **OR** a config/env-listed
+  allowlist (escape hatch for CI/admin service accounts). No identities in code.
+  T007 covers member + non-member; add an allowlisted-non-member case. Green T007.
 
 ## Stage 3 — #29 browse labels + type-agnostic enum (P1)
 - [ ] T010 [#29] [S] `tests/test_browse_labels.py` (RED FIRST): staged RF exp →
@@ -60,8 +67,12 @@ Dispatch tier per task: **[H]** haiku, **[S]** sonnet.
   (`CObject`/`Resource.get`) + count-verify vs server `# Files`; empty no-op.
   Keep gateway-portable (Phase 6 re-homes this).
 - [ ] T015 [#25] [H] `app/pages/download.py`: one-click whole-surgery selection
-  (auto-expand experiment → all scans) + optional zip. No streamlit in logic.
-  Green T013.
+  (auto-expand experiment → all scans) + a **content-scope picker** (source-only /
+  subset / all / + derived), delivering a **single zip** (default = full source
+  set). No streamlit in logic. Green T013.
+- [ ] T015b [#25] [S] `app/logic/download.py`: zip assembly from enumerated real
+  files honoring the selected content scope; test in `test_download_full_series.py`
+  asserts zip contents match each scope option (default = all source images).
 
 ## Stage 5 — #30 cleanup (P3)
 - [ ] T016 [#30] [H] `tests/test_session_metadata_guard.py` (RED FIRST): DICOM with

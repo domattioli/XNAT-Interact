@@ -34,7 +34,23 @@ these call sites behind a gateway is **Phase 6** (`006-xnat-alignment`).
   tests. If Phase 6 lands first, Phase 7's #25/#29 tasks collapse to "verify
   through the gateway" instead of patching raw call sites.
 
-## Clarifications (2026-06-05)
+## Clarifications
+
+### Session 2026-06-05 (speckit-clarify)
+
+- Q: #28 — who may self-initialize ConfigTables on a fresh project (replacing the
+  hardcoded `dmattioli/domattioli/stelong` whitelist)? → A: Project member/owner
+  **OR** a config-listed allowlist (not code) — backward-compatible escape hatch
+  for service accounts (CI/admin) not on the project roster.
+- Q: #25 — default on-disk result of a whole-surgery download? → A: **Always a
+  zip**, but the user chooses what it includes (source images only, a subset or
+  all scans, derived data, etc.) — selectable contents, single zip artifact.
+- Q: #27 — re-publish behavior when a prior failed push left orphaned empty
+  subjects? → A: **Reuse existing, fill in missing** (idempotent upsert) — detect
+  the orphaned subject/experiment, reuse it, create only missing children; no
+  duplicates, no manual cleanup.
+
+### Pre-existing scope clarifications (2026-06-05)
 
 1. **Scope = the five filed defects only.** No new user features beyond what #25
    already specifies (whole-surgery download). No refactor — minimal targeted
@@ -128,9 +144,10 @@ friendly no-op.
 **Acceptance Scenarios**:
 1. **Given** a scan with N files, **When** downloaded, **Then** N files land and
    the count matches the server.
-2. **Given** a one-click whole-surgery selection, **When** downloaded, **Then**
-   every scan's resource is enumerated and fetched (no per-scan multiselect
-   required).
+2. **Given** a one-click whole-surgery selection with a chosen content scope
+   (source-only / subset / all / + derived), **When** downloaded, **Then** every
+   selected scan's resource is enumerated, fetched, and delivered as one zip whose
+   contents match the selection (default = full source-image set).
 
 ---
 
@@ -154,8 +171,9 @@ script no longer fails on `from Utilities import MetaTables`.
 ### Edge Cases
 - `subj_inst`/`scan_inst` hit the **same** post-`create()` datatype bug as
   `exp_inst` — all three create+mset sites must be fixed, not just the experiment.
-- After a previously-failed push, orphaned empty subjects may exist — fix must not
-  assume a clean project; re-publish should reconcile, not duplicate.
+- After a previously-failed push, orphaned/partial subjects may exist — fix must not
+  assume a clean project; re-publish reuses the existing subject/experiment and
+  fills in missing children (idempotent upsert), never duplicating.
 - A project where `database_config.json` exists but is malformed → still distinct
   from "does not exist"; do not silently re-initialize over a real (corrupt) file.
 - Download of a scan whose server `# Files` is 0 → friendly no-op, not a crash.
@@ -169,15 +187,19 @@ script no longer fails on `from Utilities import MetaTables`.
   before `attrs.mset` so `_get_datatype()` returns the xsiType (not `None`). Applies
   to experiment, subject, and scan handles.
 - **FR-002 (#27)**: A real push of a `SourceRFSession` MUST create
-  experiment+subject+scan+`SRC` and upload the DICOM zip with zero `TypeError`,
-  leaving no orphaned empty subjects.
+  experiment+subject+scan+`SRC` and upload the DICOM zip with zero `TypeError`.
+  Re-publish MUST be an **idempotent upsert**: if a prior failed run left an
+  orphaned/partial subject or experiment, reuse it and create only the missing
+  children — no duplicate subject/experiment, no manual cleanup required.
 - **FR-003 (#28)**: `ConfigTables.__init__` first-run detection
   (`src/utilities.py` ~L634) MUST treat pyxnat's `DataError` ("file does not
   exist") as first-run and self-initialize, in addition to
   `FileNotFoundError`/`KeyError`/`ValueError`.
 - **FR-004 (#28)**: The accessor authorization (`src/utilities.py` ~L704) MUST NOT
-  rely on a hardcoded username list; it MUST authorize via project
-  membership/owner lookup so `admin`/new users/CI can initialize.
+  rely on a hardcoded username list. It MUST authorize a connecting user who is a
+  project **member or owner** (via the `_verify_login` users()/owner lookup) **OR**
+  who appears in a **config-listed allowlist** (config/env, not code) — the latter
+  being the escape hatch for service accounts (CI/admin) not on the project roster.
 - **FR-005 (#29)**: Browse enumeration MUST resolve and use human-readable subject
   **labels** (not internal `*_S#####` IDs) for display and downstream queries.
 - **FR-006 (#29)**: Experiment enumeration MUST be type-agnostic (surface
@@ -188,8 +210,10 @@ script no longer fails on `from Utilities import MetaTables`.
   filename (`app/logic/download.py` ~L222); downloaded count MUST be verified
   against the server's reported `# Files`.
 - **FR-008 (#25)**: A one-click **whole-surgery** (experiment) selection MUST
-  auto-expand to all its scans and download every file; fail-soft, cross-platform
-  paths, offline-testable.
+  auto-expand to all its scans. The result MUST be delivered as a **single zip**
+  whose **contents are user-selectable** — e.g. source images only, a subset or
+  all scans, and/or derived data — defaulting to the full source-image set when
+  no selection is made. Fail-soft, cross-platform paths, offline-testable.
 - **FR-009 (#30)**: `dicom_obj.metadata.InstanceNumber`
   (`src/xnat_experiment_data.py` ~L506) MUST be `hasattr`-guarded like its sibling
   tags, defaulting/deriving an instance index when absent.
@@ -215,14 +239,17 @@ script no longer fails on `from Utilities import MetaTables`.
 ### Success Criteria *(mandatory)*
 - **SC-001 (#27)**: A scripted real (local) push completes: server shows 1 exp + 1
   subj + scan `0` + `SRC` with all files; the pre-fix code raises the documented
-  `TypeError` and the post-fix code does not. No orphaned empty subjects.
+  `TypeError` and the post-fix code does not. A re-publish over a pre-seeded
+  orphaned/partial subject reuses it and fills missing children — final state has
+  exactly one subject/experiment (no duplicates).
 - **SC-002 (#28)**: `ConfigTables` initializes on a fresh project AND for a
   non-whitelisted user, with no manual pre-seeding of `database_config.json`.
 - **SC-003 (#29)**: A staged RF experiment appears in `list_downloadable` and the
   Subject column shows labels, not internal IDs.
 - **SC-004 (#25)**: A scan with N files downloads N files (was 1); a one-click
-  whole-surgery selection downloads every scan's files; count-verify test passes;
-  empty resource is a friendly no-op.
+  whole-surgery selection produces a single zip whose contents match the chosen
+  scope (default = all source images), count-verified per scan; empty resource is
+  a friendly no-op.
 - **SC-005 (#30)**: A DICOM without `InstanceNumber` builds without crashing; the
   bootstrap script imports (or is gone).
 - **SC-006 (fidelity)**: Every one of SC-001..SC-004 has a test that FAILS at the

@@ -70,6 +70,9 @@ Order = by severity / unblock-dependency. #27 first (push blocker); then #28
    datatype so `attrs._get_datatype()` returns the xsiType (e.g.
    `exp_inst.attrs._datatype = f'xnat:{self.schema_prefix_str}SessionData'`), or
    pass attrs in the same `create(**{...})` call. Apply to all three handles.
+   Make create **idempotent-upsert** (clarification): `if not exists` create, else
+   reuse the handle; then set attrs / fill missing children. A re-publish over an
+   orphaned/partial subject reuses it — never duplicates.
 2. Extend FakeXNAT to reproduce the empty post-`create()` datatype cache so the
    bug is reproducible offline; add `tests/test_publish_real_contract.py` asserting
    no `TypeError` and full exp+subj+scan+SRC creation.
@@ -78,8 +81,10 @@ Order = by severity / unblock-dependency. #27 first (push blocker); then #28
 3. Widen the first-run `except` (`utilities.py:634`) to include
    `pyxnat.core.errors.DataError` (key off "does not exist" semantics) → self-init.
 4. Replace the hardcoded `['dmattioli','domattioli','stelong']` whitelist
-   (`utilities.py:704`) with project membership/owner lookup (reuse
-   `_verify_login`'s project_handle.users()/owner path).
+   (`utilities.py:704`) with: project membership/owner lookup (reuse
+   `_verify_login`'s project_handle.users()/owner path) **OR** a config/env-listed
+   allowlist (clarification) — the allowlist is the escape hatch for service
+   accounts (CI/admin) not on the project roster. No identities hardcoded.
 5. `tests/test_configtables_bootstrap.py`: fresh project (no `database_config.json`)
    self-inits; a non-whitelisted user (`admin`) authorizes.
 
@@ -96,7 +101,10 @@ Order = by severity / unblock-dependency. #27 first (push blocker); then #28
    resource-file enumeration (`CObject` / `Resource.get`) + count-verify vs
    server `# Files`; friendly no-op on empty resource.
 10. Add whole-experiment expansion: select a surgery once → iterate all scans →
-    fetch all files; `app/pages/download.py` one-click affordance (+ optional zip).
+    fetch all files; `app/pages/download.py` one-click affordance. Deliver as a
+    **single zip with user-selectable contents** (clarification): content-scope
+    picker (source-only / subset / all scans / + derived data), default = full
+    source-image set; zip assembled from the enumerated real files.
 11. `tests/test_download_full_series.py`: N-file scan → N files; whole-surgery →
     every scan; count-mismatch → FriendlyError; empty → no-op.
     *(Note: this is the same fix Phase 6 routes through the gateway — keep the test

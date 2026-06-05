@@ -48,6 +48,11 @@ argv/logs, no behavior change visible to users (pure refactor + one bug fix).
    Wiring consensus output to it happens when STAPLE is built (Phase-5 seam).
 4. **xnatpy = spike only.** Implement nothing in production; a throwaway
    `XnatpyGateway` behind the ABC + a comparison note is the deliverable.
+5. **Real-XNAT verification = contract test, not one-off harness.** Phase 7 
+   offline verification is complete (742 tests green). Phase 6 ships a durable
+   contract-test framework (grad-student workflow sim) that locks in FakeXNAT ≈ 
+   real XNAT parity and replaces one-off integration harnesses. See 
+   [`contract-test.md`](contract-test.md).
 
 ## User Scenarios & Testing *(mandatory)*
 

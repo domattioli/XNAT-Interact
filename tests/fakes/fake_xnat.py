@@ -133,8 +133,29 @@ class FakeAttrs(_CallLog):
         self._root = root
         self._owner_qs = owner_qs
         self._store: Dict[str, Any] = {}
+        # Fidelity mode: mirrors pyxnat's internal datatype cache.
+        # When fidelity_mode=True on the root FakeXNAT, a freshly create()d
+        # handle's _datatype starts as None (exactly like real pyxnat) and
+        # mset() raises TypeError until _datatype is explicitly set.
+        self._datatype: Optional[str] = None
+
+    def _get_datatype(self) -> Optional[str]:
+        """Return the cached xsiType, mirroring pyxnat's internal helper."""
+        return self._datatype
 
     def mset(self, mapping: Dict[str, Any]) -> None:
+        # Fidelity mode: reproduce pyxnat's quote_from_bytes() TypeError when
+        # the datatype cache is empty (as happens on a freshly create()d handle
+        # before the xsiType is set).  The real pyxnat raises:
+        #   TypeError: quote_from_bytes() expected bytes-like object, got str
+        # because it tries to URL-encode the xsiType for the REST path and the
+        # None→str coercion path fails.  Gate behind root.fidelity_mode so the
+        # existing 718 tests are completely unaffected.
+        if self._root.fidelity_mode and self._datatype is None:
+            raise TypeError(
+                "quote_from_bytes() expected bytes-like object, got str"
+                " — pyxnat datatype cache empty (FakeXNAT fidelity mode)"
+            )
         self._store.update(mapping)
         self._record(self._root, "attrs.mset", (mapping,), {"_qs": self._owner_qs})
 
@@ -205,7 +226,13 @@ class FakeSelector:
         self._root = root
 
     def __call__(self, querystring: str) -> FakeSelectable:
-        return FakeSelectable(root=self._root, querystring=querystring)
+        # Return the same FakeSelectable handle for a given querystring so that
+        # seed_existing() and idempotent-upsert logic can share state.
+        if querystring not in self._root._selectables:
+            self._root._selectables[querystring] = FakeSelectable(
+                root=self._root, querystring=querystring
+            )
+        return self._root._selectables[querystring]
 
     def project(self, name: str) -> FakeProject:
         return FakeProject(root=self._root, name=name)
@@ -243,12 +270,21 @@ class FakeXNAT:
         self,
         project_name: str = "FAKE_PROJECT",
         project_users: Optional[List[str]] = None,
+        fidelity_mode: bool = False,
     ) -> None:
         self.project_name = project_name
         self.project_users: List[str] = project_users if project_users is not None else ["testuser"]
+        # fidelity_mode=True reproduces pyxnat behaviours invisible to the plain
+        # offline double — specifically the post-create() empty datatype cache
+        # (#27).  Defaults to False so all 718 existing tests are unaffected.
+        self.fidelity_mode: bool = fidelity_mode
         self.calls: List[Dict[str, Any]] = []
         self._next_failure: Optional[BaseException] = None
         self._file_contents: Dict[str, bytes] = {}
+        # Registry of FakeSelectable handles keyed by querystring.  Enables
+        # seed_existing() for idempotent-upsert tests (T005b) and the shared-
+        # handle guarantee in FakeSelector.__call__.
+        self._selectables: Dict[str, "FakeSelectable"] = {}
         self.select = FakeSelector(root=self)
 
     # ------------------------------------------------------------------
@@ -289,3 +325,17 @@ class FakeXNAT:
     def reset_calls(self) -> None:
         """Clear the recorded call log without rebuilding the object."""
         self.calls.clear()
+
+    def seed_existing(self, querystring: str) -> "FakeSelectable":
+        """
+        Mark a querystring as already-existing in the fake.
+
+        Pre-seeds a FakeSelectable whose exists() returns True, mirroring
+        an orphaned/partial object left behind by a prior failed push.
+        Used by idempotent-upsert tests (T005b) to exercise the reuse path.
+        """
+        sel = self._selectables.setdefault(
+            querystring, FakeSelectable(root=self, querystring=querystring)
+        )
+        sel._exists = True
+        return sel

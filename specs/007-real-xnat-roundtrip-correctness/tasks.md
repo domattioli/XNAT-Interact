@@ -9,7 +9,7 @@ Dispatch tier per task: **[H]** haiku, **[S]** sonnet.
 ## Format `[ID] [P?] [Issue] [tier] desc`
 
 ## Stage 0 — Fidelity harness (BLOCKS the red-first tests)
-- [ ] T001 [#27] [S] `tests/fakes/fake_xnat.py`: reproduce pyxnat's post-`create()`
+- [X] T001 [#27] [S] `tests/fakes/fake_xnat.py`: reproduce pyxnat's post-`create()`
   empty datatype cache — a freshly `create()`d handle's `attrs._get_datatype()`
   returns `None` until set, so `attrs.mset` blows up exactly like real pyxnat.
   Gate behind a fidelity flag so existing tests are unaffected.
@@ -20,17 +20,17 @@ Dispatch tier per task: **[H]** haiku, **[S]** sonnet.
   (byte round-trip) + reports `# Files`; `list_files`/get enumerates them.
 
 ## Stage 1 — #27 push blocker (P1 critical, BLOCKS round-trip)
-- [ ] T004 [#27] [S] `tests/test_publish_real_contract.py` (RED FIRST): scripted
+- [X] T004 [#27] [S] `tests/test_publish_real_contract.py` (RED FIRST): scripted
   `publish_to_xnat` against the fidelity fake → assert today's code raises
   `TypeError: quote_from_bytes() expected bytes`; post-fix asserts exp+subj+scan+
   `SRC`+zip created, no orphaned empty subjects.
-- [ ] T005 [#27] [S] `src/xnat_experiment_data.py` (~L257): after each `create()`
+- [X] T005 [#27] [S] `src/xnat_experiment_data.py` (~L257): after each `create()`
   (exp/subj/scan) set the handle datatype so `_get_datatype()` returns the xsiType
   (e.g. `*_inst.attrs._datatype = f'xnat:{schema_prefix_str}SessionData'`) or pass
   attrs in the same `create(**{...})`. Comment rationale + pyxnat-version note.
   Make create **idempotent-upsert**: reuse an existing/orphaned subject/experiment,
   fill only missing children, never duplicate.
-- [ ] T005b [#27] [S] `tests/test_publish_real_contract.py`: add re-publish case —
+- [X] T005b [#27] [S] `tests/test_publish_real_contract.py`: add re-publish case —
   pre-seed an orphaned/partial subject, run publish → final state has exactly one
   subject/experiment with all children (SC-001 upsert).
 - [ ] T006 [#27] [S] `@real_xnat` integration assert in `tests/integration/`: re-run
@@ -75,9 +75,9 @@ Dispatch tier per task: **[H]** haiku, **[S]** sonnet.
   asserts zip contents match each scope option (default = all source images).
 
 ## Stage 5 — #30 cleanup (P3)
-- [ ] T016 [#30] [H] `tests/test_session_metadata_guard.py` (RED FIRST): DICOM with
+- [X] T016 [#30] [H] `tests/test_session_metadata_guard.py` (RED FIRST): DICOM with
   no `InstanceNumber` → today `AttributeError` at `xnat_experiment_data.py:506`.
-- [ ] T017 [#30] [H] `src/xnat_experiment_data.py` (~L506): `hasattr`-guard
+- [X] T017 [#30] [H] `src/xnat_experiment_data.py` (~L506): `hasattr`-guard
   `metadata.InstanceNumber` like its sibling tags; default/derive an index. Green
   T016.
 - [ ] T018 [#30] [H] `src/initialize_basic_metatable_items.py`: fix

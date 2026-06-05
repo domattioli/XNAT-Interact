@@ -159,12 +159,14 @@ class ExperimentData():
 
 
     def _select_objects( self, xnat_connection: XNATConnection, subj_qs: str, exp_qs: str, scan_qs: str, files_qs: str ) -> Tuple[object, object, object]:
+        # Idempotent-upsert (#27): reuse an existing/orphaned handle rather than
+        # asserting non-existence.  A prior failed push may leave an orphaned
+        # empty subject or experiment; we reuse it and fill in missing children.
+        # The old assert-not-exists caused an AssertionError on re-publish and
+        # forced manual cleanup — this resolves spec FR-002 / SC-001.
         subj_inst = xnat_connection.server.select( str( subj_qs ) )
-        assert not subj_inst.exists(), f'Subject already exists with the uri:\n{subj_inst}'         # type: ignore
-        exp_inst = xnat_connection.server.select( str( exp_qs ) )
-        assert not exp_inst.exists(), f'Experiment already exists with the uri:\n{exp_inst}'        # type: ignore
+        exp_inst  = xnat_connection.server.select( str( exp_qs ) )
         scan_inst = xnat_connection.server.select( str( scan_qs ) )
-        assert not scan_inst.exists(), f'Scan already exists with the uri:\n{scan_inst}'            # type: ignore
         return subj_inst, exp_inst, scan_inst
 
 
@@ -251,15 +253,33 @@ class ExperimentData():
         subj_qs, exp_qs, scan_qs, files_qs, resource_label = self._generate_queries( xnat_connection=xnat_connection )
         subj_inst, exp_inst, scan_inst = self._select_objects( xnat_connection=xnat_connection, subj_qs=subj_qs, exp_qs=exp_qs, scan_qs=scan_qs, files_qs=files_qs )
 
-        # Create the items in stepwise fashion -- to-do: can't figure out how to create all in one go instead of attrs.mset(), it wouldn't work properly
-        subj_inst.create()                                                                                  # type: ignore -- doesnt recognize .create() attribute of subj_inst
-        subj_inst.attrs.mset( { f'xnat:subjectData/GROUP': self.intake_form.group } )                       # type: ignore -- doesnt recognize .attrs attribute of subj_inst
-        exp_inst.create( **{    f'experiments': f'xnat:{self.schema_prefix_str}SessionData' })               # type: ignore -- doesnt recognize .create() attribute of exp_inst
+        # Create the items in stepwise fashion — idempotent-upsert (#27):
+        # only call create() when the object does not already exist, so a re-publish
+        # over an orphaned/partial subject from a prior failed push reuses it
+        # instead of duplicating or raising.
+        #
+        # After each create() (or reuse) we explicitly set attrs._datatype so that
+        # pyxnat's internal _get_datatype() returns the xsiType rather than None.
+        # Without this, pyxnat's attrs.mset() raises:
+        #   TypeError: quote_from_bytes() expected bytes-like object, got str
+        # because it tries to URL-encode the xsiType for the REST path and the
+        # None→str coercion path in urllib.parse.quote_from_bytes() blows up.
+        # This is a pyxnat internals dependency — revisit if pyxnat is replaced
+        # with xnatpy in Phase 6 (006-xnat-alignment).
+        if not subj_inst.exists():                                                                          # type: ignore -- doesnt recognize .exists() attribute of subj_inst
+            subj_inst.create()                                                                              # type: ignore -- doesnt recognize .create() attribute of subj_inst
+        subj_inst.attrs._datatype = 'xnat:subjectData'                                                     # type: ignore -- set datatype cache so mset() resolves xsiType (pyxnat internals, #27)
+        subj_inst.attrs.mset( { f'xnat:subjectData/GROUP': self.intake_form.group } )                      # type: ignore -- doesnt recognize .attrs attribute of subj_inst
+        if not exp_inst.exists():                                                                           # type: ignore -- doesnt recognize .exists() attribute of exp_inst
+            exp_inst.create( **{    f'experiments': f'xnat:{self.schema_prefix_str}SessionData' })          # type: ignore -- doesnt recognize .create() attribute of exp_inst
+        exp_inst.attrs._datatype = f'xnat:{self.schema_prefix_str}SessionData'                             # type: ignore -- set datatype cache so mset() resolves xsiType (pyxnat internals, #27)
         exp_inst.attrs.mset( {  f'xnat:experimentData/ACQUISITION_SITE': self.intake_form.acquisition_site, # type: ignore -- doesnt recognize .attrs attribute of exp_inst
                                 f'xnat:experimentData/DATE': self.intake_form.datetime.date
                             } )
-        scan_inst.create( **{   f'scans': f'xnat:{self.schema_prefix_str}ScanData' } )                      # type: ignore -- doesnt recognize .create() attribute of scan_inst
-        scan_inst.attrs.mset( { f'xnat:{self.schema_prefix_str}ScanData/TYPE': self.scan_type_label,        # type: ignore -- doesnt recognize .attrs attribute of scan_inst
+        if not scan_inst.exists():                                                                          # type: ignore -- doesnt recognize .exists() attribute of scan_inst
+            scan_inst.create( **{   f'scans': f'xnat:{self.schema_prefix_str}ScanData' } )                 # type: ignore -- doesnt recognize .create() attribute of scan_inst
+        scan_inst.attrs._datatype = f'xnat:{self.schema_prefix_str}ScanData'                               # type: ignore -- set datatype cache so mset() resolves xsiType (pyxnat internals, #27)
+        scan_inst.attrs.mset( { f'xnat:{self.schema_prefix_str}ScanData/TYPE': self.scan_type_label,       # type: ignore -- doesnt recognize .attrs attribute of scan_inst
                                 f'xnat:{self.schema_prefix_str}ScanData/SERIES_DESCRIPTION': self.intake_form.ortho_procedure_type,
                                 f'xnat:{self.schema_prefix_str}ScanData/QUALITY': self.intake_form.scan_quality,
                                 f'xnat:imageScanData/NOTE': f'BY: {validated_login.validated_username.upper()}; AT: {USCentralDateTime(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))}'
@@ -502,8 +522,12 @@ class SourceRFSession( ExperimentData ):
             dicom_obj.metadata.add_new( (0x0019, 0x1006), 'LT', f'Metadata de-identified & standardized by XNAT-Interact script on {dicom_obj._derived_metadata["DATETIME"]}.' )
 
             # Save the modified DICOM object back to the DataFrame; Generate a new file name for each shot in the session given its instance number, then overwrite metadata to ensure consistency throughout all shots.
+            # Guard metadata.InstanceNumber like its sibling tags above (#30, FR-009):
+            # some DICOMs omit this field; fall back to the row index as a derived
+            # instance counter so the file name is still unique and deterministic.
+            _inst_str = str( dicom_obj.metadata.InstanceNumber ) if hasattr( dicom_obj.metadata, 'InstanceNumber' ) else str( idx )
             self._df.at[idx, 'OBJECT'] = dicom_obj
-            self._df.at[idx, 'NEW_FN'] = dicom_obj.generate_source_image_file_name( str( dicom_obj.metadata.InstanceNumber ), self.intake_form.uid )
+            self._df.at[idx, 'NEW_FN'] = dicom_obj.generate_source_image_file_name( _inst_str, self.intake_form.uid )
 
         # self._derive_acquisition_site_info() # to-do: should warn the user that any mined info is inconsistent with their input
         self._df = self.df.sort_values( by='NEW_FN', inplace=False )

@@ -74,6 +74,15 @@ class FakeFile(_CallLog):
 
     def put(self, ffn: Any, *, content: str = "", format: str = "", tags: str = "", overwrite: Optional[bool] = None) -> None:
         self._maybe_raise(self._root)
+        # Auto-store file bytes so get_copy can round-trip real content.
+        # Only reads bytes when ffn is a path to an existing file; leaves
+        # any manually-primed _file_contents entry untouched if no file at ffn.
+        try:
+            p = Path(ffn)
+            if p.is_file():
+                self._root._file_contents[self._filename] = p.read_bytes()
+        except (TypeError, OSError):
+            pass  # ffn is not a path — skip auto-store; backward-compatible
         self._record(self._root, "file.put", (ffn,), {"content": content, "format": format, "tags": tags, "overwrite": overwrite, "_filename": self._filename})
 
     def get_copy(self, dest: Any) -> Any:

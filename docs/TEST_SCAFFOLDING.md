@@ -5,7 +5,7 @@ so the throwaway scaffolding can be confidently deleted later without touching t
 permanent offline regression suite. "Delete the cruft" cleanup checklist.
 
 **Created**: 2026-06-05 (Phase 7 — real-XNAT round-trip correctness)
-**Status**: Living document — update whenever a fixture/harness file is added or removed.
+**Status**: Phase 7 complete — all KEEP tests landed (742 passed, 7 xfailed). THROWAWAY harness awaits Phase 7 local round-trip verification (T006/T020) + Phase 6 offline contract test before removal.
 
 ---
 
@@ -33,9 +33,10 @@ permanent offline regression suite. "Delete the cruft" cleanup checklist.
 |---|---|---|
 | `tests/test_publish_real_contract.py` | #27 | push datatype-cache fix + idempotent-upsert re-publish |
 | `tests/test_session_metadata_guard.py` | #30 | missing-`InstanceNumber` guard |
-| `tests/test_configtables_bootstrap.py` *(Agent B)* | #28 | fresh-project + non-whitelisted/allowlisted bootstrap |
-| `tests/test_browse_labels.py` *(Agent B)* | #29 | RF surfaced, subject labels not internal IDs |
-| `tests/test_download_full_series.py` *(Agent B)* | #25 | N-file + whole-surgery zip + count-verify + empty no-op |
+| `tests/test_configtables_bootstrap.py` | #28 | fresh-project + non-whitelisted/allowlisted bootstrap (7 tests, 2 xfailed) |
+| `tests/test_browse_labels.py` | #29 | RF surfaced, subject labels not internal IDs (5 tests, 2 xfailed) |
+| `tests/test_download_full_series.py` | #25 | N-file + whole-surgery zip + count-verify + empty no-op (6 tests, 1 xfailed) |
+| `tests/test_stale_bootstrap_removed.py` | #30 | stale initialize_basic_metatable_items.py removed smoke (3 tests) |
 
 > These are red-first regression tests — each FAILS at its parent commit, proving
 > the FakeXNAT fidelity gap is closed. They stay forever.

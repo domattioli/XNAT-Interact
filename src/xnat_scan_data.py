@@ -304,64 +304,53 @@ class SourceDicomDeIdentified( ScanFile ):
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for *a single* mturk batch file *row*
-class MTurkSemanticSegmentation( ScanFile ):
-    '''
-    A class representing the XNAT Scan for MTurk Semantic Segmentation. Inherits from ScanFile.
+class MTurkSemanticSegmentation:
+    """
+    Thin adapter that converts one row of an MTurk batch results file into a
+    canonical ``src.annotations.model.Annotation``.
 
-    Attributes:
-    tbd
+    Bridges to ``src.annotations.importers.mturk.from_mturk_row`` — the
+    annotation-layer importer that supersedes the original commented-out stub.
+    Does NOT inherit from ScanFile: MTurk rows are not file-based scan artifacts.
 
-    Methods:
-    tbd
+    Usage
+    -----
+    ann = MTurkSemanticSegmentation.from_row(row)
+    # or equivalently via constructor:
+    ann = MTurkSemanticSegmentation(row).annotation
 
-    # Example usage:
-    tbd
-    '''
-    # def __init__( self, assignment: pd.Series, config: ConfigTables, intake_form: ORDataIntakeForm ): #to-do: allow for different input types eg batch file data or pulled-from-xnat data
-    #     super().__init__( intake_form=intake_form, assignment )  # to:do -- cant pass assignment to super().__init__ because it expects a Path object. need to rethink the baseclass.
-    #     self._validate_input( assignment )
-    #     self._read_image()
-    #     self._extract_target_object_info() #to-do
-    #     self._extract_date_and_time()
-    #     self._extract_uid_info()
-    #     self._extract_pngImageData()
-    #     self._validate_image()
+    Parameters
+    ----------
+    row : dict or pandas.Series with MTurk result columns:
+          WorkerId, SubmitTime, *.pngImageData (base64-encoded PNG mask).
 
-    # @property
-    # def bw( self ) -> np.ndarray:   return self._bw
-    
-    # def _validate_input( self, assignment: pd.Series ):
-    #     assert len( set(self.mturk_batch_col_names) - set(assignment.columns) ) == 0, f"Missing required columns: {set(self.mturk_batch_col_names) - set(assignment.columns)}"
-    #     assert not isinstance( self.image, ImageHash ), f'BUG: the dummy_image() method below will only work if .image is an ImageHash object.'
-    #     self._metadata = assignment.loc[0]
-    #     img_s3_url = assignment.loc[0,'Input.image_url']
-    #     assert self.is_s3_url( img_s3_url ), f'Input.image_url column of inputted data series (row) must be an s3 url: {img_s3_url}'
-    #     self._ffn = self.metadata['Input.image_url']
-    #     self._bw, self._acquisition_site = self.image.dummy_image(), 'AMAZON_MECHANICAL_TURK' #to-do: this is copy-pasted from the ConfigTables, need to figure out how to query it.
+    Returns (via .annotation)
+    -------------------------
+    src.annotations.model.Annotation with
+        annotation_type = 'binary_segmentation'
+        tool            = 'mturk'
+        annotator_id    = WorkerId  (opaque token, PHI-free)
+        payload         = 2-D uint8 numpy array (decoded grayscale mask)
+    """
 
-    # def _read_image( self ):
-    #     response = requests.get( self.ffn_str, stream=True )
-    #     response.raw.decode_content = True
-    #     arr = np.asarray( bytearray( response.raw.read() ), dtype=np.uint8 )
-    #     self._image = ImageHash( reference_table=self.config, img=cv2.imdecode( arr, cv2.IMREAD_GRAYSCALE ) ) # img = Image.open( response.raw )
-    
-    # def _extract_target_object_info( self ):
-    #     pass
+    def __init__(self, row) -> None:
+        from src.annotations.importers.mturk import from_mturk_row
+        self._annotation = from_mturk_row(row)
 
-    # def _extract_date_and_time( self ):
-    #     self._datetime = USCentralDateTime( self.metadata.loc['SubmitTime'] )
+    @property
+    def annotation(self):
+        """The canonical Annotation produced from this MTurk row."""
+        return self._annotation
 
-    # def _extract_uid_info( self ):
-    #     self._uid_info = { 'HIT_ID': self.metadata['HITId'], 'ASSIGNMENT_ID': self.metadata['AssignmentId'], 'WORKER_ID': self.metadata['WorkerId'] }
+    @classmethod
+    def from_row(cls, row) -> "MTurkSemanticSegmentation":
+        """
+        Convenience classmethod — identical to calling the constructor directly.
 
-    # def _extract_pngImageData( self ):
-    #     pngImageData_index = [i for i, c in enumerate( self.metadata.index.to_list() ) if '.pngImageData' in c]
-    #     self._bw = self.convert_base64_to_np_array( self.metadata.iloc[pngImageData_index[0]] )
-
-    # def convert_base64_to_np_array( self, b64_str: str ) -> np.ndarray:
-    #     return cv2.imdecode( np.frombuffer( base64.b64decode( b64_str ), np.uint8 ), cv2.IMREAD_GRAYSCALE )
-     
-    # def __str__( self ):
-    #     return f'{self.__class__.__name__}:\t{self.ffn}\nIs Valid:\t{self.is_valid}\nAcquisition Site: {self.acquisition_site}\nGroup:\t\t{self.group}\nDatetime:\t{self.datetime}\nUID Info: {self.uid_info}'
+        Returns
+        -------
+        MTurkSemanticSegmentation instance (use .annotation to get the Annotation).
+        """
+        return cls(row)
 
 

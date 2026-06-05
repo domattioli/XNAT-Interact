@@ -48,6 +48,11 @@ from src.services.errors import FriendlyError, render as render_error   # noqa: 
 from src.xnat_experiment_data import ReviewDecision                     # noqa: E402
 from installer.python_detect import detect_python                       # noqa: E402
 from installer.update_checker import check_for_update                   # noqa: E402
+from src.annotations.importers.generic import from_mask_array           # noqa: E402
+from src.annotations.importers.mturk import from_mturk_row             # noqa: E402
+from src.annotations.model import AnnotationSet, ConsensusResult        # noqa: E402
+from src.annotations.io_xnat import upload_annotation_set, download_annotation_set  # noqa: E402
+from src.annotations.aggregate import aggregate_set, list_aggregators   # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -847,6 +852,261 @@ def section_learn():
 
 
 # ===========================================================================
+# SECTION 11 — ANNOTATIONS (offline, FakeXNAT, PHI-free)
+# ===========================================================================
+
+def _make_b64_png_mask(rows: int = 16, cols: int = 16, seed: int = 7) -> str:
+    """Build a deterministic binary PNG mask and return as base64 string."""
+    import base64
+    import cv2
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    arr = (rng.integers(0, 2, size=(rows, cols), dtype=np.uint8) * 255)
+    ok, buf = cv2.imencode(".png", arr)
+    assert ok, "cv2.imencode failed"
+    return base64.b64encode(bytes(buf)).decode("ascii")
+
+
+def section_annotations():
+    _section("11. ANNOTATIONS")
+    SECTION = "ANNOTATIONS"
+    import numpy as np
+
+    # ------------------------------------------------------------------
+    # Step 1: ingest 3 annotators' masks via two tools
+    # ------------------------------------------------------------------
+    H, W = 16, 16
+    rng = np.random.default_rng(42)
+    mask_A = (rng.integers(0, 2, (H, W), dtype=np.uint8))   # worker_A1 via generic
+    mask_B = (rng.integers(0, 2, (H, W), dtype=np.uint8))   # worker_B2 via generic
+    # worker_C3 via mturk (base64 PNG)
+    b64_mask = _make_b64_png_mask(H, W, seed=13)
+
+    ann_A = from_mask_array(
+        mask_A,
+        annotator_id="worker_A1",
+        tool="labelbox_v2",
+        annotation_type="binary_segmentation",
+        version=1,
+    )
+    ann_B = from_mask_array(
+        mask_B,
+        annotator_id="worker_B2",
+        tool="labelbox_v2",
+        annotation_type="binary_segmentation",
+        version=1,
+    )
+    ann_C = from_mturk_row({
+        "WorkerId": "worker_C3",
+        "SubmitTime": "2026-06-05T10:00:00Z",
+        "pngImageData": b64_mask,
+    })
+
+    aset = AnnotationSet(image_ref="scans/SCAN_001")
+    aset.add(ann_A)
+    aset.add(ann_B)
+    aset.add(ann_C)
+
+    _info(f"AnnotationSet image_ref={aset.image_ref!r}, {len(aset.annotations)} annotation(s):")
+    for a in aset.annotations:
+        _info(f"  annotator_id={a.annotator_id!r}  tool={a.tool!r}  "
+              f"type={a.annotation_type!r}  version={a.version}  "
+              f"payload.shape={a.payload.shape}")
+
+    if len(aset.annotations) == 3:
+        _ok("3 annotations ingested (2 generic + 1 mturk) into one AnnotationSet")
+    else:
+        _fail(f"Expected 3 annotations, got {len(aset.annotations)}", SECTION)
+
+    tools = {a.tool for a in aset.annotations}
+    if "labelbox_v2" in tools and "mturk" in tools:
+        _ok(f"Two distinct tools present: {sorted(tools)}")
+    else:
+        _fail(f"Expected labelbox_v2 + mturk tools, got {tools}", SECTION)
+
+    # annotator_ids are opaque tokens — check no human name leaked
+    for a in aset.annotations:
+        if " " in a.annotator_id:
+            _fail(f"annotator_id {a.annotator_id!r} contains whitespace (possible PHI)", SECTION)
+            break
+    else:
+        _ok("All annotator_ids are opaque tokens (no whitespace)")
+
+    # ------------------------------------------------------------------
+    # Step 2: upload to FakeXNAT; image NOT uploaded, 3 versioned blobs
+    # ------------------------------------------------------------------
+    fake = FakeXNAT(project_name="ANNO_PROJECT")
+    result = upload_annotation_set(
+        fake,
+        image_ref="scans/SCAN_001",
+        annotation_set=aset,
+        project_name="ANNO_PROJECT",
+        resource_label="ANNOTATIONS",
+    )
+    _info(f"upload_annotation_set ok={result.ok}, files_written={result.files_written}")
+
+    if not result.ok:
+        _fail(f"upload_annotation_set failed: {result.friendly.title if result.friendly else '?'}", SECTION)
+    else:
+        _ok("upload_annotation_set returned ok=True")
+
+    # No put_zip (image not uploaded)
+    put_zip_count = sum(1 for c in fake.calls if c["op"] == "resource.put_zip")
+    if put_zip_count == 0:
+        _ok("Image NOT uploaded (zero put_zip calls — annotations-only write)")
+    else:
+        _fail(f"Expected 0 put_zip calls, got {put_zip_count}", SECTION)
+
+    # 3 versioned blobs + 1 manifest = 4 file.put calls; assert ≥3 blob files
+    blob_files = [f for f in result.files_written if f.startswith("ann__")]
+    if len(blob_files) == 3:
+        _ok(f"3 versioned annotation blobs written: {blob_files}")
+    else:
+        _fail(f"Expected 3 blob files, got {blob_files}", SECTION)
+
+    # ------------------------------------------------------------------
+    # Step 3: re-submit by worker_A1 at version+1; both versions kept
+    # ------------------------------------------------------------------
+    mask_A_v2 = (rng.integers(0, 2, (H, W), dtype=np.uint8))
+    ann_A_v2 = from_mask_array(
+        mask_A_v2,
+        annotator_id="worker_A1",
+        tool="labelbox_v2",
+        annotation_type="binary_segmentation",
+        version=2,
+    )
+    aset_v2 = AnnotationSet(image_ref="scans/SCAN_001")
+    for a in aset.annotations:
+        aset_v2.add(a)
+    aset_v2.add(ann_A_v2)
+
+    fake2 = FakeXNAT(project_name="ANNO_PROJECT")
+    result2 = upload_annotation_set(
+        fake2,
+        image_ref="scans/SCAN_001",
+        annotation_set=aset_v2,
+        project_name="ANNO_PROJECT",
+        resource_label="ANNOTATIONS",
+    )
+    blob_files2 = [f for f in result2.files_written if f.startswith("ann__")]
+    _info(f"Re-submit blobs written: {blob_files2}")
+
+    # worker_A1 v1 + v2 both present → keep-all versioning
+    worker_A_blobs = [f for f in blob_files2 if "worker_A1" in f]
+    if len(worker_A_blobs) == 2:
+        _ok(f"Keep-all: both v1 and v2 for worker_A1 present: {worker_A_blobs}")
+    else:
+        _fail(f"Expected 2 worker_A1 blobs (v1+v2), got {worker_A_blobs}", SECTION)
+
+    # ------------------------------------------------------------------
+    # Step 4: aggregate_set with 'reference' aggregator
+    # ------------------------------------------------------------------
+    consensus = aggregate_set(aset, "binary_segmentation", "reference")
+    _info(f"aggregate_set result: method={consensus.method!r}, "
+          f"payload.shape={consensus.payload.shape}, "
+          f"payload.dtype={consensus.payload.dtype}")
+
+    if isinstance(consensus, ConsensusResult):
+        _ok(f"aggregate_set returned ConsensusResult (method={consensus.method!r})")
+    else:
+        _fail(f"Expected ConsensusResult, got {type(consensus).__name__}", SECTION)
+
+    if consensus.payload.shape == (H, W):
+        _ok(f"Consensus mask shape correct: {consensus.payload.shape}")
+    else:
+        _fail(f"Expected shape ({H},{W}), got {consensus.payload.shape}", SECTION)
+
+    known_aggregators = list_aggregators()
+    _info(f"list_aggregators() → {known_aggregators}")
+    if "reference" in known_aggregators:
+        _ok("'reference' aggregator registered and listed")
+    else:
+        _fail(f"'reference' not in list_aggregators(): {known_aggregators}", SECTION)
+
+    # 'staple' is an extension slot — not yet registered
+    if "staple" not in known_aggregators:
+        _ok("'staple' correctly absent from registry (extension slot, STAPLE deferred)")
+    else:
+        _fail("'staple' found in registry — expected it to be deferred", SECTION)
+
+    # ------------------------------------------------------------------
+    # Step 5: download_annotation_set → decoded masks equal originals
+    # ------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dest = Path(tmpdir) / "anno_download"
+
+        # Use same fake that was uploaded to (fake has the stored bytes)
+        dl = download_annotation_set(
+            fake,
+            image_ref="scans/SCAN_001",
+            dest_dir=dest,
+            project_name="ANNO_PROJECT",
+            resource_label="ANNOTATIONS",
+        )
+        _info(f"download_annotation_set ok={dl.ok}, "
+              f"files_written={[str(p) for p in dl.files_written]}")
+
+        if not dl.ok:
+            _fail(f"download_annotation_set failed: {dl.friendly.title if dl.friendly else '?'}", SECTION)
+        else:
+            _ok("download_annotation_set returned ok=True")
+
+        # Files written with pathlib.Path paths
+        non_path = [f for f in dl.files_written if not isinstance(f, Path)]
+        if not non_path:
+            _ok(f"All {len(dl.files_written)} files_written are pathlib.Path objects")
+        else:
+            _fail(f"Non-Path entries in files_written: {non_path}", SECTION)
+
+        # Bit-for-bit mask equality: downloaded payload == original payload
+        if dl.annotation_set is not None:
+            orig_payloads = {a.annotator_id: a.payload for a in aset.annotations}
+            dl_payloads = {a.annotator_id: a.payload for a in dl.annotation_set.annotations}
+            all_equal = True
+            for aid, orig in orig_payloads.items():
+                dl_p = dl_payloads.get(aid)
+                if dl_p is None:
+                    _fail(f"annotator {aid!r} missing from downloaded set", SECTION)
+                    all_equal = False
+                elif not np.array_equal(orig, dl_p):
+                    _fail(f"annotator {aid!r} mask mismatch after round-trip", SECTION)
+                    all_equal = False
+            if all_equal:
+                _ok("All 3 downloaded masks equal originals bit-for-bit")
+        else:
+            _fail("download_annotation_set returned None annotation_set", SECTION)
+
+    # ------------------------------------------------------------------
+    # Step 6: manifest is PHI-free
+    # ------------------------------------------------------------------
+    import json
+    manifest_file = fake._file_contents.get("manifest.json")
+    if manifest_file is None:
+        _fail("manifest.json not found in FakeXNAT._file_contents", SECTION)
+    else:
+        manifest_text = manifest_file.decode("utf-8")
+        manifest_data = json.loads(manifest_text)
+        _info(f"manifest image_ref={manifest_data.get('image_ref')!r}, "
+              f"{len(manifest_data.get('annotations',[]))} entries")
+
+        phi_keywords = ["doe", "john", "smith", "patient", "mrn", "dob"]
+        found_phi = [kw for kw in phi_keywords if kw in manifest_text.lower()]
+        if not found_phi:
+            _ok("Manifest is PHI-free (no patient name / MRN / DOB keywords)")
+        else:
+            _fail(f"PHI-like keywords found in manifest: {found_phi}", SECTION)
+
+        # Annotator IDs in manifest are opaque tokens
+        for entry in manifest_data.get("annotations", []):
+            aid = entry.get("annotator_id", "")
+            if " " in aid:
+                _fail(f"manifest annotator_id {aid!r} contains space (possible PHI)", SECTION)
+                break
+        else:
+            _ok("All manifest annotator_ids are opaque tokens")
+
+
+# ===========================================================================
 # Main
 # ===========================================================================
 
@@ -869,6 +1129,7 @@ def main() -> int:
         ("METRICS",       section_metrics),
         ("PACKAGING",     section_packaging),
         ("LEARN",         section_learn),
+        ("ANNOTATIONS",   section_annotations),
     ]
 
     ran = []

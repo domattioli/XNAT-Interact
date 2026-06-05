@@ -16,7 +16,7 @@ from __future__ import annotations
 import streamlit as st
 
 from app import state
-from app.pages import browse, login, upload, batch, download, terminal, onboarding
+from app.pages import browse, login, upload, batch, download, terminal, onboarding, annotations
 
 # ---------------------------------------------------------------------------
 # Page configuration — must be the FIRST streamlit call
@@ -35,12 +35,13 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 
 _NAV_PAGES = [
-    (state.PAGE_BROWSE,      "Browse"),
-    (state.PAGE_UPLOAD,      "Upload"),
-    (state.PAGE_BATCH,       "Batch Upload"),
-    (state.PAGE_DOWNLOAD,    "Download"),
-    (state.PAGE_LEARN,       "Learn (CLI ref)"),
-    (state.PAGE_ONBOARDING,  "Onboarding / Access"),
+    (state.PAGE_BROWSE,       "Browse"),
+    (state.PAGE_UPLOAD,       "Upload"),
+    (state.PAGE_BATCH,        "Batch Upload"),
+    (state.PAGE_DOWNLOAD,     "Download"),
+    (state.PAGE_ANNOTATIONS,  "Annotations"),
+    (state.PAGE_LEARN,        "Learn (CLI ref)"),
+    (state.PAGE_ONBOARDING,   "Onboarding / Access"),
 ]
 
 
@@ -83,12 +84,13 @@ def _render_sidebar() -> None:
 # ---------------------------------------------------------------------------
 
 _PAGE_RENDERERS = {
-    state.PAGE_BROWSE:      browse.render,
-    state.PAGE_UPLOAD:      upload.render,
-    state.PAGE_BATCH:       batch.render,
-    state.PAGE_DOWNLOAD:    download.render,
-    state.PAGE_LEARN:       terminal.render,
-    state.PAGE_ONBOARDING:  onboarding.render,
+    state.PAGE_BROWSE:       browse.render,
+    state.PAGE_UPLOAD:       upload.render,
+    state.PAGE_BATCH:        batch.render,
+    state.PAGE_DOWNLOAD:     download.render,
+    state.PAGE_ANNOTATIONS:  annotations.render,
+    state.PAGE_LEARN:        terminal.render,
+    state.PAGE_ONBOARDING:   onboarding.render,
 }
 
 

@@ -18,7 +18,7 @@ Agent delegation + token rules: [`../AGENTS.md`](../AGENTS.md).
 | 2 | Streamlit "see-your-data" app | [`002-phase-2-streamlit-app`](002-phase-2-streamlit-app/) | ✅ Built (`app/`) |
 | 3 | Packaging & install (detect-or-bundle Python; Software Center) | [`003-phase-3-packaging-and-install`](003-phase-3-packaging-and-install/) | ✅ Built (`installer/`) — OPS items deferred¹ |
 | 4 | Onboarding checklist & static site | [`004-phase-4-onboarding-and-docs`](004-phase-4-onboarding-and-docs/) | ✅ Built — enable Pages² |
-| 5 | Annotations & segmentations (multi-user, extensible, RLE storage; aggregator seam) | [`005-annotations-segmentations`](005-annotations-segmentations/) | 🚧 Building (STAPLE deferred to seam) |
+| 5 | Annotations & segmentations (multi-user, extensible, RLE storage; aggregator seam) | [`005-annotations-segmentations`](005-annotations-segmentations/) | ✅ Built (`src/annotations/`) — STAPLE deferred to aggregator seam |
 
 ¹ Code + build specs + runbooks shipped. Operator/ITS-only items tracked in [`docs/OPS_CHECKLIST.md`](../docs/OPS_CHECKLIST.md): ITS Software Center packaging request, Windows code-signing cert, Apple Developer ID + notarization, app-control allowlisting.
 ² Static site + Pages workflow shipped; operator must enable Pages (Settings → Pages → Source = GitHub Actions).

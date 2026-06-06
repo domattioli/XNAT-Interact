@@ -14,6 +14,7 @@ from src.xnat_scan_data import *
 from src.xnat_resource_data import *
 from src.services.deidentify import needs_pixel_review, apply_redaction
 from src.services.errors import FriendlyError, handle as _handle_error
+from src.services import xnat_conventions as conventions
 
 # Define list for allowable imports from this module -- do not want to import _local_variables.
 __all__ = ['SourceRFSession', 'SourceESVSession'] # Each time you add a new class that inherits from ExperimentData, add it to this list.
@@ -143,18 +144,13 @@ class ExperimentData():
     #--------------------------------------------XNAT-Publishing helpers and methods----------------------------------------------------------
     def _generate_queries( self, xnat_connection: XNATConnection ) -> Tuple[str, str, str, str, str]:
         # Create query strings and select object in xnat then create the relevant objects
-        exp_label = ( 'SOURCE_DATA' + '-' + self.intake_form.uid )
-        scan_label = '0' #to-do: potentially an issue if there are multiple scans in a session
-        # scan_type_label = scan_type_label
-        # scan_type_series_description = 
-        # resource_label = resource_label
-        proj_qs = '/project/' + xnat_connection.xnat_project_name
-        proj_qs = PurePosixPath( proj_qs ) # to-doneed to revisit this because it is hard-coded but Path makes it annoying
-        subj_qs = proj_qs / 'subject' / str( self.intake_form.uid )
-        exp_qs = subj_qs / 'experiment' / exp_label
-        scan_qs = exp_qs / 'scan' / scan_label
-        files_qs = scan_qs / 'resource' / 'files'
-        resource_label = 'SRC'
+        exp_label = conventions.source_data_label( self.intake_form.uid )
+        scan_label = conventions.SCAN_DEFAULT
+        subj_qs = conventions.subject_qs( xnat_connection.xnat_project_name, str( self.intake_form.uid ) )
+        exp_qs = conventions.experiment_qs( xnat_connection.xnat_project_name, str( self.intake_form.uid ), exp_label )
+        scan_qs = conventions.scan_qs( xnat_connection.xnat_project_name, str( self.intake_form.uid ), exp_label, scan_label )
+        files_qs = str( PurePosixPath( scan_qs ) / 'resource' / 'files' )
+        resource_label = conventions.ResourceLabel.SRC
         return str( subj_qs ), str( exp_qs ), str( scan_qs ), str( files_qs ), resource_label
 
 
@@ -164,9 +160,9 @@ class ExperimentData():
         # empty subject or experiment; we reuse it and fill in missing children.
         # The old assert-not-exists caused an AssertionError on re-publish and
         # forced manual cleanup — this resolves spec FR-002 / SC-001.
-        subj_inst = xnat_connection.server.select( str( subj_qs ) )
-        exp_inst  = xnat_connection.server.select( str( exp_qs ) )
-        scan_inst = xnat_connection.server.select( str( scan_qs ) )
+        subj_inst = xnat_connection.gateway.select( str( subj_qs ) )
+        exp_inst  = xnat_connection.gateway.select( str( exp_qs ) )
+        scan_inst = xnat_connection.gateway.select( str( scan_qs ) )
         return subj_inst, exp_inst, scan_inst
 
 
@@ -286,7 +282,7 @@ class ExperimentData():
         for key_zipped_ffn, value_dict in zipped_data.items():
             if verbose:     print( f'\t\t...Uploading {value_dict["FORMAT"]}-formatted files to XNAT...' )
             try:
-                scan_inst.resource( resource_label ).put_zip( key_zipped_ffn, content=value_dict['CONTENT'], format=value_dict['FORMAT'], tags='DATA' ) # type: ignore -- doesnt recognize .resource attribute of scan instance
+                xnat_connection.gateway.put_zip( scan_qs, resource_label, key_zipped_ffn, content=value_dict['CONTENT'], format=value_dict['FORMAT'], tags='DATA' ) # type: ignore
             except UploadError:
                 raise  # already wrapped; don't double-wrap
             except (ConnectionError, TimeoutError, OSError, Exception) as _conn_exc:

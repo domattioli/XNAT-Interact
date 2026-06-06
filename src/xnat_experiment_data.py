@@ -178,6 +178,8 @@ class ExperimentData():
         verbose: Opt[bool] = True,
         pixel_review_confirmer: Opt[Callable] = None,
         intake_form_temp_artifacts: Opt[_List[Path]] = None,
+        assessor: Opt[Path] = None,
+        assessor_label: Opt[str] = None,
     ) -> None:
         """
         Publish zipped pixel data to XNAT.
@@ -304,6 +306,22 @@ class ExperimentData():
 
         # Must also publish the resource file(s)
         self.intake_form.push_to_xnat( verbose=verbose, gateway=xnat_connection.gateway, subj_qs=subj_qs )
+
+        # C006 — assessor upload (derived data path)
+        # Only executed when caller supplies assessor=Path(...).
+        # Source-data publish behavior is unchanged when assessor=None.
+        if assessor is not None:
+            _assessor_label = assessor_label if assessor_label is not None else conventions.consensus_label( str( self.intake_form.uid ) )
+            _resource_label = conventions.ResourceLabel.SEGMENTATION_CONSENSUS
+            _filename = assessor.name
+            if verbose:
+                print( f'\t...Uploading assessor file {_filename} to XNAT...' )
+            xnat_connection.gateway.create_assessor(
+                exp_qs,
+                _assessor_label,
+                xsi_type='xnat:assessorData',
+                files=[ ( _resource_label, _filename, assessor ) ],
+            )
 
         # T027 — local PHI cleanup: delete zip files + any extra intake-form temp artifacts.
         if delete_zip:

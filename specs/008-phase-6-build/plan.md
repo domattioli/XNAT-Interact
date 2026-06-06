@@ -37,20 +37,22 @@ Six stages; each commit keeps `pytest` green. Dispatch per DomI policy: code →
 ### Stage 4 — Assessor decision + wiring (sonnet)
 
 13. `PyxnatGateway.create_assessor(experiment_qs, assessor_label, xsi_type='xnat:assessorData', files)`: implements assessor write per Phase 7 #27 datatype-cache pattern (create with xsiType → empty cache → attrs.mset). FakeGateway mirror records assessor-level write distinct from scan-resource.
-14. `src/xnat_experiment_data.py`: `publish_to_xnat` gains `assessor=...` keyword routing through `gateway.create_assessor`.
+14. `src/xnat_experiment_data.py`: `publish_to_xnat(..., assessor: Path = None, assessor_label: str = None)` (C006). When `assessor` set, routes through `gateway.create_assessor` using `assessor_label` (default `conventions.consensus_label(uid)`).
 15. `tests/contract/test_workflow_contract.py` T003: flip `# DOCUMENTS GAP` comments to live assertions; assert assessor xsiType + label + file round-trip.
 16. Update `specs/006-xnat-alignment/contract-test.md` audit matrix row 7 from "Assessor API deferred" to "Aligned (assessor, T003 verified)".
 
 ### Stage 5 — Real-XNAT dual-run (sonnet)
 
-17. Verify `tests/integration/xnat_local/` exists; if not, scaffold docker-compose pulling pinned xnat_local image SHA.
-18. `tests/contract/conftest.py` `real_xnat` fixture: under `RUN_XNAT_DUAL=1` → boot xnat_local via subprocess docker-compose; health-poll `:8080/xapi/siteConfig`; seed admin user + per-test project namespace (`ITEST_{uuid4hex[:8]}`); yield gateway connection; teardown cleans the project (not the container — session-scoped reuse).
-19. `tests/contract/test_workflow_contract.py`: flip all `# DUAL-RUN PARITY (deferred):` comment seams to live assertions (`assert fake_state == real_state` on attrs/files/enumeration).
-20. CI: leave `RUN_XNAT_DUAL` unset (skip-default); document local invocation in `tests/contract/README.md`.
+17. Verify `tests/integration/xnat_local/` exists; if not, scaffold `docker-compose.yml` pulling `xnat/xnat-web` at subagent-selected pinned SHA (latest stable digest). Document SHA in `tests/contract/README.md`.
+18. `tests/contract/conftest.py` `real_xnat` fixture: under `RUN_XNAT_DUAL=1` → boot xnat_local via subprocess docker-compose; health-poll `:8080/xapi/siteConfig`; seed admin/admin + per-test project namespace (`ITEST_{uuid4hex[:8]}`); yield gateway connection; teardown cleans the project (not the container — session-scoped reuse).
+19a. `tests/contract/comparator.py`: `XnatStateComparator` class. Normalizes fake + real state by stripping server-assigned fields (`ID`, `insert_date`, `xnat_*Data/id`, `URI`, timestamp fields). `compare(fake, real) -> ComparisonResult` with diff report on mismatch. Unit-tested in `tests/contract/test_comparator.py`.
+19b. `tests/contract/test_workflow_contract.py`: flip all 9 tests' `# DUAL-RUN PARITY (deferred):` seams to live: `XnatStateComparator().compare(fake_state, real_state).assert_equal()`. Poll-with-timeout for XNAT eventual consistency.
+20. No CI lane this batch (C009). Local-only `RUN_XNAT_DUAL=1` documented in `tests/contract/README.md`.
 
 ### Stage 6 — Verify + close
 
 21. Full suite + `scripts/simulate_e2e.py` green; byte-diff representative writes pre/post (SC-006).
+21b. Delete `build_server()` shim (C008). Verify zero callers via `grep -rn 'build_server' src/ tests/`.
 22. `RUN_XNAT_DUAL=1 pytest tests/contract/` green.
 23. Update `specs/README.md` Phase-6 row → Built. Close `006-xnat-alignment/tasks.md` T006/T020 (Phase 7 deferred items). Annotate #25.
 

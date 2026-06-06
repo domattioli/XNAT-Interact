@@ -11,6 +11,8 @@ import hashlib
 import tempfile
 from pyxnat import Interface
 from pyxnat.core.resources import Project as pyxnatProject
+from src.services.xnat_gateway import XnatGateway, build_gateway as _build_gateway
+from src.services import xnat_conventions as _conventions
 from typing import Optional as Opt, Union, Tuple, List as typehintList, Dict as typehintDict
 from pydicom.uid import UID as pydicom_UID, generate_uid as generate_pydicomUID
 import matplotlib.pyplot as plt
@@ -403,7 +405,7 @@ class XNATConnection( UIDandMetaInfo ):
         self._verify_login()
         
         if self.is_verified and not stay_connected: # Disconnect from the project instance connection if we successfully connected.
-            self.server.disconnect()
+            self.gateway.disconnect()
             self._open = False
         # if there are any failed tests, disconnect from the server and set is_open to False.
         if any( self._failed_tests.values() ):
@@ -415,7 +417,9 @@ class XNATConnection( UIDandMetaInfo ):
     @property
     def login_info( self )          -> XNATLogin:       return self._login_info
     @property
-    def server( self )              -> Interface:       return self._server
+    def gateway( self )             -> XnatGateway:     return self._gateway
+    @property
+    def server( self )              -> Interface:       return self._gateway.server  # type: ignore
     @property
     def project_query_str( self )   -> str:             return self._project_query_str
     @property
@@ -439,7 +443,7 @@ class XNATConnection( UIDandMetaInfo ):
             3.  User is None: If the user is None, the connection is invalid.
             4.  User is not added to project (XNAT-side): If the user is not added to the project on the XNAT side, the connection is invalid.
         '''
-        self._server = self._establish_connection()
+        self._gateway = self._establish_connection()
         self._grab_project_handle() # If more tests in the future, separate as its own function.
         self._is_verified = False
         try:    self.server.get('/')
@@ -488,7 +492,10 @@ class XNATConnection( UIDandMetaInfo ):
         # if all tests pass, set is_verified to True
         self._is_verified = True
 
-    def _establish_connection( self ) -> Interface:     return Interface( server=self.xnat_project_url, user=self.get_user, password=self.get_password )
+    def _establish_connection( self ) -> "XnatGateway":
+        gw = _build_gateway( url=self.xnat_project_url, user=self.get_user, password=self.get_password )
+        gw.connect()
+        return gw
 
     def _grab_project_handle( self ):
         self._project_query_str = '/project/' + self.xnat_project_name
@@ -496,8 +503,8 @@ class XNATConnection( UIDandMetaInfo ):
         if project_handle.exists():                 self._project_handle = project_handle       # type: ignore
 
     def close( self ):
-        if hasattr( self, '_server' ):  # Delete the local copy of the ConfigTables.
-            self._server.disconnect()
+        if hasattr( self, '_gateway' ):  # Delete the local copy of the ConfigTables.
+            self._gateway.disconnect()
             if os.path.exists( self.config_ffn ):       os.remove( self.config_ffn )
         self._open = False
         print( f"\n\t*Prior connection to XNAT server, '{self.uid}', has been closed -- local config data will be deleted!\n" )
@@ -910,7 +917,7 @@ class ConfigTables( UIDandMetaInfo ):
         with open( write_fn, 'w' ) as f:            json.dump( data, f, indent=2, separators=( ',', ':' ) )
 
         # Push that to xnat.
-        self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_backups_folder_name ).file( write_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
+        self.xnat_connection.gateway.put_file( _conventions.project_qs( self.xnat_connection.xnat_project_name ), self.xnat_backups_folder_name, write_fn, self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
         if write_pn is not None:
             shutil.copy( self.config_ffn, write_pn )
             if verbose:             print( f'\tSUCCESS! -- Created backup of config file at:\t{write_pn}\n' )
@@ -923,11 +930,12 @@ class ConfigTables( UIDandMetaInfo ):
         with open( ffn, 'rb' ) as _f:   return hashlib.sha256( _f.read() ).hexdigest()
 
     def pull_from_xnat( self, write_ffn: Opt[Path]=None, verbose: Opt[bool]=True ) -> Opt[Path]:
-        if write_ffn is None:   write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( self.config_ffn )
+        _proj_qs = _conventions.project_qs( self.xnat_connection.xnat_project_name )
+        if write_ffn is None:   write_ffn = self.xnat_connection.gateway.get_file_copy( _proj_qs, self.xnat_config_folder_name, self.config_fn, self.config_ffn )
         else:
             assert isinstance( write_ffn, Path ), f"Provided write file path must be a valid Path object: {write_ffn}"
             assert write_ffn.suffix == '.json', f"Provided write file path must have a '.json' extension: {write_ffn}"
-            write_ffn = self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( write_ffn )
+            write_ffn = self.xnat_connection.gateway.get_file_copy( _proj_qs, self.xnat_config_folder_name, self.config_fn, write_ffn )
         self._load( write_ffn, verbose )
         if verbose:                     print( f'\t...ConfigTables successfully populated from XNAT data.\n' )
 
@@ -979,9 +987,12 @@ class ConfigTables( UIDandMetaInfo ):
         with _tempfile.NamedTemporaryFile( suffix='.json', delete=False ) as _tmp:
             _tmp_path = _tmp.name
         try:
-            self.xnat_connection.server.select.project(
-                self.xnat_connection.xnat_project_name
-            ).resource( self.xnat_config_folder_name ).file( self.config_fn ).get_copy( _tmp_path )
+            self.xnat_connection.gateway.get_file_copy(
+                _conventions.project_qs( self.xnat_connection.xnat_project_name ),
+                self.xnat_config_folder_name,
+                self.config_fn,
+                _tmp_path,
+            )
             current_fingerprint = self._fingerprint_file( _tmp_path )
         finally:
             if os.path.exists( _tmp_path ):     os.remove( _tmp_path )
@@ -1013,12 +1024,14 @@ class ConfigTables( UIDandMetaInfo ):
             # T029: detect-and-refuse lost-update before overwriting the server copy.
             self._check_for_lost_update()
             #
-            self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_config_folder_name ).file( self.config_fn ).put( self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
+            _proj_qs = _conventions.project_qs( self.xnat_connection.xnat_project_name )
+            self.xnat_connection.gateway.put_file( _proj_qs, self.xnat_config_folder_name, self.config_fn, self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
             if verbose:                     print( f'\t...ConfigTables (config.json) successfully updated on XNAT!\n' )
             return True
         except Exception as e:
             # Delete the backupfile
-            if out is not None:     self.xnat_connection.server.select.project( self.xnat_connection.xnat_project_name ).resource( self.xnat_backups_folder_name ).file( out ).delete()
+            _proj_qs = _conventions.project_qs( self.xnat_connection.xnat_project_name )
+            if out is not None:     self.xnat_connection.gateway.delete_file( _proj_qs, self.xnat_backups_folder_name, out )
             print( f'\tERROR! --- Failed to push ConfigTables to XNAT server. Error message: {e}\n' )
             return False
 

@@ -83,6 +83,7 @@ def _build_stub_config_tables(
     stub = types.SimpleNamespace()
     stub.xnat_connection = types.SimpleNamespace()
     stub.xnat_connection.server = fake_server
+    stub.xnat_connection.gateway = fake_server
     stub.xnat_connection.xnat_project_name = project_name
     stub.xnat_config_folder_name = config_folder
     stub.config_fn = config_fn

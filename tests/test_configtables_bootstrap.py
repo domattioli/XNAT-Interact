@@ -57,6 +57,7 @@ def _make_xnat_connection(
     stub.is_open = True
     stub.is_verified = True
     stub.server = server
+    stub.gateway = server
     stub.xnat_project_name = "FAKE_PROJECT"
     stub.login_info = login_info
     _users = project_users or ["testuser"]

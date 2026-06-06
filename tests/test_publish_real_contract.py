@@ -31,7 +31,7 @@ from tests.fakes.fake_xnat import FakeXNAT
 # ---------------------------------------------------------------------------
 
 def _make_connection(fake: FakeXNAT, project: str = "TEST_PROJECT") -> SimpleNamespace:
-    return SimpleNamespace(server=fake, xnat_project_name=project)
+    return SimpleNamespace(server=fake, gateway=fake, xnat_project_name=project)
 
 
 def _make_login(username: str = "testuser") -> SimpleNamespace:

@@ -210,7 +210,7 @@ def multi_file_zip(tmp_path: Path, synthetic_rf_dicom: Path) -> tuple[Path, Dict
 @pytest.fixture
 def xnat_connection(fake_xnat: FakeXNAT) -> SimpleNamespace:
     """XNAT connection stub for publish_to_xnat."""
-    return SimpleNamespace(server=fake_xnat, xnat_project_name="TEST_PROJECT")
+    return SimpleNamespace(server=fake_xnat, gateway=fake_xnat, xnat_project_name="TEST_PROJECT")
 
 
 @pytest.fixture

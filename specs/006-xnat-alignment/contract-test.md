@@ -167,7 +167,7 @@ Track divergences between FakeXNAT and real XNAT.
 | Idempotent `create()` on existing | Reuses handle | Reuses handle | Aligned | Phase 7 #27; verified T006 |
 | Resource registry lookup (plural/singular QS) | Unified registry (Phase 6 Stage 1) | N/A (real XNAT) | FakeXNAT enhancement | Contract tests use both `/project/` and `/projects/` formats; FakeXNAT now normalizes both via _parse_resource_qs |
 | Multi-file resource enumeration | list_files() returns all N | enumerate endpoint lists N | Aligned | Phase 7 #25; verified T002 |
-| Assessor vs. Resource | Resource API tested (T003) | Assessor API deferred | Design choice | Phase 6 gateway will clarify (assessor or resource for derived) |
+| Assessor vs. Resource | Aligned (assessor, T003 verified, fake-side) | Real-side parity Stage 5 (dual-run) | Design choice — assessor path chosen per C001 | `gateway.create_assessor` wired; T003 contract tests live; Stage 5 dual-run discharges real-side |
 | Versioning overwrite (no dupes) | put_zip(..., overwrite=True) → same resource | Same | Aligned | T004 verified idempotent overwrite |
 | Missing-tag guard (InstanceNumber) | No crash, default used | No crash, default used | Aligned | Phase 7 #30; verified T007 |
 

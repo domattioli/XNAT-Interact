@@ -70,10 +70,8 @@ def _make_fake_intake_form(tmp_path: Path) -> SimpleNamespace:
         saved_ffn_str=str(saved_ffn),
     )
 
-    def push_to_xnat(subj_inst: Any, verbose: bool = False) -> None:
-        subj_inst.resource("INTAKE_FORM").file("form.json").insert(
-            "{}", content="TEXT", format="JSON", tags="DOC"
-        )
+    def push_to_xnat(subj_inst=None, verbose: bool = False, **kwargs) -> None:
+        pass  # gateway path handles the upload; mock is a no-op
 
     form.push_to_xnat = push_to_xnat
     return form

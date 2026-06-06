@@ -770,10 +770,15 @@ class ORDataIntakeForm( ResourceFile ):
         shutil.copy( self.saved_ffn, dest_ffn )
 
 
-    def push_to_xnat( self, subj_inst, verbose: Opt[bool] = False ):
+    def push_to_xnat( self, subj_inst=None, verbose: Opt[bool] = False, *, gateway=None, subj_qs: Opt[str] = None ):
         if verbose:     print( f'\t\t...Uploading resource files...' )
         with open( self.saved_ffn, 'r' ) as f:
-            subj_inst.resource( 'INTAKE_FORM' ).file( self.filename_str ).insert( f.read(), content='TEXT', format='JSON', tags='DOC' ) # type: ignore
+            data = f.read()
+        if gateway is not None and subj_qs is not None:
+            from src.services.xnat_conventions import ResourceLabel
+            gateway.insert_file( subj_qs, ResourceLabel.INTAKE_FORM, self.filename_str, data, content='TEXT', format='JSON', tags='DOC' )
+        else:
+            subj_inst.resource( 'INTAKE_FORM' ).file( self.filename_str ).insert( data, content='TEXT', format='JSON', tags='DOC' ) # type: ignore
 
 
     @staticmethod

@@ -303,7 +303,7 @@ class ExperimentData():
                 raise UploadError(fe) from _conn_exc
 
         # Must also publish the resource file(s)
-        self.intake_form.push_to_xnat( subj_inst=subj_inst, verbose=verbose )
+        self.intake_form.push_to_xnat( verbose=verbose, gateway=xnat_connection.gateway, subj_qs=subj_qs )
         # # Old method for pushing files to XNAT:
         # # scan_inst.resource( 'DATA' ).file( 'mp4_vid.mp4' ).insert( vid_ffn, content='VIDEO', format='MP4', tags='OR_DATA', overwrite=True )
         # # scan_inst.resource( resource_label ).put_zip( zipped_ffn, content='IMAGE', format='DICOM', tags='POST_OP_DATA', overwrite=True )

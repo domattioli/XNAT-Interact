@@ -93,11 +93,8 @@ def make_fake_intake_form(tmp_path: Path) -> SimpleNamespace:
         saved_ffn_str=str(saved_ffn),
     )
 
-    def push_to_xnat(subj_inst, verbose=False):
-        # Simulate the real push: calls subj_inst.resource(...).file(...).insert(...)
-        subj_inst.resource("INTAKE_FORM").file("RECONSTRUCTED_OR_DATA_INTAKE_FORM.json").insert(
-            "{}", content="TEXT", format="JSON", tags="DOC"
-        )
+    def push_to_xnat(subj_inst=None, verbose=False, **kwargs):
+        pass  # gateway path handles the upload; mock is a no-op
 
     form.push_to_xnat = push_to_xnat
     return form

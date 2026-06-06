@@ -390,7 +390,11 @@ class FakeXNAT(XnatGateway):
         fidelity_mode: bool = False,
     ) -> None:
         self.project_name = project_name
-        self.project_users: List[str] = project_users if project_users is not None else ["testuser"]
+        # Stored as _project_users to avoid shadowing the XnatGateway.project_users() method.
+        self._project_users: List[str] = project_users if project_users is not None else ["testuser"]
+        # Legacy alias kept for backward compat with tests that read fake.project_users directly.
+        # (These tests read the list, not call it; the alias allows both access patterns.)
+        self.project_users_list: List[str] = self._project_users
         # fidelity_mode=True reproduces pyxnat behaviours invisible to the plain
         # offline double — specifically the post-create() empty datatype cache
         # (#27).  Defaults to False so all 726 existing tests are unaffected.

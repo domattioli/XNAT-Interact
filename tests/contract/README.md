@@ -56,3 +56,12 @@ across all tests in the session; teardown at session end runs `docker compose do
 
 Dual-run is local-only this batch (C009). A CI lane (`xnat-dual-run`) is out of scope
 and will be added in a future phase once image caching strategy is decided.
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `conftest.py` | `fake_xnat`, `real_xnat` (session-scoped), `real_xnat_project` fixtures |
+| `comparator.py` | `XnatStateComparator` — capture, normalize, and diff XNAT state |
+| `test_comparator.py` | Unit tests for `XnatStateComparator` |
+| `test_workflow_contract.py` | 9 workflow contract tests (T001–T007), dual-run seams live |

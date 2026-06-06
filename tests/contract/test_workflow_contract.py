@@ -2,29 +2,88 @@
 tests/contract/test_workflow_contract.py — Phase 6 contract tests (T001–T007).
 
 Ensures FakeXNAT ≈ real XNAT behavioral parity for realistic grad-student workflows.
-Stage 1 (this implementation): FakeXNAT only. Stage 2: dual-run with real XNAT via Docker.
+Stage 5 (this implementation): dual-run seams live — real XNAT comparisons execute
+when RUN_XNAT_DUAL=1; fake-side assertions always run.
 
 Test design: each test case
   1. Stages synthetic data (FakeXNAT with fidelity_mode=True)
   2. Executes workflow (publish/download/revise)
   3. Asserts server state matches expectations
-  4. Includes seam comments for deferred real-XNAT parity assertions
+  4. When RUN_XNAT_DUAL=1: runs same workflow against real XNAT and compares
+     state via XnatStateComparator
 
 Synthetic data: all DICOMs, zips, and form stubs generated offline — no real PHI.
-No real XNAT server required; no Docker; CI-friendly.
+No real XNAT server required; no Docker; CI-friendly (default mode).
 """
 from __future__ import annotations
 
+import time
+import uuid
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytest
 
 from src.xnat_experiment_data import ExperimentData, ReviewDecision
+from src.services import xnat_conventions as conventions
 from tests.fakes.fake_xnat import FakeXNAT
 from app.logic.download import download_selection, list_downloadable
+from tests.contract.comparator import XnatStateComparator
+
+
+# ---------------------------------------------------------------------------
+# Dual-run helpers
+# ---------------------------------------------------------------------------
+
+def _get_real_xnat_and_project(request) -> Optional[Tuple[Any, str]]:
+    """
+    Attempt to obtain the real_xnat gateway and a fresh project name.
+
+    Returns (gateway, project_name) when RUN_XNAT_DUAL=1 and Docker is available.
+    Returns None when the real_xnat fixture skips (env var absent or Docker absent).
+
+    Uses pytest's fixture value lookup so the skip from real_xnat propagates
+    as a None result here rather than skipping the whole test.
+    """
+    try:
+        gw = request.getfixturevalue("real_xnat")
+    except pytest.skip.Exception:
+        return None
+    # Create a per-test project
+    project_name = f"ITEST_{uuid.uuid4().hex[:8].upper()}"
+    try:
+        gw.create(f"/project/{project_name}")
+    except Exception:
+        pass
+    return gw, project_name
+
+
+def _teardown_real_project(gw: Any, project_name: str) -> None:
+    """Best-effort project deletion on real XNAT."""
+    try:
+        gw.select(f"/project/{project_name}").delete()
+    except Exception:
+        pass
+
+
+def _poll_until(condition_fn, timeout: float = 5.0, interval: float = 0.5) -> bool:
+    """
+    Poll *condition_fn* until it returns truthy or timeout expires.
+
+    Returns True if condition met, False on timeout.
+    Used for XNAT eventual-consistency reads.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            if condition_fn():
+                return True
+        except Exception:
+            pass
+        time.sleep(interval)
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -86,11 +145,14 @@ class TestT001SourceUpload:
         fake_zip_file: tuple,
         xnat_connection: SimpleNamespace,
         xnat_login: SimpleNamespace,
+        request,
     ):
         """Publish creates subject → experiment → scan → SRC resource."""
         zip_path, zipped_data = fake_zip_file
         session = _MinimalRFSession.build(intake_form)
 
+        # Capture fake state before publish
+        cmp = XnatStateComparator()
         session.publish_to_xnat(
             xnat_connection=xnat_connection,
             validated_login=xnat_login,
@@ -111,10 +173,32 @@ class TestT001SourceUpload:
         assert len(put_zips) == 1, f"Expected 1 put_zip for SRC, got {len(put_zips)}"
         assert put_zips[0]["kwargs"]["_label"] == "SRC"
 
-        # DUAL-RUN PARITY (deferred):
-        #   assert fake_xnat subject.exists() == real_xnat.subject.exists()
-        #   assert fake_xnat experiment.exists() == real_xnat.experiment.exists()
-        #   assert fake_xnat scan.exists() == real_xnat.scan.exists()
+        # DUAL-RUN PARITY: capture fake state, run against real, compare
+        fake_state = cmp.capture(fake_xnat, "TEST_PROJECT")
+        real_pair = _get_real_xnat_and_project(request)
+        if real_pair is not None:
+            real_gw, real_project = real_pair
+            try:
+                real_conn = SimpleNamespace(
+                    server=real_gw, gateway=real_gw, xnat_project_name=real_project
+                )
+                real_session = _MinimalRFSession.build(intake_form)
+                real_session.publish_to_xnat(
+                    xnat_connection=real_conn,
+                    validated_login=xnat_login,
+                    zipped_data=zipped_data,
+                    delete_zip=False,
+                    verbose=False,
+                    pixel_review_confirmer=_confirmed_confirmer,
+                )
+                # Poll for eventual consistency
+                _poll_until(lambda: real_gw.exists(
+                    f"/project/{real_project}/subject/{intake_form.uid}"
+                ))
+                real_state = cmp.capture(real_gw, real_project)
+                cmp.compare(fake_state, real_state).assert_equal()
+            finally:
+                _teardown_real_project(real_gw, real_project)
 
     def test_publish_calls_attrs_mset_for_all_three(
         self,
@@ -123,11 +207,13 @@ class TestT001SourceUpload:
         fake_zip_file: tuple,
         xnat_connection: SimpleNamespace,
         xnat_login: SimpleNamespace,
+        request,
     ):
         """attrs.mset must be called at least once (per Phase 7 #27 fix)."""
         zip_path, zipped_data = fake_zip_file
         session = _MinimalRFSession.build(intake_form)
 
+        cmp = XnatStateComparator()
         session.publish_to_xnat(
             xnat_connection=xnat_connection,
             validated_login=xnat_login,
@@ -141,6 +227,32 @@ class TestT001SourceUpload:
         assert len(mset_calls) >= 3, (
             f"Expected ≥3 attrs.mset calls (subj/exp/scan), got {len(mset_calls)}"
         )
+
+        # DUAL-RUN PARITY: fake vs real attrs written
+        fake_state = cmp.capture(fake_xnat, "TEST_PROJECT")
+        real_pair = _get_real_xnat_and_project(request)
+        if real_pair is not None:
+            real_gw, real_project = real_pair
+            try:
+                real_conn = SimpleNamespace(
+                    server=real_gw, gateway=real_gw, xnat_project_name=real_project
+                )
+                real_session = _MinimalRFSession.build(intake_form)
+                real_session.publish_to_xnat(
+                    xnat_connection=real_conn,
+                    validated_login=xnat_login,
+                    zipped_data=zipped_data,
+                    delete_zip=False,
+                    verbose=False,
+                    pixel_review_confirmer=_confirmed_confirmer,
+                )
+                _poll_until(lambda: real_gw.exists(
+                    f"/project/{real_project}/subject/{intake_form.uid}"
+                ))
+                real_state = cmp.capture(real_gw, real_project)
+                cmp.compare(fake_state, real_state).assert_equal()
+            finally:
+                _teardown_real_project(real_gw, real_project)
 
 
 # ---------------------------------------------------------------------------
@@ -166,11 +278,13 @@ class TestT002SourceDownload:
         self,
         fake_xnat: FakeXNAT,
         tmp_path: Path,
+        request,
     ):
         """
         Pre-seed 5 files in a resource, download, assert all 5 appear
         (not 1 synthesized {subject}_{experiment}_{scan}.dcm).
         """
+        cmp = XnatStateComparator()
         # Pre-seed: subject → experiment → scan → SRC resource with 5 files
         subj_qs = "/project/TEST_PROJECT/subject/ITEST_SUBJ_0001"
         exp_qs = "/project/TEST_PROJECT/subject/ITEST_SUBJ_0001/experiment/ITEST_EXP_0001"
@@ -217,14 +331,36 @@ class TestT002SourceDownload:
             f"Expected 5 files written, got {len(outcome.files_written)}"
         )
 
-        # DUAL-RUN PARITY (deferred):
-        #   assert fake_xnat.resource.num_files() == real_xnat.resource.num_files()
-        #   assert len(fake_files) == len(real_files)
+        # DUAL-RUN PARITY: file count matches between fake and real
+        fake_state = cmp.capture(fake_xnat, "TEST_PROJECT")
+        real_pair = _get_real_xnat_and_project(request)
+        if real_pair is not None:
+            real_gw, real_project = real_pair
+            try:
+                # Seed the same files on real XNAT
+                real_scan_qs = f"/project/{real_project}/subject/ITEST_SUBJ_0001/experiment/ITEST_EXP_0001/scan/0"
+                real_gw.create(f"/project/{real_project}/subject/ITEST_SUBJ_0001")
+                real_gw.create(
+                    f"/project/{real_project}/subject/ITEST_SUBJ_0001/experiment/ITEST_EXP_0001",
+                    xsiType="xnat:rfSessionData",
+                )
+                real_gw.create(real_scan_qs, xsiType="xnat:rfScanData")
+                for i in range(5):
+                    real_gw.insert_file(
+                        real_scan_qs, "SRC", f"frame_{i:03d}.dcm",
+                        f"FAKE_DICOM_CONTENT_{i}".encode(),
+                    )
+                _poll_until(lambda: len(real_gw.list_files(real_scan_qs, "SRC")) == 5)
+                real_state = cmp.capture(real_gw, real_project)
+                cmp.compare(fake_state, real_state).assert_equal()
+            finally:
+                _teardown_real_project(real_gw, real_project)
 
     def test_file_bytes_round_trip(
         self,
         fake_xnat: FakeXNAT,
         tmp_path: Path,
+        request,
     ):
         """File bytes must round-trip: write → get_copy → verify content."""
         subj_qs = "/project/TEST_PROJECT/subject/ITEST_SUBJ_0002"
@@ -270,6 +406,28 @@ class TestT002SourceDownload:
         if found_1:
             assert found_1[0].read_bytes() == test_content_1
 
+        # DUAL-RUN PARITY: bytes hash comparison
+        cmp = XnatStateComparator()
+        fake_state = cmp.capture(fake_xnat, "TEST_PROJECT")
+        real_pair = _get_real_xnat_and_project(request)
+        if real_pair is not None:
+            real_gw, real_project = real_pair
+            real_scan_qs = f"/project/{real_project}/subject/ITEST_SUBJ_0002/experiment/ITEST_EXP_0002/scan/0"
+            try:
+                real_gw.create(f"/project/{real_project}/subject/ITEST_SUBJ_0002")
+                real_gw.create(
+                    f"/project/{real_project}/subject/ITEST_SUBJ_0002/experiment/ITEST_EXP_0002",
+                    xsiType="xnat:rfSessionData",
+                )
+                real_gw.create(real_scan_qs, xsiType="xnat:rfScanData")
+                real_gw.insert_file(real_scan_qs, "SRC", "file_1.dcm", test_content_1)
+                real_gw.insert_file(real_scan_qs, "SRC", "file_2.dcm", test_content_2)
+                _poll_until(lambda: len(real_gw.list_files(real_scan_qs, "SRC")) == 2)
+                real_state = cmp.capture(real_gw, real_project)
+                cmp.compare(fake_state, real_state).assert_equal()
+            finally:
+                _teardown_real_project(real_gw, real_project)
+
 
 # ---------------------------------------------------------------------------
 # T003 — Upload Derived (Assessor or Resource)
@@ -278,62 +436,249 @@ class TestT002SourceDownload:
 @pytest.mark.contract
 class TestT003UploadDerived:
     """
-    T003: upload a derived/consensus resource.
+    T003: upload a derived/consensus file via gateway.create_assessor.
 
     Workflow:
       1. Stage Subject/Experiment from T001
-      2. Upload a derived DICOM (e.g., SEGMENTATION_CONSENSUS resource)
-      3. Assert: new resource created
+      2. Call publish_to_xnat(..., assessor=Path, assessor_label=label)
+      3. Assert: assessor.create recorded with correct xsiType and label;
+         file round-trips via FakeGateway.
 
-    Fidelity note:
-      publish_to_xnat does not expose an assessor=... parameter yet.
-      This test uses the resource-level API directly.
-      Gap documented in audit matrix: Phase 6 decision needed (assessor vs. resource).
+    Fake-side parity verified here.
+    Real-side parity deferred to Stage 5 dual-run (DUAL-RUN PARITY seams below).
     """
 
-    def test_upload_derived_resource(
+    def test_publish_to_xnat_assessor_create_recorded(
+        self,
+        fake_xnat: FakeXNAT,
+        intake_form: SimpleNamespace,
+        fake_zip_file: tuple,
+        xnat_connection: SimpleNamespace,
+        xnat_login: SimpleNamespace,
+        tmp_path: Path,
+        request,
+    ):
+        """
+        publish_to_xnat with assessor=... routes through gateway.create_assessor.
+        Asserts:
+          - assessor.create op recorded
+          - xsiType == 'xnat:assessorData'
+          - assessor_label == conventions.consensus_label(uid)
+          - assessor.file.put op recorded for the file
+        """
+        zip_path, zipped_data = fake_zip_file
+        session = _MinimalRFSession.build(intake_form)
+
+        # Create a synthetic assessor file
+        assessor_file = tmp_path / "consensus.nii"
+        assessor_file.write_bytes(b"CONSENSUS_SEGMENTATION_BYTES")
+
+        session.publish_to_xnat(
+            xnat_connection=xnat_connection,
+            validated_login=xnat_login,
+            zipped_data=zipped_data,
+            delete_zip=False,
+            verbose=False,
+            pixel_review_confirmer=_confirmed_confirmer,
+            assessor=assessor_file,
+        )
+
+        # assessor.create must be recorded
+        assessor_creates = [c for c in fake_xnat.calls if c["op"] == "assessor.create"]
+        assert len(assessor_creates) == 1, (
+            f"Expected 1 assessor.create, got {len(assessor_creates)}"
+        )
+
+        # xsiType must be xnat:assessorData
+        recorded_xsi = assessor_creates[0]["kwargs"].get("xsiType")
+        assert recorded_xsi == "xnat:assessorData", (
+            f"Expected xsiType='xnat:assessorData', got {recorded_xsi!r}"
+        )
+
+        # label must equal conventions.consensus_label(uid)
+        expected_label = conventions.consensus_label(str(intake_form.uid))
+        recorded_qs = assessor_creates[0]["kwargs"].get("_qs", "")
+        assert recorded_qs.endswith(expected_label), (
+            f"Assessor QS {recorded_qs!r} does not end with expected label {expected_label!r}"
+        )
+
+        # file put must be recorded under assessor.file.put
+        assessor_file_puts = [c for c in fake_xnat.calls if c["op"] == "assessor.file.put"]
+        assert len(assessor_file_puts) == 1, (
+            f"Expected 1 assessor.file.put, got {len(assessor_file_puts)}"
+        )
+        assert assessor_file_puts[0]["kwargs"]["_filename"] == "consensus.nii"
+
+        # DUAL-RUN PARITY: assessor existence + xsiType on real XNAT
+        cmp = XnatStateComparator()
+        fake_state = cmp.capture(fake_xnat, "TEST_PROJECT")
+        real_pair = _get_real_xnat_and_project(request)
+        if real_pair is not None:
+            real_gw, real_project = real_pair
+            try:
+                real_conn = SimpleNamespace(
+                    server=real_gw, gateway=real_gw, xnat_project_name=real_project
+                )
+                real_session = _MinimalRFSession.build(intake_form)
+                real_session.publish_to_xnat(
+                    xnat_connection=real_conn,
+                    validated_login=xnat_login,
+                    zipped_data=zip_path.__class__(str(zip_path)),
+                    delete_zip=False,
+                    verbose=False,
+                    pixel_review_confirmer=_confirmed_confirmer,
+                    assessor=assessor_file,
+                )
+                exp_label = conventions.experiment_qs(
+                    real_project,
+                    str(intake_form.uid),
+                    intake_form.group,
+                    intake_form.acquisition_site,
+                    intake_form.ortho_procedure_type,
+                ).split("/experiment/")[-1]
+                real_exp_qs = (
+                    f"/project/{real_project}/subject/{intake_form.uid}"
+                    f"/experiment/{exp_label}"
+                )
+                _poll_until(lambda: bool(
+                    real_gw.exists(real_exp_qs)
+                ))
+                real_state = cmp.capture(real_gw, real_project)
+                cmp.compare(fake_state, real_state).assert_equal()
+            finally:
+                _teardown_real_project(real_gw, real_project)
+
+    def test_assessor_distinct_from_scan_resource_write(
+        self,
+        fake_xnat: FakeXNAT,
+        intake_form: SimpleNamespace,
+        fake_zip_file: tuple,
+        xnat_connection: SimpleNamespace,
+        xnat_login: SimpleNamespace,
+        tmp_path: Path,
+        request,
+    ):
+        """
+        assessor.create / assessor.file.put ops are distinct from scan-resource
+        write ops (resource.put_zip / file.put).
+        """
+        zip_path, zipped_data = fake_zip_file
+        session = _MinimalRFSession.build(intake_form)
+
+        assessor_file = tmp_path / "seg.nii"
+        assessor_file.write_bytes(b"SEG_DATA")
+
+        session.publish_to_xnat(
+            xnat_connection=xnat_connection,
+            validated_login=xnat_login,
+            zipped_data=zipped_data,
+            delete_zip=False,
+            verbose=False,
+            pixel_review_confirmer=_confirmed_confirmer,
+            assessor=assessor_file,
+        )
+
+        scan_resource_writes = [
+            c for c in fake_xnat.calls
+            if c["op"] in ("resource.put_zip", "file.put")
+        ]
+        assessor_writes = [
+            c for c in fake_xnat.calls
+            if c["op"] in ("assessor.create", "assessor.file.put")
+        ]
+        assert len(scan_resource_writes) >= 1, "Expected at least 1 scan-resource write"
+        assert len(assessor_writes) >= 1, "Expected at least 1 assessor write"
+
+        # op namespaces must not overlap
+        scan_ops = {c["op"] for c in scan_resource_writes}
+        assessor_ops = {c["op"] for c in assessor_writes}
+        assert scan_ops.isdisjoint(assessor_ops), (
+            f"Scan and assessor op namespaces overlap: {scan_ops & assessor_ops}"
+        )
+
+        # DUAL-RUN PARITY: scan resource count unchanged by assessor upload
+        cmp = XnatStateComparator()
+        fake_state = cmp.capture(fake_xnat, "TEST_PROJECT")
+        real_pair = _get_real_xnat_and_project(request)
+        if real_pair is not None:
+            real_gw, real_project = real_pair
+            try:
+                real_conn = SimpleNamespace(
+                    server=real_gw, gateway=real_gw, xnat_project_name=real_project
+                )
+                real_session = _MinimalRFSession.build(intake_form)
+                real_session.publish_to_xnat(
+                    xnat_connection=real_conn,
+                    validated_login=xnat_login,
+                    zipped_data={str(zip_path): {"CONTENT": "IMAGE", "FORMAT": "DICOM", "TAG": "INTRA_OP"}},
+                    delete_zip=False,
+                    verbose=False,
+                    pixel_review_confirmer=_confirmed_confirmer,
+                    assessor=assessor_file,
+                )
+                _poll_until(lambda: real_gw.exists(
+                    f"/project/{real_project}/subject/{intake_form.uid}"
+                ))
+                real_state = cmp.capture(real_gw, real_project)
+                cmp.compare(fake_state, real_state).assert_equal()
+            finally:
+                _teardown_real_project(real_gw, real_project)
+
+    def test_assessor_file_bytes_round_trip(
         self,
         fake_xnat: FakeXNAT,
         tmp_path: Path,
+        request,
     ):
         """
-        Upload a derived resource (SEGMENTATION_CONSENSUS).
-
-        Note: publish_to_xnat currently only exposes SOURCE_DATA uploads.
-        This test directly uses the FakeXNAT resource API to verify the
-        infrastructure supports derived resources. Phase 6 gateway design
-        will clarify the publish_to_xnat API for derived uploads.
+        File bytes uploaded via create_assessor are recorded in FakeGateway.
+        Verifies the assessor.file.put record carries the correct local_path.
         """
-        # Pre-stage Subject/Experiment/Scan (T001 state)
-        subj_qs = "/project/TEST_PROJECT/subject/ITEST_SUBJ_0003"
         exp_qs = "/project/TEST_PROJECT/subject/ITEST_SUBJ_0003/experiment/ITEST_EXP_0003"
-        scan_qs = "/project/TEST_PROJECT/subject/ITEST_SUBJ_0003/experiment/ITEST_EXP_0003/scan/0"
+        assessor_label = "SEGMENTATION_CONSENSUS-test_uid"
+        assessor_file = tmp_path / "consensus.nii"
+        expected_bytes = b"ROUND_TRIP_TEST_BYTES"
+        assessor_file.write_bytes(expected_bytes)
 
-        subj = fake_xnat.select(subj_qs)
-        subj.create()
-        exp = fake_xnat.select(exp_qs)
-        exp.create(xsiType="xnat:rfSessionData")
-        scan = fake_xnat.select(scan_qs)
-        scan.create(xsiType="xnat:rfScanData")
+        fake_xnat.create_assessor(
+            exp_qs,
+            assessor_label,
+            xsi_type="xnat:assessorData",
+            files=[("SEGMENTATION_CONSENSUS", "consensus.nii", assessor_file)],
+        )
 
-        # Upload derived resource (using resource API directly)
-        derived_zip = tmp_path / "derived.zip"
-        with zipfile.ZipFile(str(derived_zip), "w") as zf:
-            zf.writestr("consensus.nii", b"CONSENSUS_SEGMENTATION_DATA")
+        # assessor.create recorded
+        creates = [c for c in fake_xnat.calls if c["op"] == "assessor.create"]
+        assert len(creates) == 1
+        assert creates[0]["kwargs"]["xsiType"] == "xnat:assessorData"
 
-        resource = scan.resource("SEGMENTATION_CONSENSUS")
-        resource.put_zip(str(derived_zip), content="IMAGE", format="NIFTI", tags="CONSENSUS")
+        # assessor.file.put recorded with correct path
+        file_puts = [c for c in fake_xnat.calls if c["op"] == "assessor.file.put"]
+        assert len(file_puts) == 1
+        assert file_puts[0]["kwargs"]["_filename"] == "consensus.nii"
+        assert str(assessor_file) in file_puts[0]["args"] or str(assessor_file) == file_puts[0]["args"][0]
 
-        # Verify: resource created and put_zip called
-        put_zip_calls = [
-            c for c in fake_xnat.calls
-            if c["op"] == "resource.put_zip" and c["kwargs"]["_label"] == "SEGMENTATION_CONSENSUS"
-        ]
-        assert len(put_zip_calls) == 1, "SEGMENTATION_CONSENSUS resource must be created"
-
-        # DUAL-RUN PARITY (deferred):
-        #   assert fake_xnat.resource.exists() == real_xnat.resource.exists()
-        #   Gap: clarify whether this should be Assessor (xnat:assessorData) or Resource
+        # DUAL-RUN PARITY: assessor file bytes round-trip on real XNAT
+        cmp = XnatStateComparator()
+        fake_state = cmp.capture(fake_xnat, "TEST_PROJECT")
+        real_pair = _get_real_xnat_and_project(request)
+        if real_pair is not None:
+            real_gw, real_project = real_pair
+            real_exp_qs = f"/project/{real_project}/subject/ITEST_SUBJ_0003/experiment/ITEST_EXP_0003"
+            try:
+                real_gw.create(f"/project/{real_project}/subject/ITEST_SUBJ_0003")
+                real_gw.create(real_exp_qs, xsiType="xnat:rfSessionData")
+                real_gw.create_assessor(
+                    real_exp_qs,
+                    assessor_label,
+                    xsi_type="xnat:assessorData",
+                    files=[("SEGMENTATION_CONSENSUS", "consensus.nii", assessor_file)],
+                )
+                _poll_until(lambda: real_gw.exists(real_exp_qs))
+                real_state = cmp.capture(real_gw, real_project)
+                cmp.compare(fake_state, real_state).assert_equal()
+            finally:
+                _teardown_real_project(real_gw, real_project)
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +705,7 @@ class TestT004ReviseAfterReanalysis:
         self,
         fake_xnat: FakeXNAT,
         tmp_path: Path,
+        request,
     ):
         """
         Pre-seed with derived resource, overwrite, verify no duplicates and new content.
@@ -415,8 +761,30 @@ class TestT004ReviseAfterReanalysis:
             f"Expected 1 put_zip after re-analysis (idempotent overwrite), got {len(put_zips)}"
         )
 
-        # DUAL-RUN PARITY (deferred):
-        #   assert fake_xnat final state == real_xnat final state (same resource, new bytes)
+        # DUAL-RUN PARITY: idempotent overwrite results in same final state
+        cmp = XnatStateComparator()
+        fake_state = cmp.capture(fake_xnat, "TEST_PROJECT")
+        real_pair = _get_real_xnat_and_project(request)
+        if real_pair is not None:
+            real_gw, real_project = real_pair
+            real_scan_qs = f"/project/{real_project}/subject/ITEST_SUBJ_0004/experiment/ITEST_EXP_0004/scan/0"
+            try:
+                real_gw.create(f"/project/{real_project}/subject/ITEST_SUBJ_0004")
+                real_gw.create(
+                    f"/project/{real_project}/subject/ITEST_SUBJ_0004/experiment/ITEST_EXP_0004",
+                    xsiType="xnat:rfSessionData",
+                )
+                real_gw.create(real_scan_qs, xsiType="xnat:rfScanData")
+                real_gw.insert_file(real_scan_qs, "SRC", "original_frame_000.dcm", b"ORIGINAL_PIXEL_DATA")
+                # First upload of derived
+                real_gw.put_zip(real_scan_qs, "SEGMENTATION_CONSENSUS", str(derived_zip_v1))
+                # Overwrite with v2
+                real_gw.put_zip(real_scan_qs, "SEGMENTATION_CONSENSUS", str(derived_zip_v2))
+                _poll_until(lambda: real_gw.exists(real_scan_qs))
+                real_state = cmp.capture(real_gw, real_project)
+                cmp.compare(fake_state, real_state).assert_equal()
+            finally:
+                _teardown_real_project(real_gw, real_project)
 
 
 # ---------------------------------------------------------------------------
@@ -442,6 +810,7 @@ class TestT005MixedModality:
     def test_mixed_modality_enumeration(
         self,
         fake_xnat: FakeXNAT,
+        request,
     ):
         """
         Both RF and CT must appear in enumeration when seeded.
@@ -467,8 +836,29 @@ class TestT005MixedModality:
         assert experiments[0]["xsi_type"] == "xnat:rfSessionData"
         assert experiments[1]["xsi_type"] == "xnat:ctSessionData"
 
-        # DUAL-RUN PARITY (deferred):
-        #   assert fake_xnat.list_experiments_with_type() == real_xnat.list_experiments_with_type()
+        # DUAL-RUN PARITY: mixed modality enumeration on real XNAT
+        cmp = XnatStateComparator()
+        fake_state = cmp.capture(fake_xnat, "TEST_PROJECT")
+        real_pair = _get_real_xnat_and_project(request)
+        if real_pair is not None:
+            real_gw, real_project = real_pair
+            try:
+                real_gw.create(f"/project/{real_project}/subject/ITEST_SUBJ_0005")
+                real_gw.create(
+                    f"/project/{real_project}/subject/ITEST_SUBJ_0005/experiment/RF_EXP_0001",
+                    xsiType="xnat:rfSessionData",
+                )
+                real_gw.create(
+                    f"/project/{real_project}/subject/ITEST_SUBJ_0005/experiment/CT_EXP_0001",
+                    xsiType="xnat:ctSessionData",
+                )
+                _poll_until(lambda: real_gw.exists(
+                    f"/project/{real_project}/subject/ITEST_SUBJ_0005/experiment/CT_EXP_0001"
+                ))
+                real_state = cmp.capture(real_gw, real_project)
+                cmp.compare(fake_state, real_state).assert_equal()
+            finally:
+                _teardown_real_project(real_gw, real_project)
 
 
 # ---------------------------------------------------------------------------
@@ -497,6 +887,7 @@ class TestT006OrphanedSubjectReuse:
         fake_zip_file: tuple,
         xnat_connection: SimpleNamespace,
         xnat_login: SimpleNamespace,
+        request,
     ):
         """
         Pre-seed an orphaned subject, then publish.
@@ -529,8 +920,34 @@ class TestT006OrphanedSubjectReuse:
             f"Expected 2 create() calls (exp+scan, subject pre-seeded), got {len(create_calls)}"
         )
 
-        # DUAL-RUN PARITY (deferred):
-        #   assert fake_xnat final subject count == real_xnat final subject count == 1
+        # DUAL-RUN PARITY: orphaned subject reuse on real XNAT
+        cmp = XnatStateComparator()
+        fake_state = cmp.capture(fake_xnat, "TEST_PROJECT")
+        real_pair = _get_real_xnat_and_project(request)
+        if real_pair is not None:
+            real_gw, real_project = real_pair
+            try:
+                # Pre-seed orphaned subject on real XNAT
+                real_gw.create(f"/project/{real_project}/subject/{intake_form.uid}")
+                real_conn = SimpleNamespace(
+                    server=real_gw, gateway=real_gw, xnat_project_name=real_project
+                )
+                real_session = _MinimalRFSession.build(intake_form)
+                real_session.publish_to_xnat(
+                    xnat_connection=real_conn,
+                    validated_login=xnat_login,
+                    zipped_data=zipped_data,
+                    delete_zip=False,
+                    verbose=False,
+                    pixel_review_confirmer=_confirmed_confirmer,
+                )
+                _poll_until(lambda: real_gw.exists(
+                    f"/project/{real_project}/subject/{intake_form.uid}"
+                ))
+                real_state = cmp.capture(real_gw, real_project)
+                cmp.compare(fake_state, real_state).assert_equal()
+            finally:
+                _teardown_real_project(real_gw, real_project)
 
 
 # ---------------------------------------------------------------------------
@@ -560,6 +977,7 @@ class TestT007MissingInstanceNumberGuard:
         tmp_path: Path,
         xnat_connection: SimpleNamespace,
         xnat_login: SimpleNamespace,
+        request,
     ):
         """
         Pack a DICOM with no InstanceNumber into a zip.
@@ -595,5 +1013,30 @@ class TestT007MissingInstanceNumberGuard:
         create_calls = [c for c in fake_xnat.calls if c["op"] == "selectable.create"]
         assert len(create_calls) >= 1, "Expected at least subject/experiment/scan creation"
 
-        # DUAL-RUN PARITY (deferred):
-        #   assert fake_xnat.publish() == real_xnat.publish() (both succeed without error)
+        # DUAL-RUN PARITY: missing InstanceNumber handled on real XNAT
+        cmp = XnatStateComparator()
+        fake_state = cmp.capture(fake_xnat, "TEST_PROJECT")
+        real_pair = _get_real_xnat_and_project(request)
+        if real_pair is not None:
+            real_gw, real_project = real_pair
+            try:
+                real_conn = SimpleNamespace(
+                    server=real_gw, gateway=real_gw, xnat_project_name=real_project
+                )
+                real_session = _MinimalRFSession.build(intake_form)
+                # Must not raise on real XNAT either
+                real_session.publish_to_xnat(
+                    xnat_connection=real_conn,
+                    validated_login=xnat_login,
+                    zipped_data=zipped_data,
+                    delete_zip=False,
+                    verbose=False,
+                    pixel_review_confirmer=_confirmed_confirmer,
+                )
+                _poll_until(lambda: real_gw.exists(
+                    f"/project/{real_project}/subject/{intake_form.uid}"
+                ))
+                real_state = cmp.capture(real_gw, real_project)
+                cmp.compare(fake_state, real_state).assert_equal()
+            finally:
+                _teardown_real_project(real_gw, real_project)

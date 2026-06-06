@@ -29,4 +29,7 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
-        pytest
+        # exit code 5 = "no tests collected" — the repo's functional test
+        # (update_and_test.py) needs a live XNAT server, so there is no
+        # pytest suite yet. Treat no-tests as pass; any real failure still fails.
+        pytest || ([ $? -eq 5 ] && echo "No tests collected — treating as pass")

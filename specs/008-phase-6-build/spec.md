@@ -21,9 +21,18 @@ xnatpy spike (User Story 5 in 006) stays out of this batch — gated on operator
 
 Constraints unchanged: offline-testable (Docker dual-run opt-in via `RUN_XNAT_DUAL=1`), PHI-free synthetic data only, no creds in argv/logs, byte-identical writes for existing XNAT layouts.
 
-## Clarifications Needed (resolve before build)
+## Clarifications — RESOLVED 2026-06-06
 
-These four block the build wave. Each has a recommended default; operator confirms or overrides.
+C001–C004 (Stage 0) all confirmed at recommended defaults.
+
+C005–C009 (second-pass) resolved:
+- **C005 xnat_local image**: subagent verifies `tests/integration/xnat_local/` exists; if absent, scaffolds `xnat/xnat-web` at a pinned SHA the subagent selects (latest stable tag, digest-pinned in docker-compose).
+- **C006 publish_to_xnat assessor signature**: `assessor: Path, assessor_label: str` kwargs. Single file per call. Extendable later if multi-file emerges.
+- **C007 dual-run parity**: custom `XnatStateComparator` class normalizes both sides (strips server IDs, timestamps, URIs) before equality compare. Most foolproof; documented in `tests/contract/comparator.py`.
+- **C008 build_server shim**: deleted in Stage 6 once all callers routed.
+- **C009 CI lane for dual-run**: none this batch. Local-only via `RUN_XNAT_DUAL=1`. CI follow-up after fixture stabilizes.
+
+### Original clarifications (Stage 0)
 
 1. **Assessor-vs-Resource for derived data** (T003 gap).
    - **Default**: resource-under-experiment, label `SEGMENTATION_CONSENSUS-{uid}` (matches today's loose-resource pattern; no schema change).

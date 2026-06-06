@@ -3,14 +3,17 @@
 **Input**: [spec.md](spec.md), [plan.md](plan.md). Suite green at EVERY commit.
 **Tier**: **[H]** haiku, **[S]** sonnet. Orchestrator (main session) plans/reviews/integrates.
 
-## Stage 0 — Pre-flight clarifications (BLOCKING)
+## Stage 0 — Clarifications RESOLVED (2026-06-06)
 
-Resolve before any code. Defaults recommended in `spec.md ## Clarifications Needed`.
-
-- [ ] C001 Operator confirms **assessor** for derived data (vs. resource). Recommended: assessor.
-- [ ] C002 Operator confirms **Docker xnat_local session-scoped + per-test project namespace** for real_xnat fixture. Recommended: yes.
-- [ ] C003 Operator confirms **full 6-file routing this batch** (vs. publish+download only). Recommended: full.
-- [ ] C004 Operator confirms **conventions module = new names + replacements** (vs. doc-only). Recommended: new names.
+- [X] C001 Assessor for derived data.
+- [X] C002 Docker xnat_local session-scoped + per-test project namespace.
+- [X] C003 Full 6-file routing this batch.
+- [X] C004 Conventions = new names + replacements.
+- [X] C005 xnat_local image: subagent verifies dir; scaffolds `xnat/xnat-web` pinned SHA if missing.
+- [X] C006 publish_to_xnat: `assessor: Path, assessor_label: str` kwargs.
+- [X] C007 Dual-run parity: custom `XnatStateComparator` normalizes IDs/timestamps/URIs.
+- [X] C008 build_server shim: deleted in Stage 6.
+- [X] C009 No CI lane this batch; local-only `RUN_XNAT_DUAL=1`.
 
 ## Stage 1 — Gateway ABC (BLOCKS all)
 
@@ -38,21 +41,23 @@ Resolve before any code. Defaults recommended in `spec.md ## Clarifications Need
 ## Stage 4 — Assessor decision + wiring
 
 - [ ] T013 [S] `PyxnatGateway.create_assessor(experiment_qs, assessor_label, *, xsi_type='xnat:assessorData', files)`: implements per Phase 7 #27 datatype-cache pattern (create with xsiType → empty cache → attrs.mset). FakeGateway mirror.
-- [ ] T014 [S] `src/xnat_experiment_data.py`: `publish_to_xnat(..., assessor=None)` keyword. When set, routes through `gateway.create_assessor` using `conventions.consensus_label(uid)`.
+- [ ] T014 [S] `src/xnat_experiment_data.py`: `publish_to_xnat(..., assessor: Path = None, assessor_label: str = None)` kwargs. When `assessor` set, routes through `gateway.create_assessor` with `assessor_label` (defaults to `conventions.consensus_label(uid)` if None).
 - [ ] T015 [S] `tests/contract/test_workflow_contract.py` T003: flip `# DOCUMENTS GAP` → live assertions. Assert assessor xsiType + label + file round-trip via FakeGateway. Remove "resource-level API directly" workaround.
 - [ ] T016 [H] Update `specs/006-xnat-alignment/contract-test.md` audit matrix row 7: "Assessor API deferred" → "Aligned (assessor, T003 verified)".
 
 ## Stage 5 — Real-XNAT dual-run
 
-- [ ] T017 [S] Verify `tests/integration/xnat_local/` exists. If not, scaffold `docker-compose.yml` pinning xnat_local image SHA + admin/admin throwaway creds. Document in `tests/contract/README.md`.
+- [ ] T017 [S] Verify `tests/integration/xnat_local/` exists. If not, scaffold `docker-compose.yml` pulling `xnat/xnat-web` at subagent-selected pinned SHA (latest stable digest) + admin/admin throwaway creds. Document image SHA + boot in `tests/contract/README.md`.
 - [ ] T018 [S] `tests/contract/conftest.py` `real_xnat` fixture (session-scoped): under `RUN_XNAT_DUAL=1` → `docker compose up -d` xnat_local; poll `:8080/xapi/siteConfig` until 200 (timeout 60s); seed admin user + per-test project namespace `ITEST_{uuid4hex[:8]}`; yield gateway connection; teardown deletes project only (container reused).
-- [ ] T019 [S] `tests/contract/test_workflow_contract.py`: flip all 9 tests' `# DUAL-RUN PARITY (deferred):` seams to live. Pattern per test: run workflow on fake_xnat, capture state; run on real_xnat, capture state; `assert fake_state == real_state` on attrs/files/enumeration. Use poll-with-timeout for XNAT eventual consistency reads.
+- [ ] T019a [S] `tests/contract/comparator.py`: `XnatStateComparator` class. Normalizes both fake + real state by stripping server-assigned fields (`ID`, `insert_date`, `xnat_*Data/id`, `URI`, any timestamp fields). Exposes `compare(fake_state, real_state) -> ComparisonResult` with diff report on mismatch. Unit tests: `tests/contract/test_comparator.py`.
+- [ ] T019b [S] `tests/contract/test_workflow_contract.py`: flip all 9 tests' `# DUAL-RUN PARITY (deferred):` seams to live. Pattern per test: capture fake state → capture real state → `XnatStateComparator().compare(fake, real).assert_equal()`. Poll-with-timeout for XNAT eventual consistency reads.
 - [ ] T020 [H] CI: leave `RUN_XNAT_DUAL` unset (skip-default). Add `tests/contract/README.md` with local invocation: `RUN_XNAT_DUAL=1 pytest tests/contract/`.
 - [ ] GATE `RUN_XNAT_DUAL=1 pytest tests/contract/` green (9 dual-runs). SC-004 met.
 
 ## Stage 6 — Verify + close
 
 - [ ] T021 [S] Full suite + `scripts/simulate_e2e.py` green. Byte-diff representative writes (publish + intake push + annotation push) pre/post → zero drift. SC-006.
+- [ ] T021b [H] Delete `build_server()` shim from `src/services/xnat_gateway.py`. Verify zero remaining callers (`grep -rn 'build_server' src/ tests/`).
 - [ ] T022 [H] Update `specs/README.md` Phase-6 row → Built. Close `006-xnat-alignment/tasks.md` T006/T020 (Phase 7 deferred). Annotate #25.
 - [ ] T023 [H] Session introspection → `docs/introspections/phase6-build-{commit}.md`. Pain corpus YAML per DomI introspect schema. Route via PR/corpus, not new tracking issue.
 

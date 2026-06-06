@@ -3,16 +3,21 @@ tests/contract/conftest.py — Fixtures for contract-test framework.
 
 Provides:
 - fake_xnat: FakeXNAT with fidelity_mode=True for behavioral parity testing.
-- real_xnat: pytest.skip() scaffold for deferred dual-run phase (requires Docker XNAT).
+- real_xnat: session-scoped live XNAT fixture (requires RUN_XNAT_DUAL=1 + Docker).
+- real_xnat_project: function-scoped project namespace ITEST_<hex> on real XNAT.
 - @pytest.mark.contract: marker for contract tests.
 - Synthetic data factories as fixtures for easy DICOM generation.
 """
 from __future__ import annotations
 
+import os
+import subprocess
+import time
+import uuid
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Generator, List, Optional
 
 import pytest
 
@@ -48,25 +53,99 @@ def fake_xnat() -> FakeXNAT:
 
 
 # ---------------------------------------------------------------------------
-# Real XNAT fixture (scaffolded, skip-marked for Stage 1)
+# Real XNAT fixture (session-scoped — boots Docker XNAT when RUN_XNAT_DUAL=1)
 # ---------------------------------------------------------------------------
 
-@pytest.fixture
-def real_xnat(request):
-    """
-    Scaffold for dual-run phase (deferred).
+_XNAT_LOCAL_DIR = Path(__file__).parent.parent / "integration" / "xnat_local"
+_XNAT_URL = "http://localhost:8080"
+_XNAT_USER = "admin"
+_XNAT_PASSWORD = "admin"
+_HEALTH_ENDPOINT = "/xapi/siteConfig"
+_HEALTH_TIMEOUT = 60   # seconds
+_HEALTH_INTERVAL = 2   # seconds
 
-    Currently skip-marked because Stage 1 tests run against FakeXNAT only.
-    Stage 2 (Phase 6 dual-run) will populate this with a Docker XNAT instance.
 
-    Parametrization:
-      test_workflow_contract.py uses @pytest.mark.parametrize((fake_xnat, real_xnat))
-      so real_xnat-parameterized runs cleanly skip with this reason.
-    """
-    pytest.skip(
-        "real-XNAT dual-run deferred — requires Docker XNAT (see contract-test.md Stage 1). "
-        "Stage 2 (Phase 6) will implement this with xnat_local/ image."
+def _wait_for_xnat(timeout: int = _HEALTH_TIMEOUT, interval: int = _HEALTH_INTERVAL) -> None:
+    """Poll XNAT health endpoint until HTTP 200 or timeout."""
+    import urllib.request
+    import urllib.error
+
+    deadline = time.monotonic() + timeout
+    url = _XNAT_URL + _HEALTH_ENDPOINT
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=2) as resp:
+                if resp.status == 200:
+                    return
+        except Exception:
+            pass
+        time.sleep(interval)
+    pytest.fail(
+        f"XNAT did not become ready at {url} within {timeout}s. "
+        "Check container logs: docker logs xnat-local-it"
     )
+
+
+@pytest.fixture(scope="session")
+def real_xnat(tmp_path_factory):
+    """
+    Session-scoped live XNAT gateway.
+
+    Skip unless RUN_XNAT_DUAL=1.  Boots xnat_local via docker compose,
+    polls until healthy, yields a connected PyxnatGateway, and tears down
+    the container at session end.
+    """
+    if os.environ.get("RUN_XNAT_DUAL") != "1":
+        pytest.skip("RUN_XNAT_DUAL not set — skipping real-XNAT dual-run tests")
+
+    # Boot container
+    try:
+        subprocess.run(
+            ["docker", "compose", "up", "-d"],
+            cwd=str(_XNAT_LOCAL_DIR),
+            check=True,
+            capture_output=True,
+        )
+    except FileNotFoundError:
+        pytest.skip("docker not installed — skipping real-XNAT dual-run tests")
+    except subprocess.CalledProcessError as exc:
+        pytest.fail(
+            f"docker compose up failed:\n{exc.stderr.decode()}"
+        )
+
+    # Wait for XNAT to be ready
+    _wait_for_xnat()
+
+    # Yield a connected gateway
+    from src.services.xnat_gateway import build_gateway
+    gw = build_gateway(_XNAT_URL, _XNAT_USER, _XNAT_PASSWORD)
+    gw.connect()
+
+    yield gw
+
+    # Session teardown — bring down the container
+    gw.disconnect()
+    subprocess.run(
+        ["docker", "compose", "down"],
+        cwd=str(_XNAT_LOCAL_DIR),
+        capture_output=True,
+    )
+
+
+@pytest.fixture
+def real_xnat_project(real_xnat):
+    """
+    Function-scoped fixture: create a fresh ITEST_<hex> project on real XNAT,
+    yield its name, delete it after the test.  Container is NOT torn down here.
+    """
+    project_name = f"ITEST_{uuid.uuid4().hex[:8].upper()}"
+    real_xnat.create(f"/project/{project_name}")
+    yield project_name, real_xnat
+    # Teardown: delete the project (best-effort)
+    try:
+        real_xnat.select(f"/project/{project_name}").delete()
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------

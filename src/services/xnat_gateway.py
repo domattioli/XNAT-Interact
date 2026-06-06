@@ -6,10 +6,6 @@ Purpose
 This module defines the ``XnatGateway`` ABC and the ``PyxnatGateway`` production
 implementation.  All XNAT-Interact application code should obtain a connection
 through ``build_gateway``; tests use ``FakeGateway`` (alias of FakeXNAT).
-
-``build_server`` is a shim that returns the underlying ``pyxnat.Interface``
-directly; it exists for not-yet-migrated call sites and will be deleted in
-Stage 6 once all callers route through ``XnatGateway``.
 """
 from __future__ import annotations
 
@@ -283,8 +279,6 @@ class PyxnatGateway(XnatGateway):
     Production ``XnatGateway`` backed by pyxnat.
 
     ``build_gateway(url, user, password)`` is the preferred constructor.
-    The underlying ``pyxnat.Interface`` is accessible via ``.server`` for
-    the not-yet-migrated call sites that still use ``build_server()``.
     """
 
     def __init__(self, url: str, user: str, password: str) -> None:
@@ -471,27 +465,3 @@ def build_gateway(url: str, user: str, password: str) -> PyxnatGateway:
     PyxnatGateway
     """
     return PyxnatGateway(url=url, user=user, password=password)
-
-
-def build_server(url: str, user: str, password: str):
-    """
-    Shim: build a ``PyxnatGateway``, connect it, and return the underlying
-    ``pyxnat.Interface`` for not-yet-migrated call sites.
-
-    .. deprecated::
-        Stage 6 will delete this function once all callers route through
-        ``XnatGateway``.  New code must use ``build_gateway`` instead.
-
-    Parameters
-    ----------
-    url:      Full XNAT server URL
-    user:     XNAT username
-    password: XNAT password
-
-    Returns
-    -------
-    pyxnat.Interface
-    """
-    gw = build_gateway(url=url, user=user, password=password)
-    gw.connect()
-    return gw.server

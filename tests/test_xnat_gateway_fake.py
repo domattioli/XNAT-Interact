@@ -1,7 +1,7 @@
 """
 Characterization tests for FakeXNAT — the offline test double for pyxnat.
 
-Goal: prove every surface enumerated in xnat_gateway.build_server's docstring
+Goal: prove every surface declared in xnat_gateway.XnatGateway
 is faithfully faked and that tests can run with zero network access.
 
 NO pyxnat.Interface constructed here. NO real server. NO PHI.

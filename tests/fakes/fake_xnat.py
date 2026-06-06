@@ -1,6 +1,9 @@
 """
 FakeXNAT — offline test double for the pyxnat surface used by XNAT-Interact.
 
+FakeXNAT implements XnatGateway (ABC) so any code that accepts an XnatGateway
+can receive a FakeXNAT in tests.  ``FakeGateway`` is an alias for FakeXNAT.
+
 CONTRACT CHECKLIST  (mirrors the pyxnat methods this double must cover)
 -----------------------------------------------------------------------
 Server-level:
@@ -30,6 +33,15 @@ Project-level (returned by .select.project(name)):
   [x] project.users()                        → list[str]
   [x] project.resource(folder)              → FakeResource
 
+XnatGateway gateway methods (T003 — Stage 1 ABC conformance):
+  [x] connect() / disconnect() / liveness()
+  [x] project_label() / project_users()
+  [x] select() / exists()
+  [x] create() / set_attrs()
+  [x] put_zip() / put_file() / insert_file()
+  [x] get_file_copy() / delete_file()
+  [x] list_files() / download_resource() / create_assessor()
+
 Failure injection:
   [x] fake.set_next_failure(exc)  — next call on any FakeFile or FakeResource
       operation raises exc.  Automatically cleared after one use.
@@ -40,6 +52,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from src.services.xnat_gateway import XnatGateway
 
 
 # ---------------------------------------------------------------------------
@@ -330,9 +344,12 @@ class FakeSelector:
 # FakeXNAT  — top-level server double
 # ---------------------------------------------------------------------------
 
-class FakeXNAT:
+class FakeXNAT(XnatGateway):
     """
-    Offline stand-in for a ``pyxnat.Interface`` instance.
+    Offline stand-in for a ``pyxnat.Interface`` / ``XnatGateway``.
+
+    Implements ``XnatGateway`` so tests can inject a ``FakeXNAT`` wherever
+    production code accepts the ABC.  Use ``FakeGateway`` as a shorter alias.
 
     Usage::
 
@@ -520,3 +537,221 @@ class FakeXNAT:
         )
         sel._exists = True
         return sel
+
+    # ------------------------------------------------------------------
+    # XnatGateway ABC — gateway interface methods (T003 Stage 1)
+    # ------------------------------------------------------------------
+
+    def connect(self) -> None:
+        """No-op: FakeXNAT is always connected."""
+
+    def liveness(self) -> None:
+        """No-op: fake is always live."""
+
+    def project_label(self, project_name: str) -> str:
+        """Return the fake project label (== project_name)."""
+        return self.select.project(project_name).label()
+
+    def project_users(self, project_name: str) -> List[str]:
+        """Return the fake project users list."""
+        return self.select.project(project_name).users()
+
+    def select(self, querystring: str) -> Any:  # type: ignore[override]
+        """Return a FakeSelectable for *querystring*.
+
+        Note: at runtime, ``self.select`` is a ``FakeSelector`` instance (set
+        in ``__init__``), so calling ``fake.select(qs)`` invokes
+        ``FakeSelector.__call__``.  This class-level method only exists to
+        satisfy the ``XnatGateway`` ABC; it is never reached directly.
+        """
+        # self.select is the FakeSelector instance attribute at runtime.
+        raise NotImplementedError("Unreachable: shadowed by instance attribute self.select")
+
+    def exists(self, querystring: str) -> bool:
+        """Return True if the object at *querystring* was created."""
+        sel = self._selectables.get(querystring)
+        return sel._exists if sel is not None else False
+
+    def create(self, querystring: str, **kwargs: Any) -> None:
+        """Create the object at *querystring* (marks it as existing)."""
+        sel = self._selectables.setdefault(
+            querystring, FakeSelectable(root=self, querystring=querystring)
+        )
+        sel.create(**kwargs)
+
+    def set_attrs(self, querystring: str, mapping: Dict[str, Any]) -> None:
+        """Set attrs on the object at *querystring*."""
+        sel = self._selectables.setdefault(
+            querystring, FakeSelectable(root=self, querystring=querystring)
+        )
+        sel.attrs.mset(mapping)
+
+    def put_zip(
+        self,
+        querystring: str,
+        resource_label: str,
+        ffn: Any,
+        *,
+        content: str = "",
+        format: str = "",
+        tags: str = "",
+    ) -> None:
+        """Record a put_zip call on *resource_label* under *querystring*."""
+        sel = self._selectables.setdefault(
+            querystring, FakeSelectable(root=self, querystring=querystring)
+        )
+        sel.resource(resource_label).put_zip(ffn, content=content, format=format, tags=tags)
+
+    def put_file(
+        self,
+        querystring: str,
+        resource_label: str,
+        filename: str,
+        ffn: Any,
+        *,
+        content: str = "",
+        format: str = "",
+        tags: str = "",
+        overwrite: Optional[bool] = None,
+    ) -> None:
+        """Record a file.put call."""
+        sel = self._selectables.setdefault(
+            querystring, FakeSelectable(root=self, querystring=querystring)
+        )
+        sel.resource(resource_label).file(filename).put(
+            ffn, content=content, format=format, tags=tags, overwrite=overwrite
+        )
+
+    def insert_file(
+        self,
+        querystring: str,
+        resource_label: str,
+        filename: str,
+        data: Any,
+        *,
+        content: str = "",
+        format: str = "",
+        tags: str = "",
+    ) -> None:
+        """Record a file.insert call."""
+        sel = self._selectables.setdefault(
+            querystring, FakeSelectable(root=self, querystring=querystring)
+        )
+        sel.resource(resource_label).file(filename).insert(
+            data, content=content, format=format, tags=tags
+        )
+
+    def get_file_copy(
+        self,
+        querystring: str,
+        resource_label: str,
+        filename: str,
+        dest: Any,
+    ) -> Any:
+        """Download *filename* from *resource_label* under *querystring* to *dest*."""
+        sel = self._selectables.setdefault(
+            querystring, FakeSelectable(root=self, querystring=querystring)
+        )
+        return sel.resource(resource_label).file(filename).get_copy(dest)
+
+    def delete_file(
+        self,
+        querystring: str,
+        resource_label: str,
+        filename: str,
+    ) -> None:
+        """Record a file.delete call."""
+        sel = self._selectables.setdefault(
+            querystring, FakeSelectable(root=self, querystring=querystring)
+        )
+        sel.resource(resource_label).file(filename).delete()
+
+    def list_files(
+        self,
+        querystring: str,
+        resource_label: str,
+    ) -> List[str]:
+        """
+        Return filenames staged in *resource_label* under *querystring*.
+
+        Returns an empty list when no files have been staged (seed_resource_files).
+        """
+        sel = self._selectables.get(querystring)
+        if sel is None:
+            return []
+        # Use resource registry lookup via FakeSelectable.resource()
+        resource = sel.resource(resource_label)
+        return resource.list_files()
+
+    def download_resource(
+        self,
+        querystring: str,
+        resource_label: str,
+        dest_dir: Any,
+    ) -> List[Path]:
+        """
+        Download all staged files in *resource_label* under *querystring* to *dest_dir*.
+
+        Writes real bytes when seeded via seed_resource_files; placeholder text otherwise.
+        Returns list of local paths written.
+        """
+        dest_dir = Path(dest_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        filenames = self.list_files(querystring, resource_label)
+        written: List[Path] = []
+        for fn in filenames:
+            dest = dest_dir / fn
+            self.get_file_copy(querystring, resource_label, fn, dest)
+            written.append(dest)
+        return written
+
+    def create_assessor(
+        self,
+        experiment_qs: str,
+        assessor_label: str,
+        *,
+        xsi_type: str = "xnat:assessorData",
+        files: Optional[List[tuple]] = None,
+    ) -> None:
+        """
+        Record an assessor creation under *experiment_qs*.
+
+        Uses fidelity_mode pattern (Phase 7 #27): create with xsiType → empty
+        datatype cache populated → set_attrs safe.  Files attached via put_file.
+
+        Records calls under op="assessor.create" and "assessor.file.put"
+        (distinct from scan-resource writes recorded as "file.put" / "resource.put_zip").
+        """
+        assessor_qs = experiment_qs + "/assessor/" + assessor_label
+        sel = self._selectables.setdefault(
+            assessor_qs, FakeSelectable(root=self, querystring=assessor_qs)
+        )
+        if not sel._exists:
+            sel._exists = True
+            if self.fidelity_mode and sel.attrs._datatype is None:
+                # Populate datatype cache exactly as create(xsiType=...) does.
+                sel.attrs._datatype = xsi_type
+            self.calls.append({
+                "op": "assessor.create",
+                "args": (),
+                "kwargs": {"_qs": assessor_qs, "xsiType": xsi_type},
+            })
+        if files:
+            for resource_label, filename, local_path in files:
+                self.calls.append({
+                    "op": "assessor.file.put",
+                    "args": (str(local_path),),
+                    "kwargs": {
+                        "_assessor_qs": assessor_qs,
+                        "_resource": resource_label,
+                        "_filename": filename,
+                    },
+                })
+
+
+# ---------------------------------------------------------------------------
+# FakeGateway alias (T003 export)
+# ---------------------------------------------------------------------------
+
+#: Alias for FakeXNAT; use when the callee type-hint is ``XnatGateway``.
+FakeGateway = FakeXNAT

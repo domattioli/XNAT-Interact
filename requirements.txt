@@ -14,7 +14,6 @@ numpy
 opencv-python
 packaging
 pandas
-pathlib
 pwinput
 pydicom
 pyparsing

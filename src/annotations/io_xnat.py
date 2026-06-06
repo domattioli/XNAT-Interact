@@ -48,6 +48,7 @@ from src.services.errors import FriendlyError, handle as _handle
 from src.annotations.model import AnnotationSet
 from src.annotations.registry import get_type
 from src.annotations.codecs import get_codec
+from src.services.xnat_conventions import ResourceLabel as _ResourceLabel
 
 
 # ---------------------------------------------------------------------------
@@ -118,24 +119,17 @@ def _blob_filename(annotator_id: str, annotation_type: str, version: int, codec:
     return f"ann__{annotator_id}__{annotation_type}__v{version}{ext}"
 
 
-def _resource(server: Any, image_ref: str, project_name: Optional[str], resource_label: str):
+def _image_qs(image_ref: str, project_name: Optional[str]) -> str:
     """
-    Return the XNAT resource handle for this image's ANNOTATIONS resource.
+    Build the XNAT query string for an image scan resource.
 
-    Uses server.select(<image_qs>).resource(resource_label).
-    The image_ref is treated as an opaque XNAT query-string fragment.
     If project_name is supplied and image_ref does not already start with
     '/projects/', a qualified query string is built; otherwise image_ref
     is used verbatim.
-
-    The IMAGE itself is never put here — only the resource handle is
-    obtained so annotation artifacts can be filed under it.
     """
     if project_name and not image_ref.startswith("/projects/"):
-        qs = f"/projects/{project_name}/{image_ref.lstrip('/')}"
-    else:
-        qs = image_ref
-    return server.select(qs).resource(resource_label)
+        return f"/projects/{project_name}/{image_ref.lstrip('/')}"
+    return image_ref
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +174,7 @@ def upload_annotation_set(
     files_written: List[str] = []
 
     try:
-        resource = _resource(server, image_ref, project_name, resource_label)
+        qs = _image_qs(image_ref, project_name)
     except Exception as exc:
         fe = _handle(
             exc,
@@ -239,7 +233,10 @@ def upload_annotation_set(
             local_blob.write_bytes(blob_bytes)
 
             try:
-                resource.file(blob_fn).put(
+                server.put_file(
+                    qs,
+                    resource_label,
+                    blob_fn,
                     str(local_blob),
                     content="ANNOTATION",
                     format=codec_name.upper(),
@@ -293,7 +290,10 @@ def upload_annotation_set(
         )
 
         try:
-            resource.file(MANIFEST_FILENAME).put(
+            server.put_file(
+                qs,
+                resource_label,
+                MANIFEST_FILENAME,
                 str(manifest_local),
                 content="ANNOTATION",
                 format="JSON",
@@ -360,9 +360,9 @@ def download_annotation_set(
     dest_path.mkdir(parents=True, exist_ok=True)
     files_written: List[Path] = []
 
-    # --- Reach resource ---
+    # --- Build querystring ---
     try:
-        resource = _resource(server, image_ref, project_name, resource_label)
+        qs = _image_qs(image_ref, project_name)
     except Exception as exc:
         fe = _handle(
             exc,
@@ -382,7 +382,7 @@ def download_annotation_set(
     # --- Fetch manifest ---
     manifest_dest = dest_path / MANIFEST_FILENAME
     try:
-        resource.file(MANIFEST_FILENAME).get_copy(manifest_dest)
+        server.get_file_copy(qs, resource_label, MANIFEST_FILENAME, manifest_dest)
     except Exception as exc:
         fe = _handle(
             exc,
@@ -426,7 +426,7 @@ def download_annotation_set(
 
         blob_dest = dest_path / blob_fn
         try:
-            resource.file(blob_fn).get_copy(blob_dest)
+            server.get_file_copy(qs, resource_label, blob_fn, blob_dest)
         except Exception as exc:
             fe = _handle(
                 exc,

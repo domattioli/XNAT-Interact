@@ -304,10 +304,6 @@ class ExperimentData():
 
         # Must also publish the resource file(s)
         self.intake_form.push_to_xnat( verbose=verbose, gateway=xnat_connection.gateway, subj_qs=subj_qs )
-        # # Old method for pushing files to XNAT:
-        # # scan_inst.resource( 'DATA' ).file( 'mp4_vid.mp4' ).insert( vid_ffn, content='VIDEO', format='MP4', tags='OR_DATA', overwrite=True )
-        # # scan_inst.resource( resource_label ).put_zip( zipped_ffn, content='IMAGE', format='DICOM', tags='POST_OP_DATA', overwrite=True )
-        # scan_inst.resource( resource_label ).put_zip( zipped_ffn, content='OR_DATA', format='DICOM', tags='', overwrite=True ) # type: ignore -- doesnt recognize .resource attribute of scan instance
 
         # T027 — local PHI cleanup: delete zip files + any extra intake-form temp artifacts.
         if delete_zip:

@@ -640,11 +640,10 @@ class ConfigTables( UIDandMetaInfo ):
             # T008 (#28): also treat pyxnat DataError ("does not exist") as
             # first-run — real pyxnat raises this when the config file has
             # never been pushed to a brand-new project.
-            import pyxnat.core.errors as _pyxnat_errors
             _is_first_run_error = isinstance(
                 _ct_init_exc,
-                (FileNotFoundError, KeyError, ValueError, _pyxnat_errors.DataError),
-            )
+                (FileNotFoundError, KeyError, ValueError),
+            ) or type(_ct_init_exc).__name__ == "DataError"  # pyxnat.core.errors.DataError (avoid raw import)
             if not _is_first_run_error:
                 # Surface the real error instead of masking it as first-time DB setup.
                 from src.services.errors import handle, render

@@ -48,7 +48,7 @@ from src.services.errors import FriendlyError, handle as _handle
 from src.annotations.model import AnnotationSet
 from src.annotations.registry import get_type
 from src.annotations.codecs import get_codec
-from src.services.xnat_conventions import ResourceLabel as _ResourceLabel
+from src.services.xnat_conventions import ResourceLabel as _ResourceLabel, project_qs as _project_qs
 
 
 # ---------------------------------------------------------------------------
@@ -124,11 +124,11 @@ def _image_qs(image_ref: str, project_name: Optional[str]) -> str:
     Build the XNAT query string for an image scan resource.
 
     If project_name is supplied and image_ref does not already start with
-    '/projects/', a qualified query string is built; otherwise image_ref
-    is used verbatim.
+    '/project', a qualified query string is built using conventions;
+    otherwise image_ref is used verbatim.
     """
-    if project_name and not image_ref.startswith("/projects/"):
-        return f"/projects/{project_name}/{image_ref.lstrip('/')}"
+    if project_name and not image_ref.startswith("/project"):
+        return _project_qs(project_name) + "/" + image_ref.lstrip("/")
     return image_ref
 
 

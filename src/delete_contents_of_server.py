@@ -27,6 +27,7 @@ from typing import Any, List
 from src.services.config import AppConfig
 from src.services.errors import FriendlyError, handle, render
 from src.services.xnat_gateway import XnatGateway, build_gateway as _build_gateway
+from src.services.xnat_conventions import project_qs as _project_qs, subject_qs as _subject_qs
 
 # ---------------------------------------------------------------------------
 # Module-level project name resolved via AppConfig (env > config > default)
@@ -41,7 +42,7 @@ project_name: str = _cfg.project_name
 
 def list_subjects(server: XnatGateway) -> List[str]:
     """Return list of subject names in the project (no deletions)."""
-    return list(server.select(f"/projects/{project_name}/subjects/*").get())  # type: ignore
+    return list(server.select(_project_qs(project_name) + "/subjects/*").get())  # type: ignore
 
 
 def delete_subjects(server: XnatGateway, *, dry_run: bool = False) -> None:
@@ -67,7 +68,7 @@ def delete_subjects(server: XnatGateway, *, dry_run: bool = False) -> None:
 
     errors_seen: list[tuple[str, Exception]] = []
     for s in all_s_names:
-        si = server.select(f"/projects/{project_name}/subjects/{s}")
+        si = server.select(_subject_qs(project_name, s))
         try:
             si.delete()  # type: ignore
         except Exception as exc:
@@ -114,7 +115,6 @@ def delete_metatables(server: XnatGateway, *, dry_run: bool = False) -> None:
         print("[DRY-RUN] No changes made.")
         return
 
-    from src.services.xnat_conventions import project_qs as _project_qs
     try:
         server.delete_file(_project_qs(project_name), "MetaTables", "MetaTables.json")
     except Exception as exc:

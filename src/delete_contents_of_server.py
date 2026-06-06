@@ -22,12 +22,11 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import List
-
-from pyxnat import Interface
+from typing import Any, List
 
 from src.services.config import AppConfig
 from src.services.errors import FriendlyError, handle, render
+from src.services.xnat_gateway import XnatGateway, build_gateway as _build_gateway
 
 # ---------------------------------------------------------------------------
 # Module-level project name resolved via AppConfig (env > config > default)
@@ -40,12 +39,12 @@ project_name: str = _cfg.project_name
 # Core deletion helpers
 # ---------------------------------------------------------------------------
 
-def list_subjects(server: Interface) -> List[str]:
+def list_subjects(server: XnatGateway) -> List[str]:
     """Return list of subject names in the project (no deletions)."""
     return list(server.select(f"/projects/{project_name}/subjects/*").get())  # type: ignore
 
 
-def delete_subjects(server: Interface, *, dry_run: bool = False) -> None:
+def delete_subjects(server: XnatGateway, *, dry_run: bool = False) -> None:
     """Delete all subjects in the project.
 
     Parameters
@@ -96,7 +95,7 @@ def delete_subjects(server: Interface, *, dry_run: bool = False) -> None:
         )
 
 
-def delete_metatables(server: Interface, *, dry_run: bool = False) -> None:
+def delete_metatables(server: XnatGateway, *, dry_run: bool = False) -> None:
     """Delete the MetaTables.json resource from the project.
 
     Parameters
@@ -115,9 +114,9 @@ def delete_metatables(server: Interface, *, dry_run: bool = False) -> None:
         print("[DRY-RUN] No changes made.")
         return
 
-    project_instance = server.select.project(project_name)
+    from src.services.xnat_conventions import project_qs as _project_qs
     try:
-        project_instance.resource("MetaTables").file("MetaTables.json").delete()
+        server.delete_file(_project_qs(project_name), "MetaTables", "MetaTables.json")
     except Exception as exc:
         fe = handle(
             exc,
@@ -201,11 +200,15 @@ if __name__ == "__main__":
             print("Deletion cancelled — confirmation not given.")
             sys.exit(0)
 
-    with Interface(args.server, args.username, password) as xnat:
+    _gw = _build_gateway(url=args.server, user=args.username, password=password)
+    _gw.connect()
+    try:
         if args.method in ["subjects", "both"]:
-            delete_subjects(server=xnat, dry_run=args.dry_run)
+            delete_subjects(server=_gw, dry_run=args.dry_run)
         if args.method in ["metatables", "both"]:
-            delete_metatables(server=xnat, dry_run=args.dry_run)
+            delete_metatables(server=_gw, dry_run=args.dry_run)
+    finally:
+        _gw.disconnect()
 
     if not args.dry_run:
         print(f"\n\t---\tDeletion of {args.method} successfully completed!\t---")

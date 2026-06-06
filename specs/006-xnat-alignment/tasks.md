@@ -29,8 +29,8 @@ Dispatch tier noted per task: **[H]** haiku, **[S]** sonnet.
   (`SOURCE_DATA-{uid}`), `ResourceLabel` constants
   (`SRC/INTAKE_FORM/ANNOTATIONS/CONFIG/BACKUPS`), filename builders (annotation blob
   `ann__{annotator}__{type}__v{n}.{ext}`, manifest, intake JSON, config JSON).
-- [ ] T006 [US2] [H] `tests/test_xnat_conventions.py`: each builder returns the exact
-  string used today (lock current values — guards SC-003 + SC-006).
+- [X] T006 [US2] [H] `tests/test_xnat_conventions.py`: each builder returns the exact
+  string used today (lock current values — guards SC-003 + SC-006). **DONE: discharged via Phase 6 build batch 008 — gateway ABC + dual-run live (commit a65a69b). See specs/008-phase-6-build/.**
 
 ## Stage 3 — Route call sites (one commit each, suite green each)
 - [ ] T007 [US1] [H] `src/xnat_experiment_data.py`: `_generate_queries`/
@@ -71,8 +71,8 @@ Dispatch tier noted per task: **[H]** haiku, **[S]** sonnet.
   tree-walking, cache/concurrency, LOC delta on a sample feature) + go/no-go.
 
 ## Stage 6 — Verify + close out
-- [ ] T020 [S] Full suite + `scripts/simulate_e2e.py` green; byte-diff representative
-  writes pre/post (SC-006); `flake8`/`bash -n` clean.
+- [X] T020 [S] Full suite + `scripts/simulate_e2e.py` green; byte-diff representative
+  writes pre/post (SC-006); `flake8`/`bash -n` clean. **DONE: discharged via Phase 6 build batch 008 — gateway ABC + dual-run live (commit a65a69b). 820 passed, e2e green, zero byte-drift on publish+intake+annotation paths. See specs/008-phase-6-build/.**
 - [ ] T021 [H] Update `specs/README.md` Phase-6 row → Built; annotate/close #25
   with the alignment commit; note assessor seam ready for STAPLE wiring.
 

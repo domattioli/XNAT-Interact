@@ -33,8 +33,8 @@ Dispatch tier per task: **[H]** haiku, **[S]** sonnet.
 - [X] T005b [#27] [S] `tests/test_publish_real_contract.py`: add re-publish case —
   pre-seed an orphaned/partial subject, run publish → final state has exactly one
   subject/experiment with all children (SC-001 upsert).
-- [→ Phase 6] T006 [#27] [S] `@real_xnat` integration assert in `tests/integration/`: re-run
-  `run_roundtrip_push.py` against local XNAT → push completes (SC-001). **DEFERRED**: Phase 6 contract test will cover real-XNAT verification as part of FakeXNAT↔XNAT parity audit.
+- [X] T006 [#27] [S] `@real_xnat` integration assert in `tests/integration/`: re-run
+  `run_roundtrip_push.py` against local XNAT → push completes (SC-001). **DONE: discharged via Phase 6 build batch 008 — gateway ABC + dual-run live (commit a65a69b). Real-XNAT dual-run infrastructure (XnatStateComparator, real_xnat fixture, xnat_local docker-compose) landed in 008 Stage 5. See specs/008-phase-6-build/.**
 
 ## Stage 2 — #28 ConfigTables bootstrap (P1)
 - [X] T007 [#28] [H] `tests/test_configtables_bootstrap.py` (RED FIRST): fresh
@@ -88,9 +88,9 @@ Dispatch tier per task: **[H]** haiku, **[S]** sonnet.
 ## Stage 6 — Verify + close out
 - [X] T019 [S] Full offline suite + `scripts/simulate_e2e.py` green; confirm every
   RED-FIRST test (T004/T007/T010/T013/T016) fails at its parent commit (SC-006). **DONE**: 742 passed, 7 xfailed; all red-first tests confirmed to fail pre-fix.
-- [→ Phase 6] T020 [S] `@real_xnat` end-to-end: `run_roundtrip_push.py` then
+- [X] T020 [S] `@real_xnat` end-to-end: `run_roundtrip_push.py` then
   `run_roundtrip_pull.py` against local XNAT → push completes + pull returns the
-  full series (SC-001..SC-004). Synthetic/localhost only; tear down after. **DEFERRED**: Phase 6 contract test.
+  full series (SC-001..SC-004). Synthetic/localhost only; tear down after. **DONE: discharged via Phase 6 build batch 008 — gateway ABC + dual-run live (commit a65a69b). XnatStateComparator + real_xnat fixture + 9-test dual-run contract suite landed. See specs/008-phase-6-build/.**
 - [✓] T021 [H] Update `specs/README.md` Phase-7 row → Planned/Built; annotate
   #25/#27/#28/#29/#30 with fix commits; note Phase 6 will re-home #25/#29 behind
   the gateway. **IN PROGRESS**: README updated; commit pending.

@@ -431,9 +431,31 @@ class PyxnatGateway(XnatGateway):
         dest_dir: Any,
     ) -> List[Path]:
         dest_dir = Path(dest_dir)
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        self.server.select(querystring).resource(resource_label).get(str(dest_dir), extract=False)
-        return list(dest_dir.iterdir())
+        # Download into a clean sub-directory to avoid mixing pre-existing
+        # contents with newly downloaded files (audit note: avoid misleading
+        # pre-existing dir contents).
+        download_dir = dest_dir / "_xnat_download"
+        download_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.server.select(querystring).resource(resource_label).get(
+                str(download_dir), extract=True
+            )
+        except Exception as exc:  # noqa: BLE001  # fail-soft: propagate as GatewayError
+            raise GatewayError(
+                FriendlyError(
+                    title="Resource download failed",
+                    message=f"Failed to download resource '{resource_label}': {exc}",
+                    recourse=["Check XNAT connectivity and resource existence"],
+                )
+            ) from exc
+        # pyxnat with extract=True unpacks into <download_dir>/<resource_label>/files/...
+        # or a similar nested layout. Collect all real leaf files, skipping any
+        # residual .zip archives left by pyxnat.
+        files = [
+            p for p in download_dir.rglob("*")
+            if p.is_file() and p.suffix.lower() != ".zip"
+        ]
+        return files
 
     # ------------------------------------------------------------------
     # Assessor

@@ -191,6 +191,37 @@ class TestPublishSequenceRecording:
         assert len(written) == 1
         assert written[0].read_bytes() == b"\x00\x01\x02"
 
+    # M7 regression: download_resource must return N individual files, not 1 zip.
+    def test_download_resource_returns_individual_files_not_zip(self, tmp_path):
+        """Regression for M7: upload N DICOMs, download_resource returns N files
+        (not 1 zip), and byte content round-trips correctly."""
+        payloads = [
+            ("slice_001.dcm", b"\xd4\xd4\x00\x01"),
+            ("slice_002.dcm", b"\xd4\xd4\x00\x02"),
+            ("slice_003.dcm", b"\xd4\xd4\x00\x03"),
+        ]
+        self.fake.create(self.scan_qs)
+        sel = self.fake._selectables[self.scan_qs]
+        resource = sel.resource("DICOM")
+        self.fake.seed_resource_files(resource, payloads)
+
+        written = self.fake.download_resource(self.scan_qs, "DICOM", tmp_path)
+
+        # Must return 3 individual files, not 1 zip archive.
+        assert len(written) == 3, (
+            f"Expected 3 individual files but got {len(written)}: {written}"
+        )
+        # No zip files in the result.
+        zip_files = [p for p in written if p.suffix.lower() == ".zip"]
+        assert zip_files == [], f"download_resource returned zip archive(s): {zip_files}"
+        # Byte content must match originals (basename-keyed).
+        by_name = {p.name: p.read_bytes() for p in written}
+        for fname, expected_bytes in payloads:
+            assert fname in by_name, f"Expected file {fname!r} not in result"
+            assert by_name[fname] == expected_bytes, (
+                f"Byte mismatch for {fname}: got {by_name[fname]!r}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # (c) create_assessor writes are distinct from scan-resource writes

@@ -233,3 +233,13 @@ Track divergences between FakeXNAT and real XNAT.
 - **Multi-scan sessions**: Phase 7 used single-scan (`0`) simplification. Future multi-series is Phase 6+ scope.
 - **Assessor lifecycle**: Which assessor fields/versions to track. Clarified by gateway design.
 - **Annotation round-trip**: Segmentations/markup stored as resources; assessor storage is Phase 5 (STAPLE) scope.
+
+---
+
+## Fidelity Divergence Audit Matrix
+
+Gaps confirmed during dual-run against XNAT 1.9.3 (build 199, 2025-11-21).
+
+| ID | Area | FakeXNAT behavior | Real XNAT behavior | Root cause | Resolution |
+|---|---|---|---|---|---|
+| GAP-001 | Assessor file upload (T003) | `create_assessor(files=[...])` stages files in `_staged_files`; `list_files()` returns them | XNAT 1.9.3 returns HTTP 404 on `file.put` to assessor resources regardless of resource creation order | XNAT 1.9.3 server version limitation — assessor file upload via `file.put` not supported; newer XNAT versions support it | T003 dual-run xfails on `pyxnat.DatabaseError` (catches 1.9.3 404). Fake-side assertions pass. Document here; revisit when testing on XNAT 1.9.4+. |

@@ -146,6 +146,27 @@ class FakeResource(_CallLog):
 
     def put_zip(self, ffn: Any, *, content: str = "", format: str = "", tags: str = "", overwrite: Optional[bool] = None) -> None:
         self._maybe_raise(self._root)
+        # Fidelity: real XNAT unpacks the zip server-side so list_files() returns
+        # the individual files inside.  Unpack here so capture() can enumerate
+        # them from _staged_files, matching real XNAT behaviour.
+        # Real XNAT put_zip is ADDITIVE by default (does not delete existing files
+        # unless an explicit delete-resource step is done first).  Mirror that: do
+        # NOT clear _staged_files on overwrite — just append.  Tests that need a
+        # clean slate should call seed_resource_files() on a fresh resource.
+        try:
+            import zipfile
+            p = Path(ffn)
+            if p.is_file() and zipfile.is_zipfile(p):
+                with zipfile.ZipFile(p) as zf:
+                    for name in zf.namelist():
+                        # Only add regular files (skip directory entries)
+                        if not name.endswith("/"):
+                            data = zf.read(name)
+                            # Use basename so filenames match real XNAT's flat listing
+                            basename = name.split("/")[-1]
+                            self._staged_files.append((basename, data))
+        except Exception:
+            pass  # Non-existent or non-zip ffn — backward-compatible, no files staged
         self._record(self._root, "resource.put_zip", (ffn,), {"content": content, "format": format, "tags": tags, "overwrite": overwrite, "_label": self._label})
 
     # --- T003: real-file enumeration ------------------------------------------
@@ -484,9 +505,9 @@ class FakeXNAT(XnatGateway):
     ) -> None:
         """
         Stage an RF (or any-type) experiment so that ``list_experiments_with_type``
-        returns it.  Subject *subject_label* and experiment *experiment_label* must
-        already be reachable via ``list_subjects`` / ``list_experiments`` in the
-        subclass; this helper only adds the xsiType metadata.
+        returns it.  Also marks the corresponding subject and experiment selectables
+        as existing so that capture() / _list_subjects() / _list_experiments() can
+        enumerate them during dual-run parity checks.
         """
         self._experiments.append(
             {
@@ -495,6 +516,23 @@ class FakeXNAT(XnatGateway):
                 "xsi_type": xsi_type,
             }
         )
+        # Fidelity: ensure the subject and experiment appear in _selectables
+        # so capture() enumerates them just as real XNAT would after create().
+        # Uses project_name from the FakeXNAT instance (mirrors the single-project
+        # assumption in list_experiments_with_type).
+        project = self.project_name
+        subj_qs = f"/project/{project}/subject/{subject_label}"
+        exp_qs = f"{subj_qs}/experiment/{experiment_label}"
+        subj_sel = self._selectables.setdefault(
+            subj_qs, FakeSelectable(root=self, querystring=subj_qs)
+        )
+        subj_sel._exists = True
+        exp_sel = self._selectables.setdefault(
+            exp_qs, FakeSelectable(root=self, querystring=exp_qs)
+        )
+        exp_sel._exists = True
+        if exp_sel.attrs._datatype is None:
+            exp_sel.attrs._datatype = xsi_type
 
     def list_experiments_with_type(self, project_name: str) -> List[Dict[str, Any]]:
         """

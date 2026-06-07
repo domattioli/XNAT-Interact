@@ -116,8 +116,9 @@ class XnatStateComparator:
         project:
             XNAT project name string.
         """
+        # "project" is the per-run namespace (TEST_PROJECT vs ITEST_<hex>) and
+        # ALWAYS differs legitimately between fake and real runs — exclude it.
         state: Dict[str, Any] = {
-            "project": project,
             "subjects": {},
         }
 
@@ -280,10 +281,22 @@ def _diff_dicts(
 # ---------------------------------------------------------------------------
 
 def _list_subjects(gateway: Any, project: str) -> List[str]:
-    """Return subject labels for *project*."""
-    # FakeXNAT path
-    if hasattr(gateway, "_subjects"):
-        return list(gateway._subjects.get(project, {}).keys())
+    """Return subject labels for *project*.
+
+    FakeXNAT stores objects in ``_selectables`` keyed by query-string
+    (e.g. ``/project/P/subject/S``).  There is no ``_subjects`` attribute —
+    enumerate ``_selectables`` by QS-prefix instead, mirroring ``_list_scans``.
+    """
+    if hasattr(gateway, "_selectables"):
+        prefix = f"/project/{project}/subject/"
+        labels = []
+        for qs, sel in gateway._selectables.items():
+            if qs.startswith(prefix) and sel._exists:
+                tail = qs[len(prefix):]
+                # Subject keys have exactly one segment (no further "/")
+                if "/" not in tail:
+                    labels.append(tail)
+        return sorted(labels)
     # PyxnatGateway path — use raw server
     server = getattr(gateway, "server", None) or gateway
     subjects = server.select(f"/project/{project}").subjects()
@@ -291,10 +304,20 @@ def _list_subjects(gateway: Any, project: str) -> List[str]:
 
 
 def _list_experiments(gateway: Any, project: str, subject: str) -> List[str]:
-    """Return experiment labels under *subject*."""
-    if hasattr(gateway, "_subjects"):
-        subj_data = gateway._subjects.get(project, {}).get(subject, {})
-        return list(subj_data.get("experiments", {}).keys())
+    """Return experiment labels under *subject*.
+
+    Same QS-parse strategy as ``_list_subjects`` / ``_list_scans``.
+    """
+    if hasattr(gateway, "_selectables"):
+        prefix = f"/project/{project}/subject/{subject}/experiment/"
+        labels = []
+        for qs, sel in gateway._selectables.items():
+            if qs.startswith(prefix) and sel._exists:
+                tail = qs[len(prefix):]
+                # Experiment keys have exactly one segment (no further "/")
+                if "/" not in tail:
+                    labels.append(tail)
+        return sorted(labels)
     server = getattr(gateway, "server", None) or gateway
     exps = server.select(f"/project/{project}/subject/{subject}").experiments()
     return [e.label() for e in exps]
@@ -317,14 +340,30 @@ def _list_scans(gateway: Any, exp_qs: str) -> List[str]:
 
 
 def _list_resources(gateway: Any, scan_qs: str) -> List[str]:
-    """Return resource labels for *scan_qs*."""
+    """Return resource labels for *scan_qs*.
+
+    FakeXNAT stores resources in ``_resources`` keyed by
+    ``(subject, experiment, scan, resource_label)`` 4-tuples (NOT (qs, label)
+    2-tuples).  Parse scan_qs to extract the three path components, then
+    match on the first three elements of each key.
+    """
     if hasattr(gateway, "_resources"):
-        labels = []
-        for key in gateway._resources:
-            qs, label = key
-            if qs == scan_qs:
-                labels.append(label)
-        return sorted(labels)
+        # Parse scan_qs: /project/{p}/subject/{s}/experiment/{e}/scan/{scan_id}
+        parts = [p for p in scan_qs.split("/") if p]
+        subj = exp = scan_id = None
+        try:
+            subj = parts[parts.index("subject") + 1]
+            exp = parts[parts.index("experiment") + 1]
+            scan_id = parts[parts.index("scan") + 1]
+        except (ValueError, IndexError):
+            pass
+        if subj and exp and scan_id:
+            labels = [
+                key[3]
+                for key in gateway._resources
+                if len(key) == 4 and key[0] == subj and key[1] == exp and key[2] == scan_id
+            ]
+            return sorted(labels)
     server = getattr(gateway, "server", None) or gateway
     resources = server.select(scan_qs).resources()
     return [r.label() for r in resources]

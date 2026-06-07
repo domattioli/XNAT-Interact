@@ -539,13 +539,9 @@ class TestT003UploadDerived:
                 )
                 # GAP-001 resolved: assessor file upload now uses direct
                 # /data/experiments/<aid>/resources/<label>/files/<name> URI.
-                exp_label = conventions.experiment_qs(
-                    real_project,
-                    str(intake_form.uid),
-                    intake_form.group,
-                    intake_form.acquisition_site,
-                    intake_form.ortho_procedure_type,
-                ).split("/experiment/")[-1]
+                # publish_to_xnat names the experiment SOURCE_DATA-<uid>
+                # (conventions.source_data_label); derive the same label here.
+                exp_label = conventions.source_data_label(str(intake_form.uid))
                 real_exp_qs = (
                     f"/project/{real_project}/subject/{intake_form.uid}"
                     f"/experiment/{exp_label}"

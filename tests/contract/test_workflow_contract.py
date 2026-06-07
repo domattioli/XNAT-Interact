@@ -478,6 +478,9 @@ class TestT003UploadDerived:
         assessor_file = tmp_path / "consensus.nii"
         assessor_file.write_bytes(b"CONSENSUS_SEGMENTATION_BYTES")
 
+        # Mirror real-side seeding: create subject first (fake side must match real side)
+        fake_xnat.create(f"/project/TEST_PROJECT/subject/{intake_form.uid}")
+
         session.publish_to_xnat(
             xnat_connection=xnat_connection,
             validated_login=xnat_login,
@@ -648,6 +651,8 @@ class TestT003UploadDerived:
         expected_bytes = b"ROUND_TRIP_TEST_BYTES"
         assessor_file.write_bytes(expected_bytes)
 
+        # Mirror real-side seeding: create subject first, then experiment (match real side order)
+        fake_xnat.create("/project/TEST_PROJECT/subject/ITEST_SUBJ_0003")
         # Create parent experiment first (H6 guard requires it to exist)
         fake_xnat.create(exp_qs, xsiType="xnat:rfSessionData")
 

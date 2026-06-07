@@ -50,10 +50,11 @@ Failure injection:
 from __future__ import annotations
 
 import shutil
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
 
-from src.services.xnat_gateway import XnatGateway
+from src.services.errors import FriendlyError
+from src.services.xnat_gateway import XnatGateway, GatewayError
 
 
 # ---------------------------------------------------------------------------
@@ -763,8 +764,42 @@ class FakeXNAT(XnatGateway):
 
         Records calls under op="assessor.create" and "assessor.file.put"
         (distinct from scan-resource writes recorded as "file.put" / "resource.put_zip").
+
+        H6: Guards parent-experiment existence + sanitizes label.
+        Raises FriendlyError if parent experiment does not exist or label is invalid.
         """
-        assessor_qs = experiment_qs + "/assessor/" + assessor_label
+        # H6: Guard parent-experiment existence
+        if experiment_qs not in self._selectables or not self._selectables[experiment_qs]._exists:
+            raise GatewayError(
+                FriendlyError(
+                    title="Parent experiment not found",
+                    message=f"Cannot upload derived data: parent experiment {experiment_qs} does not exist. "
+                            f"Please ensure the source experiment has been created before uploading derived data.",
+                    recourse=[
+                        "Check that the experiment query string is correct",
+                        "Verify the source experiment exists in XNAT",
+                        "Create the source experiment first, then retry the upload",
+                    ],
+                )
+            )
+
+        # Sanitize assessor_label: reject path separators and parent-directory references
+        sanitized = PurePosixPath(assessor_label).name
+        if sanitized != assessor_label:
+            raise GatewayError(
+                FriendlyError(
+                    title="Invalid assessor label",
+                    message=f"Assessor label contains path separators or invalid characters: {assessor_label}. "
+                            f"Labels must be single path components without '/' or '..' references.",
+                    recourse=[
+                        "Use only alphanumeric characters, hyphens, and underscores in the label",
+                        "Remove any '/' or '..' from the label",
+                        "Example valid label: SEGMENTATION_CONSENSUS-1.2.3.4",
+                    ],
+                )
+            )
+
+        assessor_qs = str(PurePosixPath(experiment_qs) / "assessor" / assessor_label)
         sel = self._selectables.setdefault(
             assessor_qs, FakeSelectable(root=self, querystring=assessor_qs)
         )

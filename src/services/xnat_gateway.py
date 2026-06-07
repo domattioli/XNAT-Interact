@@ -10,8 +10,26 @@ through ``build_gateway``; tests use ``FakeGateway`` (alias of FakeXNAT).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
+
+from src.services.errors import FriendlyError
+
+
+# ---------------------------------------------------------------------------
+# Exception — wraps FriendlyError for gateway-layer failures
+# ---------------------------------------------------------------------------
+
+class GatewayError(Exception):
+    """
+    Raised when a gateway operation fails.
+
+    Carries a :class:`~src.services.errors.FriendlyError` as ``friendly``
+    so callers can render a user-facing message via ``errors.render()``.
+    """
+    def __init__(self, friendly: FriendlyError) -> None:
+        self.friendly = friendly
+        super().__init__(friendly.message)
 
 
 # ---------------------------------------------------------------------------
@@ -429,10 +447,41 @@ class PyxnatGateway(XnatGateway):
         xsi_type: str = "xnat:assessorData",
         files: Optional[List[tuple]] = None,
     ) -> None:
+        # H6: Guard parent-experiment existence + sanitize label
+        if not self.exists(experiment_qs):
+            raise GatewayError(
+                FriendlyError(
+                    title="Parent experiment not found",
+                    message=f"Cannot upload derived data: parent experiment {experiment_qs} does not exist. "
+                            f"Please ensure the source experiment has been created before uploading derived data.",
+                    recourse=[
+                        "Check that the experiment query string is correct",
+                        "Verify the source experiment exists in XNAT",
+                        "Create the source experiment first, then retry the upload",
+                    ],
+                )
+            )
+
+        # Sanitize assessor_label: reject path separators and parent-directory references
+        sanitized = PurePosixPath(assessor_label).name
+        if sanitized != assessor_label:
+            raise GatewayError(
+                FriendlyError(
+                    title="Invalid assessor label",
+                    message=f"Assessor label contains path separators or invalid characters: {assessor_label}. "
+                            f"Labels must be single path components without '/' or '..' references.",
+                    recourse=[
+                        "Use only alphanumeric characters, hyphens, and underscores in the label",
+                        "Remove any '/' or '..' from the label",
+                        "Example valid label: SEGMENTATION_CONSENSUS-1.2.3.4",
+                    ],
+                )
+            )
+
         # Phase 7 #27 datatype-cache pattern:
         # 1. create with xsiType so the cache is populated immediately
         # 2. then set attrs (mset will not raise TypeError)
-        assessor_qs = experiment_qs + "/assessor/" + assessor_label
+        assessor_qs = str(PurePosixPath(experiment_qs) / "assessor" / assessor_label)
         assessor = self.server.select(assessor_qs)
         if not assessor.exists():
             assessor.create(xsiType=xsi_type)

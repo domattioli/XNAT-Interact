@@ -657,6 +657,9 @@ class TestT003UploadDerived:
         expected_bytes = b"ROUND_TRIP_TEST_BYTES"
         assessor_file.write_bytes(expected_bytes)
 
+        # Create parent experiment first (H6 guard requires it to exist)
+        fake_xnat.create(exp_qs, xsiType="xnat:rfSessionData")
+
         fake_xnat.create_assessor(
             exp_qs,
             assessor_label,

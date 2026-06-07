@@ -16,7 +16,8 @@ from typing import get_type_hints
 
 import pytest
 
-from src.services.xnat_gateway import XnatGateway, PyxnatGateway
+from src.services.errors import FriendlyError
+from src.services.xnat_gateway import XnatGateway, PyxnatGateway, GatewayError
 from tests.fakes.fake_xnat import FakeXNAT, FakeGateway
 
 
@@ -208,6 +209,7 @@ class TestAssessorWritesDistinct:
         self.exp_qs = f"/project/{self.proj}/subject/{self.uid}/experiment/SOURCE_DATA-{self.uid}"
 
     def test_create_assessor_records_assessor_create_op(self, tmp_path):
+        self.fake.create(self.exp_qs, xsiType="xnat:rfSessionData")
         seg_file = tmp_path / "seg.nii"
         seg_file.write_bytes(b"\x00segdata")
         self.fake.create_assessor(
@@ -220,6 +222,7 @@ class TestAssessorWritesDistinct:
         assert "assessor.create" in ops
 
     def test_assessor_file_put_op_distinct_from_scan_file_put(self, tmp_path):
+        self.fake.create(self.exp_qs, xsiType="xnat:rfSessionData")
         seg_file = tmp_path / "seg.nii"
         seg_file.write_bytes(b"\x00segdata")
         # Scan-resource write
@@ -243,6 +246,7 @@ class TestAssessorWritesDistinct:
 
     def test_create_assessor_idempotent(self, tmp_path):
         """Calling create_assessor twice does not create duplicate create records."""
+        self.fake.create(self.exp_qs, xsiType="xnat:rfSessionData")
         self.fake.create_assessor(self.exp_qs, "ASSESS-001")
         self.fake.create_assessor(self.exp_qs, "ASSESS-001")
         creates = [c for c in self.fake.calls if c["op"] == "assessor.create"]
@@ -251,8 +255,79 @@ class TestAssessorWritesDistinct:
     def test_fidelity_mode_populates_datatype_cache(self):
         """With fidelity_mode=True, create_assessor sets xsiType on attrs._datatype."""
         fake = FakeGateway(fidelity_mode=True)
+        fake.create(self.exp_qs, xsiType="xnat:rfSessionData")
         assessor_qs = self.exp_qs + "/assessor/ASSESS-002"
         fake.create_assessor(self.exp_qs, "ASSESS-002", xsi_type="xnat:assessorData")
         sel = fake._selectables.get(assessor_qs)
         assert sel is not None
         assert sel.attrs._datatype == "xnat:assessorData"
+
+
+# ---------------------------------------------------------------------------
+# H6 — Parent-experiment existence check + label sanitization
+# ---------------------------------------------------------------------------
+
+class TestCreateAssessorH6Guards:
+    """
+    H6: create_assessor must guard parent-experiment existence and sanitize labels.
+    """
+
+    def setup_method(self):
+        self.fake = FakeGateway()
+        self.uid = "1.2.3.4"
+        self.proj = "FAKE_PROJECT"
+        self.exp_qs = f"/project/{self.proj}/subject/{self.uid}/experiment/SOURCE_DATA-{self.uid}"
+
+    def test_create_assessor_raises_on_nonexistent_parent(self):
+        """create_assessor raises GatewayError if parent experiment does not exist."""
+        nonexistent_exp_qs = f"/project/{self.proj}/subject/{self.uid}/experiment/NONEXISTENT"
+        with pytest.raises(GatewayError) as exc_info:
+            self.fake.create_assessor(nonexistent_exp_qs, "ASSESS-001")
+        assert "Parent experiment not found" in exc_info.value.friendly.title
+        assert "does not exist" in exc_info.value.friendly.message
+
+    def test_create_assessor_succeeds_with_existent_parent(self, tmp_path):
+        """create_assessor succeeds when parent experiment exists."""
+        # Create the parent experiment first
+        self.fake.create(self.exp_qs, xsiType="xnat:rfSessionData")
+        # Now create the assessor
+        seg_file = tmp_path / "seg.nii"
+        seg_file.write_bytes(b"\x00segdata")
+        self.fake.create_assessor(
+            self.exp_qs,
+            "ASSESS-001",
+            files=[("SEG", "seg.nii", seg_file)],
+        )
+        creates = [c for c in self.fake.calls if c["op"] == "assessor.create"]
+        assert len(creates) == 1
+
+    def test_create_assessor_rejects_label_with_path_separator(self):
+        """create_assessor raises GatewayError if assessor_label contains '/'."""
+        self.fake.create(self.exp_qs, xsiType="xnat:rfSessionData")
+        with pytest.raises(GatewayError) as exc_info:
+            self.fake.create_assessor(self.exp_qs, "ASSESS/SUBDIR")
+        assert "Invalid assessor label" in exc_info.value.friendly.title
+        assert "path separators" in exc_info.value.friendly.message
+
+    def test_create_assessor_rejects_label_with_parent_dir_reference(self):
+        """create_assessor raises GatewayError if assessor_label contains '..'."""
+        self.fake.create(self.exp_qs, xsiType="xnat:rfSessionData")
+        with pytest.raises(GatewayError) as exc_info:
+            self.fake.create_assessor(self.exp_qs, "../ASSESS")
+        assert "Invalid assessor label" in exc_info.value.friendly.title
+        assert "path separators" in exc_info.value.friendly.message
+
+    def test_create_assessor_accepts_valid_labels(self):
+        """create_assessor accepts labels with alphanumerics, hyphens, underscores, dots."""
+        self.fake.create(self.exp_qs, xsiType="xnat:rfSessionData")
+        # These should all succeed
+        valid_labels = [
+            "SEGMENTATION_CONSENSUS-1.2.3.4",
+            "SEG_001",
+            "seg-consensus",
+            "ASSESS-v2.0",
+        ]
+        for label in valid_labels:
+            self.fake.create_assessor(self.exp_qs, label)
+        creates = [c for c in self.fake.calls if c["op"] == "assessor.create"]
+        assert len(creates) == len(valid_labels)

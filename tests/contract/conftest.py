@@ -61,20 +61,29 @@ _XNAT_URL = "http://localhost:8080"
 _XNAT_USER = "admin"
 _XNAT_PASSWORD = "admin"
 _HEALTH_ENDPOINT = "/xapi/siteConfig"
-_HEALTH_TIMEOUT = 60   # seconds
-_HEALTH_INTERVAL = 2   # seconds
+_HEALTH_TIMEOUT = 300  # seconds — cold boot does DB init + war deploy + plugin load
+_HEALTH_INTERVAL = 5   # seconds
 
 
 def _wait_for_xnat(timeout: int = _HEALTH_TIMEOUT, interval: int = _HEALTH_INTERVAL) -> None:
-    """Poll XNAT health endpoint until HTTP 200 or timeout."""
+    """Poll XNAT health endpoint until an authenticated HTTP 200, or timeout.
+
+    ``/xapi/siteConfig`` is a protected endpoint: it returns 401 until the war
+    is deployed and 200 once XNAT is fully up *and* the admin credentials work.
+    Polling it with auth therefore proves both liveness and a usable REST API
+    in one shot. An unauthenticated probe would only ever see 401 (never 200),
+    which is why the request below carries the admin Basic-auth header.
+    """
+    import base64
     import urllib.request
-    import urllib.error
 
     deadline = time.monotonic() + timeout
     url = _XNAT_URL + _HEALTH_ENDPOINT
+    token = base64.b64encode(f"{_XNAT_USER}:{_XNAT_PASSWORD}".encode()).decode()
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=2) as resp:
+            req = urllib.request.Request(url, headers={"Authorization": f"Basic {token}"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
                 if resp.status == 200:
                     return
         except Exception:

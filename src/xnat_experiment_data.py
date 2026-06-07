@@ -506,13 +506,13 @@ class SourceRFSession( ExperimentData ):
                 dicom_obj.metadata.add_new((0x0019, 0x1002), 'LT', 'Old_StudyTime: ' + dicom_obj.StudyTime )
             dicom_obj.StudyTime = self.intake_form.epic_start_time # Provided by intake form
             if hasattr( dicom_obj, 'StudyInstanceUID' ):
-                dicom_obj.metadata.add_new((0x0019, 0x1003), 'UI', 'Old_StudyInstanceUID: ' + dicom_obj.StudyInstanceUID)
+                dicom_obj.metadata.add_new((0x0019, 0x1003), 'LT', 'Old_StudyInstanceUID: ' + dicom_obj.StudyInstanceUID)
             dicom_obj.StudyInstanceUID = self.intake_form.uid
             if hasattr( dicom_obj, 'SeriesInstanceUID' ):
-                dicom_obj.metadata.add_new((0x0019, 0x1004), 'UI', 'Old_SeriesInstanceUID: ' + dicom_obj.SeriesInstanceUID)
+                dicom_obj.metadata.add_new((0x0019, 0x1004), 'LT', 'Old_SeriesInstanceUID: ' + dicom_obj.SeriesInstanceUID)
             dicom_obj.SeriesInstanceUID = self.intake_form.uid
             if hasattr( dicom_obj, 'SOPInstanceUID' ):
-                dicom_obj.metadata.add_new((0x0019, 0x1005), 'UI', 'Old_SOPInstanceUID: ' + dicom_obj.SOPInstanceUID)
+                dicom_obj.metadata.add_new((0x0019, 0x1005), 'LT', 'Old_SOPInstanceUID: ' + dicom_obj.SOPInstanceUID)
             dicom_obj.SOPInstanceUID = self.intake_form.uid
             if hasattr( dicom_obj, 'NumberOfStudyRelatedInstances' ):
                 dicom_obj.metadata.add_new((0x0019, 0x1006), 'IS', 'Old_NumberOfStudyRelatedInstances: ' + str(dicom_obj.NumberOfStudyRelatedInstances))
@@ -525,7 +525,7 @@ class SourceRFSession( ExperimentData ):
                 dicom_obj.metadata.add_new( (0x0019, 0x1000), 'LT', f'{key}: {value}' )
              
             # Create a private long length text tag to explain what this function did.
-            dicom_obj.metadata.add_new( (0x0019, 0x1006), 'LT', f'Metadata de-identified & standardized by XNAT-Interact script on {dicom_obj._derived_metadata["DATETIME"]}.' )
+            dicom_obj.metadata.add_new( (0x0019, 0x1008), 'LT', f'Metadata de-identified & standardized by XNAT-Interact script on {dicom_obj._derived_metadata["DATETIME"]}.' )
 
             # Save the modified DICOM object back to the DataFrame; Generate a new file name for each shot in the session given its instance number, then overwrite metadata to ensure consistency throughout all shots.
             # Guard metadata.InstanceNumber like its sibling tags above (#30, FR-009):

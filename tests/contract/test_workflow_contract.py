@@ -525,22 +525,17 @@ class TestT003UploadDerived:
                     server=real_gw, gateway=real_gw, xnat_project_name=real_project
                 )
                 real_session = _MinimalRFSession.build(intake_form)
-                try:
-                    real_session.publish_to_xnat(
-                        xnat_connection=real_conn,
-                        validated_login=xnat_login,
-                        zipped_data={str(zip_path): {"CONTENT": "IMAGE", "FORMAT": "DICOM", "TAG": "INTRA_OP"}},
-                        delete_zip=False,
-                        verbose=False,
-                        pixel_review_confirmer=_confirmed_confirmer,
-                        assessor=assessor_file,
-                    )
-                except _PyxnatDatabaseError as exc:
-                    # XNAT 1.9.3 does not support file.put on assessor resources
-                    # (returns HTTP 404).  Skip comparison on this server version;
-                    # the fake-side assertions above still pass.  See
-                    # specs/006-xnat-alignment/contract-test.md [GAP-001].
-                    pytest.xfail(f"XNAT assessor file upload not supported on this server: {exc}")
+                real_session.publish_to_xnat(
+                    xnat_connection=real_conn,
+                    validated_login=xnat_login,
+                    zipped_data={str(zip_path): {"CONTENT": "IMAGE", "FORMAT": "DICOM", "TAG": "INTRA_OP"}},
+                    delete_zip=False,
+                    verbose=False,
+                    pixel_review_confirmer=_confirmed_confirmer,
+                    assessor=assessor_file,
+                )
+                # GAP-001 resolved: assessor file upload now uses direct
+                # /data/experiments/<aid>/resources/<label>/files/<name> URI.
                 exp_label = conventions.experiment_qs(
                     real_project,
                     str(intake_form.uid),
@@ -619,20 +614,16 @@ class TestT003UploadDerived:
                     server=real_gw, gateway=real_gw, xnat_project_name=real_project
                 )
                 real_session = _MinimalRFSession.build(intake_form)
-                try:
-                    real_session.publish_to_xnat(
-                        xnat_connection=real_conn,
-                        validated_login=xnat_login,
-                        zipped_data={str(zip_path): {"CONTENT": "IMAGE", "FORMAT": "DICOM", "TAG": "INTRA_OP"}},
-                        delete_zip=False,
-                        verbose=False,
-                        pixel_review_confirmer=_confirmed_confirmer,
-                        assessor=assessor_file,
-                    )
-                except _PyxnatDatabaseError as exc:
-                    # XNAT 1.9.3 does not support file.put on assessor resources.
-                    # See specs/006-xnat-alignment/contract-test.md [GAP-001].
-                    pytest.xfail(f"XNAT assessor file upload not supported on this server: {exc}")
+                real_session.publish_to_xnat(
+                    xnat_connection=real_conn,
+                    validated_login=xnat_login,
+                    zipped_data={str(zip_path): {"CONTENT": "IMAGE", "FORMAT": "DICOM", "TAG": "INTRA_OP"}},
+                    delete_zip=False,
+                    verbose=False,
+                    pixel_review_confirmer=_confirmed_confirmer,
+                    assessor=assessor_file,
+                )
+                # GAP-001 resolved: direct experiment URI PUT used for assessor files.
                 _poll_until(lambda: real_gw.exists(
                     f"/project/{real_project}/subject/{intake_form.uid}"
                 ))
@@ -688,17 +679,13 @@ class TestT003UploadDerived:
             try:
                 real_gw.create(f"/project/{real_project}/subject/ITEST_SUBJ_0003")
                 real_gw.create(real_exp_qs, xsiType="xnat:rfSessionData")
-                try:
-                    real_gw.create_assessor(
-                        real_exp_qs,
-                        assessor_label,
-                        xsi_type="xnat:assessorData",
-                        files=[("SEGMENTATION_CONSENSUS", "consensus.nii", assessor_file)],
-                    )
-                except _PyxnatDatabaseError as exc:
-                    # XNAT 1.9.3 does not support file.put on assessor resources.
-                    # See specs/006-xnat-alignment/contract-test.md [GAP-001].
-                    pytest.xfail(f"XNAT assessor file upload not supported on this server: {exc}")
+                real_gw.create_assessor(
+                    real_exp_qs,
+                    assessor_label,
+                    xsi_type="xnat:assessorData",
+                    files=[("SEGMENTATION_CONSENSUS", "consensus.nii", assessor_file)],
+                )
+                # GAP-001 resolved: direct experiment URI PUT used for assessor files.
                 _poll_until(lambda: real_gw.exists(real_exp_qs))
                 real_state = cmp.capture(real_gw, real_project)
                 cmp.compare(fake_state, real_state).assert_equal()

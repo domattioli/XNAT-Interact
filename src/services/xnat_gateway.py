@@ -508,10 +508,48 @@ class PyxnatGateway(XnatGateway):
         if not assessor.exists():
             assessor.create(xsiType=xsi_type)
         if files:
+            # GAP-001 fix: pyxnat's nested assessor-resource file path
+            # (.../experiments/<exp>/assessors/<label>/resources/<N>/files/<f>)
+            # returns HTTP 404 on XNAT 1.9.3.  Assessors are themselves stored
+            # as experiments; PUT via the assessor's direct experiment URI works:
+            # PUT /data/experiments/<aid>/resources/<label>/files/<name>
+            # Resolve the assessor accession ID (e.g. Xnat4Tests_E#####).
+            try:
+                aid = assessor.id()
+            except Exception:  # noqa: BLE001
+                aid = None
+            if not aid:
+                aid = assessor.attrs.get("ID")
             for resource_label, filename, local_path in files:
-                assessor.resource(resource_label).file(filename).put(
-                    str(local_path), content="DERIVED", format="NIFTI", tags="DATA"
+                uri = (
+                    f"/data/experiments/{aid}/resources/{resource_label}"
+                    f"/files/{filename}"
                 )
+                with open(str(local_path), "rb") as fh:
+                    body = fh.read()
+                resp = self.server._exec(
+                    uri,
+                    method="PUT",
+                    body=body,
+                    headers={"Content-Type": "application/octet-stream"},
+                    params={
+                        "format": "NIFTI",
+                        "content": "DERIVED",
+                        "inbody": "true",
+                    },
+                )
+                # _exec raises on 4xx/5xx; but verify for extra safety
+                if hasattr(resp, "status_code") and resp.status_code >= 400:
+                    raise GatewayError(
+                        FriendlyError(
+                            title="Assessor file upload failed",
+                            message=(
+                                f"PUT {uri} returned HTTP {resp.status_code}. "
+                                f"File: {filename}"
+                            ),
+                            recourse=["Check XNAT connectivity and assessor existence"],
+                        )
+                    )
 
 
 # ---------------------------------------------------------------------------

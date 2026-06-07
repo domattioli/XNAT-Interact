@@ -500,22 +500,22 @@ class SourceRFSession( ExperimentData ):
             
             # Pull date and UID info and write as new private-tag pair so we can overwrite it with standardized info.
             if hasattr( dicom_obj, 'StudyDate' ):
-                dicom_obj.metadata.add_new((0x0019, 0x1001), 'DA', 'Old_StudyDate: ' + dicom_obj.StudyDate )
+                dicom_obj.metadata.add_new((0x0019, 0x1001), 'LT', 'Old_StudyDate: ' + dicom_obj.StudyDate )
             dicom_obj.StudyDate = self.intake_form.operation_date # Provided by intake form
             if hasattr( dicom_obj, 'StudyTime' ):
-                dicom_obj.metadata.add_new((0x0019, 0x1002), 'TM', 'Old_StudyTime: ' + dicom_obj.StudyTime )
+                dicom_obj.metadata.add_new((0x0019, 0x1002), 'LT', 'Old_StudyTime: ' + dicom_obj.StudyTime )
             dicom_obj.StudyTime = self.intake_form.epic_start_time # Provided by intake form
             if hasattr( dicom_obj, 'StudyInstanceUID' ):
-                dicom_obj.metadata.add_new((0x0019, 0x1002), 'UI', 'Old_StudyInstanceUID: ' + dicom_obj.StudyInstanceUID)
+                dicom_obj.metadata.add_new((0x0019, 0x1003), 'UI', 'Old_StudyInstanceUID: ' + dicom_obj.StudyInstanceUID)
             dicom_obj.StudyInstanceUID = self.intake_form.uid
             if hasattr( dicom_obj, 'SeriesInstanceUID' ):
-                dicom_obj.metadata.add_new((0x0019, 0x1003), 'UI', 'Old_SeriesInstanceUID: ' + dicom_obj.SeriesInstanceUID)
+                dicom_obj.metadata.add_new((0x0019, 0x1004), 'UI', 'Old_SeriesInstanceUID: ' + dicom_obj.SeriesInstanceUID)
             dicom_obj.SeriesInstanceUID = self.intake_form.uid
             if hasattr( dicom_obj, 'SOPInstanceUID' ):
-                dicom_obj.metadata.add_new((0x0019, 0x1004), 'UI', 'Old_SOPInstanceUID: ' + dicom_obj.SOPInstanceUID)
+                dicom_obj.metadata.add_new((0x0019, 0x1005), 'UI', 'Old_SOPInstanceUID: ' + dicom_obj.SOPInstanceUID)
             dicom_obj.SOPInstanceUID = self.intake_form.uid
             if hasattr( dicom_obj, 'NumberOfStudyRelatedInstances' ):
-                dicom_obj.metadata.add_new((0x0019, 0x1005), 'IS', 'Old_NumberOfStudyRelatedInstances: ' + dicom_obj.NumberOfStudyRelatedInstances)
+                dicom_obj.metadata.add_new((0x0019, 0x1006), 'IS', 'Old_NumberOfStudyRelatedInstances: ' + str(dicom_obj.NumberOfStudyRelatedInstances))
                 dicom_obj.NumberOfStudyRelatedInstances = num_valid_shots
             if row['IS_QUESTIONABLE']: # If the shot is questionably a duplicate within-case, add a private tag to explain why.
                 dicom_obj.metadata.add_new( (0x0019, 0x1007), 'LT', 'This shot was flagged by the XNAT-Interact software as a potential duplicate (within-performance).' )

@@ -406,11 +406,11 @@ class XNATConnection( UIDandMetaInfo ):
         
         if self.is_verified and not stay_connected: # Disconnect from the project instance connection if we successfully connected.
             self.gateway.disconnect()
-            self._open = False
+            self._is_open = False
         # if there are any failed tests, disconnect from the server and set is_open to False.
         if any( self._failed_tests.values() ):
             self.close()
-            self._open = False
+            self._is_open = False
         if verbose:                         print( self )
 
 
@@ -506,7 +506,7 @@ class XNATConnection( UIDandMetaInfo ):
         if hasattr( self, '_gateway' ):  # Delete the local copy of the ConfigTables.
             self._gateway.disconnect()
             if os.path.exists( self.config_ffn ):       os.remove( self.config_ffn )
-        self._open = False
+        self._is_open = False
         print( f"\n\t*Prior connection to XNAT server, '{self.uid}', has been closed -- local config data will be deleted!\n" )
 
     def __del__( self ):
@@ -523,6 +523,12 @@ class XNATConnection( UIDandMetaInfo ):
         if self.is_verified:    return (f"-- XNAT Connection --\n\tStatus:\t\t{'Open' if self.is_open else 'Closed'}\n\tUsername:\t{self.get_user}\n\tVerified:\t{self.is_verified}\n\tProject:\t{self.project_handle}\n\tLibrarian(s)/Owner(s):\t{self.project_owner}\n\tApproved Users:\t{project_users}" )
         else:                   return (f"-- XNAT Connection --\n\tStatus:\t\t{'Open' if self.is_open else 'Closed'}\n\tUsername:\t{self.get_user}\n\tVerified:\t{self.is_verified}\n\tFailed Tests:\t{self.failed_tests}\n\tProject:\t{self.project_handle}\n\tLibrarian(s)/Owner(s):\t{self.project_owner}\n\tApproved Users:\t{project_users}" )
           
+
+#--------------------------------------------------------------------------------------------------------------------------
+## Distinct exception type for concurrent-edit / lost-update detection (H3).
+class LostUpdateError( ValueError ):
+    """Raised when push_to_xnat detects the server copy changed since our last pull."""
+
 
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for cataloging all seen data and user info.
@@ -1012,7 +1018,7 @@ class ConfigTables( UIDandMetaInfo ):
                     "Contact the Data Librarian if you need help merging concurrent edits.",
                 ],
             )
-            raise ValueError( f"{fe.title}: {fe.message}" )
+            raise LostUpdateError( f"{fe.title}: {fe.message}" )
 
     def push_to_xnat( self, verbose: Opt[bool]=True ) -> bool:
         # Create a backup before we do anything.
@@ -1025,8 +1031,15 @@ class ConfigTables( UIDandMetaInfo ):
             #
             _proj_qs = _conventions.project_qs( self.xnat_connection.xnat_project_name )
             self.xnat_connection.gateway.put_file( _proj_qs, self.xnat_config_folder_name, self.config_fn, self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
+            # H4: refresh fingerprint so a second push in the same session compares
+            # against the just-written content, not the pre-first-push baseline.
+            self._server_fingerprint_at_load = self._fingerprint_file( self.config_ffn )
             if verbose:                     print( f'\t...ConfigTables (config.json) successfully updated on XNAT!\n' )
             return True
+        except LostUpdateError:
+            # H3: lost-update is a distinct signal — callers must be able to tell
+            # it apart from a generic network/save failure.  Re-raise as-is.
+            raise
         except Exception as e:
             # Delete the backupfile
             _proj_qs = _conventions.project_qs( self.xnat_connection.xnat_project_name )

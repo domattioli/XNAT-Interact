@@ -75,6 +75,11 @@ def deidentify_dataset(ds, redacted_string: str):
     if hasattr(ds, "StudyID"):
         ds.StudyID = "REDACTED 4 XNAT"
 
+    # FR-012: PatientID is not a PN-VR element so the walk() above does not
+    # catch it.  Redact it explicitly so no patient identifier survives ingest.
+    if hasattr(ds, "PatientID"):
+        ds.PatientID = "REDACTED 4 XNAT"
+
     return ds
 
 

@@ -64,6 +64,23 @@ python update_and_test.py
 
 ---
 
+## Data, Metadata & Identity
+
+What the data is and why it's collected, plus how every metadata field — **especially the DICOM
+UIDs** — is handled during de-identification and upload, is documented here:
+
+- [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) — purpose/motivation, and the identity /
+  de-identification / duplicate-detection model.
+- [`docs/METADATA.md`](docs/METADATA.md) — reference for every metadata parameter and UID
+  (`StudyInstanceUID` / `SeriesInstanceUID` / `SOPInstanceUID`, the private-tag block, intake-form
+  fields) and how the pipeline reads, rewrites, or preserves each.
+
+In brief: patient identity is destroyed; surgeon identity is a keyed pseudonym; cases/images are
+de-duplicated on image *content* (UIDs corroborate, never authoritative); no per-image human
+review.
+
+---
+
 ## Getting Help
 
 Contact your Data Librarian or open an issue on GitHub. For SSL certificate problems, email IIBI staff directly.

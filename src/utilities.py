@@ -634,7 +634,23 @@ class ConfigTables( UIDandMetaInfo ):
         
         super().__init__()  # Call the __init__ method of the base class to ensure that we inherit all those local variables
         self._login_info, self._xnat_connection = login_info, xnat_connection
-        
+
+        # T006: lazily open a Registry sidecar alongside the JSON config file.
+        # Fail-soft: if the registry cannot be opened (read-only FS, missing deps,
+        # etc.) we set _registry to None and continue — JSON remains the source of
+        # truth.  The registry is populated alongside as a write-through cache;
+        # no read path depends on it yet.
+        self._registry = None
+        try:
+            from src.services.registry import Registry as _Registry
+            import os as _os
+            _reg_path = _os.path.join(
+                _os.path.dirname(self.config_ffn), "registry.db"
+            )
+            self._registry = _Registry(_reg_path)
+        except Exception:  # noqa: BLE001 — fail-soft, never crash startup
+            pass
+
         try: # Need to try to pull it from the xnat server if it exists, otherwise create it from scratch.
             self.pull_from_xnat( verbose=verbose )
             self._verify_project_owners_are_registered()
@@ -1157,6 +1173,60 @@ class ConfigTables( UIDandMetaInfo ):
             self._tables[table_name] = pd.concat( [self.tables[table_name], new_data], ignore_index=True )
             self._update_metadata()
             success, out_str = True, f'\tSUCCESS! --- Added "{item_name}" to table "{table_name}".'
+
+            # T006: write-through to registry for overlapping tables.
+            # Additive-only; never raises; JSON is still the source of truth.
+            if success and self._registry is not None:
+                try:
+                    _tn = table_name  # already uppercased above
+                    if _tn == 'IMAGE_HASHES':
+                        _subj = None
+                        if extra_columns_values:
+                            _subj = (extra_columns_values.get('SUBJECT') or
+                                     extra_columns_values.get('subject'))
+                        _inst = None
+                        if extra_columns_values:
+                            _raw_inst = (extra_columns_values.get('INSTANCE_NUM') or
+                                         extra_columns_values.get('instance_num'))
+                            if _raw_inst is not None:
+                                try:
+                                    _inst = int(_raw_inst)
+                                except (TypeError, ValueError):
+                                    _inst = None
+                        _case_key = _subj.upper() if _subj else None
+                        # Attempt upsert with case_key; if FK fails (case not yet
+                        # registered in registry), retry with case_key=None so the
+                        # hash is still recorded (additive, never blocks).
+                        try:
+                            self._registry.upsert_image_hash(
+                                item_name,
+                                case_key=_case_key,
+                                instance_number=_inst,
+                            )
+                        except Exception:  # noqa: BLE001
+                            self._registry.upsert_image_hash(
+                                item_name,
+                                case_key=None,
+                                instance_number=_inst,
+                            )
+                    elif _tn == 'SUBJECTS':
+                        _acq = None
+                        _grp = None
+                        if extra_columns_values:
+                            _acq = (extra_columns_values.get('ACQUISITION_SITE') or
+                                    extra_columns_values.get('acquisition_site'))
+                            _grp = (extra_columns_values.get('GROUP') or
+                                    extra_columns_values.get('group'))
+                        self._registry.upsert_case(
+                            item_name,
+                            procedure=_grp,
+                            device=_acq,
+                        )
+                    elif _tn == 'SURGEONS':
+                        self._registry.upsert_surgeon(item_name)
+                except Exception:  # noqa: BLE001 — fail-soft
+                    pass
+
         if verbose:                     print( out_str )
         return success, out_str
     

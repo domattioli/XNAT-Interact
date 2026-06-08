@@ -1,9 +1,14 @@
 # Data Model — XNAT-Interact
 
-**Status:** Design / specification (authoritative). Implementation of several items is
-deferred and tracked in [#32](https://github.com/domattioli/XNAT-Interact/issues/32)
-(dedup/identity) and [#33](https://github.com/domattioli/XNAT-Interact/issues/33)
-(correctness audit).
+**Status:** Design / specification (authoritative). **Core implementation BUILT** via
+[`specs/009-data-identity-dedup`](../specs/009-data-identity-dedup/) (992 tests green offline +
+24 live dual-run): unique SOPInstanceUID (H1), UID preservation, `Old_StudyDate` strip + date
+hash, content-based layered dedup + evidence package, SQLite registry (write-through facade over
+ConfigTables), surgeon keyed-pseudonym + patient destroy, keep-all derived versioning. **Deferred:**
+advanced automated pixel de-id (§4.2 — its own feature), Postgres migration
+([#34](https://github.com/domattioli/XNAT-Interact/issues/34)). Related:
+[#32](https://github.com/domattioli/XNAT-Interact/issues/32) (dedup/identity),
+[#33](https://github.com/domattioli/XNAT-Interact/issues/33) (correctness audit).
 **Last updated:** 2026-06-08
 **Purpose of this document:** Capture *what the data is*, *why the repo exists*, and the
 **identity / de-identification / duplicate-detection model** that must drive ingest. This is

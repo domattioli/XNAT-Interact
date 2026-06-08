@@ -146,6 +146,53 @@ def consensus_label(uid: str) -> str:
     return f'SEGMENTATION_CONSENSUS-{uid}'
 
 
+def next_assessor_label(gateway, experiment_qs: str, base_label: str) -> str:
+    """
+    Return the next keep-all monotonic versioned label for *base_label*.
+
+    Implements FR-013 (US5 SC-1): derived/assessor data uses ``__v<n>`` suffix
+    versioning so re-uploads land as ``v(n+1)`` without destroying ``v(n)``.
+
+    Label scheme
+    ------------
+    First upload  → ``<base_label>__v1``
+    Second upload → ``<base_label>__v2``
+    etc.
+
+    The function queries the gateway for existing assessor labels under
+    *experiment_qs*, finds all that match ``<base_label>__v<int>``, and
+    returns the next version.  When no match exists (first upload) returns
+    ``<base_label>__v1``.
+
+    Fail-soft: if the gateway call fails (offline / permission error), the
+    function defaults to ``<base_label>__v1`` — the caller must not crash.
+
+    Parameters
+    ----------
+    gateway:
+        Any ``XnatGateway`` implementation (real or fake).
+    experiment_qs:
+        Querystring of the parent experiment.
+    base_label:
+        The un-versioned label (e.g. ``SEGMENTATION_CONSENSUS-<uid>``).
+
+    Returns
+    -------
+    str
+        Versioned label, e.g. ``SEGMENTATION_CONSENSUS-<uid>__v1``.
+    """
+    import re as _re
+    existing = gateway.list_assessors(experiment_qs)
+    pattern = _re.compile(rf"^{_re.escape(base_label)}__v(\d+)$")
+    versions = []
+    for label in existing:
+        m = pattern.match(label)
+        if m:
+            versions.append(int(m.group(1)))
+    next_v = max(versions) + 1 if versions else 1
+    return f"{base_label}__v{next_v}"
+
+
 # ---------------------------------------------------------------------------
 # Resource Label Registry
 # ---------------------------------------------------------------------------

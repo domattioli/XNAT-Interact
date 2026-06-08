@@ -503,11 +503,14 @@ class TestT003UploadDerived:
             f"Expected xsiType='xnat:assessorData', got {recorded_xsi!r}"
         )
 
-        # label must equal conventions.consensus_label(uid)
-        expected_label = conventions.consensus_label(str(intake_form.uid))
+        # T016 (FR-013): label must be the versioned form of consensus_label(uid).
+        # First upload on a clean experiment → base_label__v1.
+        expected_base = conventions.consensus_label(str(intake_form.uid))
+        expected_label_v1 = f"{expected_base}__v1"
         recorded_qs = assessor_creates[0]["kwargs"].get("_qs", "")
-        assert recorded_qs.endswith(expected_label), (
-            f"Assessor QS {recorded_qs!r} does not end with expected label {expected_label!r}"
+        assert recorded_qs.endswith(expected_label_v1), (
+            f"Assessor QS {recorded_qs!r} does not end with versioned label {expected_label_v1!r}. "
+            f"T016: first upload to a fresh experiment must be __v1."
         )
 
         # file put must be recorded under assessor.file.put

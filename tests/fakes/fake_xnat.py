@@ -748,6 +748,23 @@ class FakeXNAT(XnatGateway):
             written.append(dest)
         return written
 
+    def list_assessors(self, experiment_qs: str) -> List[str]:
+        """
+        Return labels of all assessors recorded under *experiment_qs*.
+
+        Supports keep-all monotonic versioning (FR-013, T016):
+        next_assessor_label() calls this to determine v(n+1).
+        """
+        prefix = str(PurePosixPath(experiment_qs) / "assessor") + "/"
+        labels = []
+        for qs, sel in self._selectables.items():
+            if qs.startswith(prefix) and sel._exists:
+                # qs is like "/.../assessor/<label>" — take the last segment
+                label = qs[len(prefix):]
+                if "/" not in label:
+                    labels.append(label)
+        return labels
+
     def create_assessor(
         self,
         experiment_qs: str,

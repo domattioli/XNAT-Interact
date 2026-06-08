@@ -267,6 +267,18 @@ class XnatGateway(ABC):
     # ------------------------------------------------------------------
 
     @abstractmethod
+    def list_assessors(self, experiment_qs: str) -> List[str]:
+        """
+        Return the list of assessor labels that exist under *experiment_qs*.
+
+        Used by keep-all monotonic versioning (FR-013, T016) to determine the
+        next version number before calling create_assessor.
+
+        Returns an empty list when the experiment has no assessors or does not
+        exist; never raises on "not found".
+        """
+
+    @abstractmethod
     def create_assessor(
         self,
         experiment_qs: str,
@@ -412,6 +424,27 @@ class PyxnatGateway(XnatGateway):
         filename: str,
     ) -> None:
         self.server.select(querystring).resource(resource_label).file(filename).delete()
+
+    # ------------------------------------------------------------------
+    # Assessor listing
+    # ------------------------------------------------------------------
+
+    def list_assessors(self, experiment_qs: str) -> List[str]:
+        """
+        Return assessor labels that exist under *experiment_qs*.
+
+        Wraps pyxnat's ``experiment.assessors().get()`` call.
+        Returns an empty list when the experiment has no assessors or does not
+        exist (never raises on "not found").
+        """
+        try:
+            experiment = self.server.select(experiment_qs)
+            if not experiment.exists():
+                return []
+            labels = list(experiment.assessors().get())
+            return labels
+        except Exception:  # noqa: BLE001 — fail-soft; versioning can still proceed
+            return []
 
     # ------------------------------------------------------------------
     # File enumeration + bulk download

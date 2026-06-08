@@ -17,6 +17,79 @@ import difflib
 from src.utilities import UIDandMetaInfo, ConfigTables, USCentralDateTime, XNATLogin, USCentralDateTime
 
 
+# ---------------------------------------------------------------------------
+# T015 (FR-011) — surgeon pseudonymization helpers
+# ---------------------------------------------------------------------------
+
+def pseudonymize_surgeon_ids(
+    surgical_info: dict,
+    salt: bytes,
+    crosswalk=None,
+) -> dict:
+    """
+    Replace raw HawkID values in *surgical_info* with keyed-HMAC pseudonyms.
+
+    Operates on the ``SURGICAL_PROCEDURE_INFO`` sub-dict of the intake form's
+    ``_running_text_file``.  Returns a **new** dict; the caller's original is not
+    modified.
+
+    Fields pseudonymized
+    --------------------
+    - ``SUPERVISING_SURGEON_UID``
+    - ``PERFORMING_SURGEON_UID``
+    - Keys of ``PERFORMANCE_ENUMERATED_TASK_PER_PERFORMER`` (dict mapping
+      hawkid → task description) — keys are replaced, values kept.
+
+    Crosswalk recording
+    -------------------
+    If *crosswalk* is supplied (a ``CrosswalkStore`` instance), each
+    ``pseudonym → hawkid`` mapping is recorded there.  The raw HawkID is NEVER
+    written to the operational form dict or any log.
+
+    Parameters
+    ----------
+    surgical_info:
+        The SURGICAL_PROCEDURE_INFO dict from the intake form.
+    salt:
+        Librarian-held salt bytes (from ``identity.load_identity_salt()``).
+    crosswalk:
+        Optional ``CrosswalkStore``; if supplied, crosswalk entries are written.
+
+    Returns
+    -------
+    dict
+        A copy of *surgical_info* with surgeon HawkIDs replaced by pseudonyms.
+    """
+    from src.services.identity import surgeon_pseudonym as _pseudonym
+
+    result = dict(surgical_info)
+
+    def _replace(hawkid_str):
+        if not hawkid_str or str(hawkid_str).upper() in ("NONE", "UNKNOWN", ""):
+            return hawkid_str
+        raw = str(hawkid_str).strip()
+        pseudo = _pseudonym(raw.lower(), salt)
+        if crosswalk is not None:
+            try:
+                crosswalk.put(pseudo, raw)
+            except Exception:  # noqa: BLE001 — crosswalk write failure must not crash intake
+                pass
+        return pseudo
+
+    for field in ("SUPERVISING_SURGEON_UID", "PERFORMING_SURGEON_UID"):
+        if field in result:
+            result[field] = _replace(result[field])
+
+    if "PERFORMANCE_ENUMERATED_TASK_PER_PERFORMER" in result:
+        raw_tasks = result["PERFORMANCE_ENUMERATED_TASK_PER_PERFORMER"]
+        if isinstance(raw_tasks, dict):
+            result["PERFORMANCE_ENUMERATED_TASK_PER_PERFORMER"] = {
+                _replace(k): v for k, v in raw_tasks.items()
+            }
+
+    return result
+
+
 ordered_keys_of_intake_text_file = ['FORM_LAST_MODIFIED', 'OPERATION_DATE', 'SUBJECT_UID', 'FILER_HAWKID', 'FORM_AVAILABLE_FOR_PERFORMANCE', 'SCAN_QUALITY',
                                     'SURGICAL_PROCEDURE_INFO', 'SKILLS_ASSESSMENT_INFO', 'STORAGE_DEVICE_INFO', 'INFO_DERIVED_FROM_ORIGINAL_FILE_METADATA']
 
@@ -329,7 +402,34 @@ class ORDataIntakeForm( ResourceFile ):
         self._running_text_file['STORAGE_DEVICE_INFO']['RELEVANT_FOLDER'] = str( self.relevant_folder )
         self._running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_DATE'] = str( self.radiology_contact_date )
         self._running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_TIME'] = str( self.radiology_contact_time )
-        
+
+        # T015 (FR-011): pseudonymize surgeon HawkIDs before the dict is
+        # committed.  Salt is required; absent salt → FriendlyError (do NOT
+        # write cleartext surgeon identity to the form or registry).
+        from src.services.identity import load_identity_salt as _load_salt
+        from src.services.xnat_gateway import GatewayError as _GatewayError
+        from src.services.errors import FriendlyError as _FriendlyError
+        try:
+            _salt = _load_salt()
+        except _GatewayError as _exc:
+            raise _FriendlyError(
+                title="Surgeon pseudonymization requires identity salt",
+                message=(
+                    "The XNAT_IDENTITY_SALT environment variable is not set. "
+                    "Surgeon HawkIDs cannot be pseudonymized without the salt. "
+                    "The intake form has NOT been saved to prevent cleartext "
+                    "surgeon identity from being written to the dataset."
+                ),
+                recourse=[
+                    "Set XNAT_IDENTITY_SALT to the hex salt provided by the Data Librarian.",
+                    "Alternatively, set it to the path of a restricted file containing the hex salt.",
+                    "Contact the Data Librarian if you do not have the salt.",
+                ],
+            ) from _exc
+        self._running_text_file['SURGICAL_PROCEDURE_INFO'] = pseudonymize_surgeon_ids(
+            self._running_text_file['SURGICAL_PROCEDURE_INFO'],
+            _salt,
+        )
 
     def _read_from_file( self, parent_folder: Path, verbose: Opt[bool]=False ) -> None:
         """

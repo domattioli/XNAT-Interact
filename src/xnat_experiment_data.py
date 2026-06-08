@@ -58,6 +58,33 @@ class UploadError(Exception):
         self.friendly = friendly
 
 
+class DedupReviewRequired(Exception):
+    """
+    Raised when an incoming case's image-hash set overlaps an existing case
+    under a different subject (FR-007, T013).
+
+    No auto-import, no auto-merge, no auto-reject.  The caller MUST surface
+    the evidence package to a human for a decision (import both / combine /
+    other).  Uploading is blocked until the human acts.
+
+    Attributes
+    ----------
+    evidence : EvidencePackage
+        Structured overlap evidence (overlap ratio, matching shots,
+        UID/date/device corroboration).  Read-only — no action is taken.
+    """
+
+    def __init__(self, evidence) -> None:  # evidence: EvidencePackage
+        self.evidence = evidence
+        super().__init__(
+            f"Dedup review required — overlap detected with existing case "
+            f"'{evidence.matched_case_key}' "
+            f"({evidence.classification}, ratio={evidence.overlap_ratio:.3f}). "
+            "No data was uploaded. A human must review the evidence package "
+            "and decide: import both / combine / other."
+        )
+
+
 def _interactive_pixel_review_confirmer(context: str) -> Tuple[ReviewDecision, _List[_Tuple[int, int, int, int]]]:
     """
     Default (production) confirmer — asks the operator at the terminal.
@@ -183,6 +210,8 @@ class ExperimentData():
         assessor: Opt[Path] = None,
         assessor_label: Opt[str] = None,
         scan: Opt[str] = None,
+        dedup_registry=None,
+        incoming_content_hashes: Opt[set] = None,
     ) -> None:
         """
         Publish zipped pixel data to XNAT.
@@ -213,6 +242,21 @@ class ExperimentData():
         -----------------------------------
         Connection/timeout errors from ``put_zip`` are caught and re-raised as
         a FriendlyError with resume recourse rather than a raw traceback.
+
+        T013 — Dedup check + no-empty-shell invariant
+        ----------------------------------------------
+        When ``dedup_registry`` and ``incoming_content_hashes`` are both
+        supplied, case_dedup() is called before any XNAT object is created.
+
+        DISJOINT → proceed normally (existing behavior unchanged).
+        Non-DISJOINT against a DIFFERENT subject → build an evidence package
+        and raise DedupReviewRequired (no XNAT objects created, no data sent).
+        Fail-soft: if the registry is unavailable or the check errors, log a
+        warning and proceed (degrade to today's behavior — never block a
+        legitimate upload on a registry fault).
+
+        FR-008 (no-empty-shell): if ``zipped_data`` is empty, XNAT Subject /
+        Experiment / Scan objects are NOT created.  Guard runs before create().
         """
         # ------------------------------------------------------------------
         # T014  PHI pixel-review gate — MUST run before any put_zip
@@ -251,6 +295,47 @@ class ExperimentData():
             # apply_redaction path; production workflows should redact before write().
 
         if verbose:             print( f'\t...Pushing {self.schema_prefix_str} Session Data to XNAT...' )
+
+        # ------------------------------------------------------------------
+        # T013  FR-008 — no-empty-shell invariant
+        # If there are no files to upload, do NOT create Subject/Experiment/
+        # Scan objects.  Guard runs before any XNAT object creation.
+        # ------------------------------------------------------------------
+        if not zipped_data:
+            if verbose:
+                print( '\t[T013] No files to upload — skipping XNAT object creation (FR-008 no-empty-shell).' )
+            return
+
+        # ------------------------------------------------------------------
+        # T013  Dedup check — additive, behavior-preserving, fail-soft
+        # ------------------------------------------------------------------
+        if dedup_registry is not None and incoming_content_hashes:
+            try:
+                from src.services.dedup import case_dedup, build_evidence_package, CaseRelation
+                _dedup_result = case_dedup( incoming_content_hashes, dedup_registry )
+                if _dedup_result.classification != CaseRelation.DISJOINT:
+                    # Non-disjoint overlap against an existing case → evidence package;
+                    # surface for human decision; do NOT auto-import/merge/reject.
+                    _evidence = build_evidence_package(
+                        incoming_hashes=incoming_content_hashes,
+                        matched_case_key=_dedup_result.matched_case_keys[0],
+                        classification=_dedup_result.classification,
+                        registry=dedup_registry,
+                    )
+                    raise DedupReviewRequired( _evidence )
+                # DISJOINT — proceed normally; register images + case in registry.
+                _case_key = str( self.intake_form.uid )
+                try:
+                    dedup_registry.upsert_case( _case_key )
+                    for _h in incoming_content_hashes:
+                        dedup_registry.upsert_image_hash( _h, case_key=_case_key )
+                except Exception:  # noqa: BLE001 — fail-soft on registry write
+                    pass
+            except DedupReviewRequired:
+                raise  # propagate the human-review signal unchanged
+            except Exception:  # noqa: BLE001 — registry unavailable → degrade gracefully
+                pass  # degrade to today's behavior; legitimate upload must not be blocked
+
         subj_qs, exp_qs, scan_qs, files_qs, resource_label = self._generate_queries( xnat_connection=xnat_connection, scan=scan )
         subj_inst, exp_inst, scan_inst = self._select_objects( xnat_connection=xnat_connection, subj_qs=subj_qs, exp_qs=exp_qs, scan_qs=scan_qs, files_qs=files_qs )
 

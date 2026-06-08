@@ -1,3 +1,4 @@
+import hashlib
 import os
 from typing import Callable, Optional as Opt, Tuple, Union
 import numpy as np
@@ -142,10 +143,11 @@ class ExperimentData():
 
 
     #--------------------------------------------XNAT-Publishing helpers and methods----------------------------------------------------------
-    def _generate_queries( self, xnat_connection: XNATConnection ) -> Tuple[str, str, str, str, str]:
+    def _generate_queries( self, xnat_connection: XNATConnection, scan: Opt[str] = None ) -> Tuple[str, str, str, str, str]:
         # Create query strings and select object in xnat then create the relevant objects
+        # FR-014: scan is user-selectable; defaults to SCAN_DEFAULT ('0').
         exp_label = conventions.source_data_label( self.intake_form.uid )
-        scan_label = conventions.SCAN_DEFAULT
+        scan_label = scan if scan is not None else conventions.SCAN_DEFAULT
         subj_qs = conventions.subject_qs( xnat_connection.xnat_project_name, str( self.intake_form.uid ) )
         exp_qs = conventions.experiment_qs( xnat_connection.xnat_project_name, str( self.intake_form.uid ), exp_label )
         scan_qs = conventions.scan_qs( xnat_connection.xnat_project_name, str( self.intake_form.uid ), exp_label, scan_label )
@@ -180,6 +182,7 @@ class ExperimentData():
         intake_form_temp_artifacts: Opt[_List[Path]] = None,
         assessor: Opt[Path] = None,
         assessor_label: Opt[str] = None,
+        scan: Opt[str] = None,
     ) -> None:
         """
         Publish zipped pixel data to XNAT.
@@ -248,7 +251,7 @@ class ExperimentData():
             # apply_redaction path; production workflows should redact before write().
 
         if verbose:             print( f'\t...Pushing {self.schema_prefix_str} Session Data to XNAT...' )
-        subj_qs, exp_qs, scan_qs, files_qs, resource_label = self._generate_queries( xnat_connection=xnat_connection )
+        subj_qs, exp_qs, scan_qs, files_qs, resource_label = self._generate_queries( xnat_connection=xnat_connection, scan=scan )
         subj_inst, exp_inst, scan_inst = self._select_objects( xnat_connection=xnat_connection, subj_qs=subj_qs, exp_qs=exp_qs, scan_qs=scan_qs, files_qs=files_qs )
 
         # Create the items in stepwise fashion — idempotent-upsert (#27):
@@ -499,21 +502,41 @@ class SourceRFSession( ExperimentData ):
             self._df.at[idx, 'InstanceNumber']  = dicom_obj.InstanceNumber  if hasattr( dicom_obj, 'InstanceNumber' )   else None
             
             # Pull date and UID info and write as new private-tag pair so we can overwrite it with standardized info.
+            # FR-003: capture original StudyDate/StudyTime as a dedup hash — never store readable date on upload.
             if hasattr( dicom_obj, 'StudyDate' ):
-                dicom_obj.metadata.add_new((0x0019, 0x1001), 'LT', 'Old_StudyDate: ' + dicom_obj.StudyDate )
+                _orig_date = dicom_obj.StudyDate
+                _orig_time = dicom_obj.StudyTime if hasattr( dicom_obj, 'StudyTime' ) else ''
+                _device    = getattr( dicom_obj, 'Manufacturer', '' ) or getattr( dicom_obj, 'ManufacturerModelName', '' )
+                try:
+                    from src.services.identity import case_date_hash, load_identity_salt
+                    _salt      = load_identity_salt()
+                    _date_hash = case_date_hash( _orig_date, _orig_time, _device, _salt )
+                    dicom_obj.metadata.add_new((0x0019, 0x1001), 'LT', f'CaseDateHash: {_date_hash}' )
+                except Exception:
+                    # Salt not configured or other failure: skip hash, still strip readable date.
+                    pass
+                # Do NOT stash readable Old_StudyDate — HIPAA identifier must not persist on upload.
             dicom_obj.StudyDate = self.intake_form.operation_date # Provided by intake form
             if hasattr( dicom_obj, 'StudyTime' ):
-                dicom_obj.metadata.add_new((0x0019, 0x1002), 'LT', 'Old_StudyTime: ' + dicom_obj.StudyTime )
+                # Old_StudyTime also not stashed — stripping alongside StudyDate (FR-003).
+                pass
             dicom_obj.StudyTime = self.intake_form.epic_start_time # Provided by intake form
             if hasattr( dicom_obj, 'StudyInstanceUID' ):
                 dicom_obj.metadata.add_new((0x0019, 0x1003), 'LT', 'Old_StudyInstanceUID: ' + dicom_obj.StudyInstanceUID)
-            dicom_obj.StudyInstanceUID = self.intake_form.uid
+            dicom_obj.StudyInstanceUID = self.intake_form.uid  # XNAT case grouping key; original preserved above
             if hasattr( dicom_obj, 'SeriesInstanceUID' ):
                 dicom_obj.metadata.add_new((0x0019, 0x1004), 'LT', 'Old_SeriesInstanceUID: ' + dicom_obj.SeriesInstanceUID)
-            dicom_obj.SeriesInstanceUID = self.intake_form.uid
+            dicom_obj.SeriesInstanceUID = self.intake_form.uid  # XNAT series grouping key; original preserved above
             if hasattr( dicom_obj, 'SOPInstanceUID' ):
                 dicom_obj.metadata.add_new((0x0019, 0x1005), 'LT', 'Old_SOPInstanceUID: ' + dicom_obj.SOPInstanceUID)
-            dicom_obj.SOPInstanceUID = self.intake_form.uid
+            # FR-001: SOPInstanceUID MUST be unique per instance.
+            # Derive deterministically from case UID + frame index so:
+            #   (a) re-runs produce the same value (idempotent),
+            #   (b) every frame gets a different value (N frames → N UIDs).
+            # Format: 2.25.<decimal-of-md5-first-16-bytes> (≤64 chars, all digits/dots).
+            _sop_seed = f"{self.intake_form.uid}:frame:{idx}"
+            _sop_int  = int( hashlib.md5( _sop_seed.encode() ).hexdigest()[:16], 16 )
+            dicom_obj.SOPInstanceUID = f"2.25.{_sop_int}"
             if hasattr( dicom_obj, 'NumberOfStudyRelatedInstances' ):
                 dicom_obj.metadata.add_new((0x0019, 0x1006), 'IS', 'Old_NumberOfStudyRelatedInstances: ' + str(dicom_obj.NumberOfStudyRelatedInstances))
                 dicom_obj.NumberOfStudyRelatedInstances = num_valid_shots

@@ -398,12 +398,15 @@ class ExperimentData():
         # C006 — assessor upload (derived data path)
         # Only executed when caller supplies assessor=Path(...).
         # Source-data publish behavior is unchanged when assessor=None.
+        # T016 (FR-013): keep-all monotonic versioning — each upload appends
+        # __v(n+1) so prior versions are never overwritten.
         if assessor is not None:
-            _assessor_label = assessor_label if assessor_label is not None else conventions.consensus_label( str( self.intake_form.uid ) )
+            _base_label = assessor_label if assessor_label is not None else conventions.consensus_label( str( self.intake_form.uid ) )
+            _assessor_label = conventions.next_assessor_label( xnat_connection.gateway, exp_qs, _base_label )
             _resource_label = conventions.ResourceLabel.SEGMENTATION_CONSENSUS
             _filename = assessor.name
             if verbose:
-                print( f'\t...Uploading assessor file {_filename} to XNAT...' )
+                print( f'\t...Uploading assessor file {_filename} to XNAT as {_assessor_label}...' )
             xnat_connection.gateway.create_assessor(
                 exp_qs,
                 _assessor_label,

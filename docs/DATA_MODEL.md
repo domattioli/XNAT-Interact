@@ -217,17 +217,64 @@ These remain **deferred** pending implementation; this document is their spec.
 
 ---
 
-## 7. Open Decisions
+## 7. Resolved Decisions (grill close-out)
 
-- **Case grouping:** is one OR case ever multiple C-arm runs (multiple sessions/series), or always
-  one experiment? (Current code uses a single-scan `'0'` simplification.)
-- **Derived-data revisions:** versioning policy for re-uploaded segmentations (overwrite vs
-  versioned assessor) — partially handled via `ann__{annotator}__{type}__v{n}`.
-- **STAPLE rater pool:** expert surgeons vs minimally-trained analysts vs crowd — affects
-  ground-truth governance.
-- **Arthroscopy (ESV) placement:** part of the skill-assessment program or a distinct dataset.
-- **De-id validation bar:** the one-time false-negative-rate target that makes automated pixel
-  de-id IRB-defensible.
+- **Case grouping / multi-run (Q12):** do **not** auto-model runs — not worth the complexity.
+  Keep the single-scan `'0'` default; make `scan` a **user-selectable parameter** so an uploader
+  can put a distinct run in a second scan *by judgment*, and **preserve the original
+  `SeriesInstanceUID` as metadata** (free, from the stop-clobbering fix) so run boundaries are
+  reconstructible later without re-ingest.
+- **Derived-data revisions (Q13):** **keep-all, monotonic versioning** for derived/assessor data
+  too (not just annotations) — re-analysis writes `v(n+1)`, never overwrites `vn`, so provenance
+  of which derived result fed which downstream analysis stays reproducible.
+- **STAPLE rater pool (Q14):** **tiered** raters (expert / trained-analyst / crowd). Track an
+  opaque `rater_id` + `expertise_tier` + `reliability_weight` in the registry (§8) — supports
+  STAPLE weighting, inter-rater-agreement analysis, and the expert-vs-novice research question.
+- **Arthroscopy (ESV) (Q16):** a **sibling track** — same goals/framework, **separate XNAT
+  project/container**, distinct granular derived-data metrics. Not co-mingled with the trauma-RF
+  corpus (like the future simulation track).
+- **De-id validation bar (Q15):** no external/IRB standard imposed. Bar = **validated-zero
+  residual PHI on a representative labeled set**, achieved by conservative over-masking + the OCR
+  quarantine net, re-validated per new device profile. The current primitive pixel processing
+  should be **upgraded to the advanced automated technique** in §4.2.
+
+---
+
+## 8. Persistence & Registry
+
+The metadata that supports ingest — the surgeon/rater registry, the dedup index, the identity
+crosswalks, and the provenance/audit trail — currently lives in `ConfigTables`: hand-rolled JSON
+"tables" stored as one blob on XNAT, guarded by a sha256 fingerprint lost-update check.
+
+**Why that must change:** whole-blob read-modify-write has a TOCTOU/lost-update window (#33 H4)
+and serializes writers; `IMAGE_HASHES` as a JSON list is O(n) membership + full rewrite per add
+(an unworkable scale wall); there is no schema, foreign keys, or transactions; and identity
+crosswalks sit in the same shared store as operational data despite needing a separate access tier.
+
+**Decision — SQLite sidecar now (Q17 = B); Postgres later (tracked in #34).**
+
+- **Now: a single-file SQLite registry** replaces the ConfigTables JSON. Gains schema, foreign
+  keys, **`UNIQUE`-indexed O(1) dedup membership**, in-session transactions, and real queries —
+  the big wins over JSON. Tables:
+  | Table | Key | Holds |
+  |---|---|---|
+  | `surgeons` | `pseudonym` | keyed-HMAC pseudonym, role (**no real names**) |
+  | `raters` | `rater_id` | opaque id, `expertise_tier`, `reliability_weight` |
+  | `cases` | `case_key` | surgeon pseudonym (FK), procedure, `date_hash`, device |
+  | `image_hashes` | `content_hash` UNIQUE | `case_key` (FK), `orig_sopuid` (corroborant), `instance_number` |
+  | `audit_log` | append-only | timestamp, actor pseudonym, action, target |
+- **Identity crosswalks** (`pseudonym ↔ real HawkID` + salt) live in a **separate,
+  access-controlled, encrypted store — librarian-only**, never in the operational DB.
+- **Later: PostgreSQL** ([#34](https://github.com/domattioli/XNAT-Interact/issues/34)) when the
+  lab reaches genuine **concurrent multi-writer** scale — SQLite (however synced) does not give
+  safe concurrent multi-writer semantics; Postgres provides real server-side transactions/locking
+  (and closes the stress-test concurrency class, #32 A). XNAT already runs on Postgres.
+- **Migration:** one-time import from the ConfigTables JSON into the SQLite schema; transactions
+  replace the fingerprint guard.
+
+---
+
+## 9. References
 
 ---
 

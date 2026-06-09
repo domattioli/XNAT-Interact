@@ -32,3 +32,10 @@ urllib3
 wheel
 zipp
 openpyxl
+# --- 010 pixel de-id (burned-in PHI). CPU-only. Imported lazily in src/services/pixel_deid/* ---
+# Requires the Tesseract 5 system binary on PATH (apt: tesseract-ocr / brew: tesseract) and the
+# spaCy model: `python -m spacy download en_core_web_lg`. See docs install notes.
+presidio-image-redactor
+presidio-analyzer
+pytesseract
+onnxruntime

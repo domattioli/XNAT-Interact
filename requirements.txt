@@ -32,6 +32,14 @@ urllib3
 wheel
 zipp
 openpyxl
+# --- 011 operational hardening. All three lazy-imported / opt-in; absent → graceful skip. ---
+# SQLAlchemy: Postgres backend (US2). Lazy-imported in src/services/registry_backend.py only.
+SQLAlchemy
+# cryptography: AEAD crosswalk encryption (US1). Lazy-imported inside crosswalk_crypto.py fns.
+cryptography
+cffi  # cryptography's CFFI backend; pin explicitly — some envs ship it missing → Rust bindings panic.
+# psycopg[binary]  # only when XNAT_REGISTRY_PG_DSN set — install manually for Postgres path.
+
 # --- 010 pixel de-id (burned-in PHI). CPU-only. Imported lazily in src/services/pixel_deid/* ---
 # Requires the Tesseract 5 system binary on PATH (apt: tesseract-ocr / brew: tesseract) and the
 # spaCy model: `python -m spacy download en_core_web_lg`. See docs install notes.

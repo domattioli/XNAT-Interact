@@ -558,34 +558,98 @@ class CrosswalkStore:
 
     SECURITY: This store holds the ONLY copy of real HawkIDs.  It MUST be:
       - Stored at a path accessible only to the data librarian account.
-      - Encrypted at rest in production (e.g. via LUKS, macOS encrypted
-        volume, or a secrets-management system).
+      - Encrypted at rest in production via the opt-in passphrase/key arg
+        (011 FR-003: AEAD envelope via crosswalk_crypto).
       - Never co-located with the operational Registry DB.
       - Never committed to source control.
-
-    This implementation uses a plain JSON file as the backing store.
-    Encryption is a deployment concern and is explicitly out of scope for
-    this module (noted in FR-011 and DATA_MODEL §3.2).
 
     Parameters
     ----------
     path : str | Path
-        Path to the crosswalk JSON file.  Created if it does not exist.
+        Path to the crosswalk file.  Created if it does not exist.
+    passphrase : str | None
+        Librarian passphrase.  When supplied the store is encrypted at rest
+        (AEAD envelope via scrypt KDF).  Never logged or persisted.
+    key : bytes | None
+        Pre-derived 32-byte AES key.  Use instead of *passphrase* when you
+        already hold the derived key.  Mutually exclusive with *passphrase*.
+
+    When neither *passphrase* nor *key* is given the store behaves exactly
+    as before (plain JSON) — the 009 unkeyed path is byte-unchanged (F2).
     """
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        passphrase: "str | None" = None,
+        key: "bytes | None" = None,
+    ) -> None:
         self._path = Path(path)
+        if passphrase is not None and key is not None:
+            raise ValueError("Supply either passphrase or key, not both.")
+        self._passphrase = passphrase
+        self._key = key  # pre-derived key (bypasses KDF)
+        self._kdf_salt: "bytes | None" = None  # loaded from envelope on first read
+
+    # ------------------------------------------------------------------
+    # Internal key helpers
+    # ------------------------------------------------------------------
+
+    def _is_keyed(self) -> bool:
+        return self._passphrase is not None or self._key is not None
+
+    def _get_key(self, kdf_salt: bytes) -> bytes:
+        """Return the AES key, deriving from passphrase if needed."""
+        if self._key is not None:
+            return self._key
+        from src.services.crosswalk_crypto import derive_key
+        return derive_key(self._passphrase, kdf_salt)  # type: ignore[arg-type]
+
+    # ------------------------------------------------------------------
+    # Load / save
+    # ------------------------------------------------------------------
 
     def _load(self) -> dict:
         if not self._path.exists():
             return {}
-        with self._path.open("r", encoding="utf-8") as fh:
-            return json.load(fh)
+        raw = self._path.read_bytes()
+        if not self._is_keyed():
+            # Unkeyed — legacy plaintext JSON path (byte-unchanged, F2)
+            return json.loads(raw.decode("utf-8"))
+        # Keyed path
+        from src.services.crosswalk_crypto import (
+            extract_kdf_salt,
+            is_legacy_plaintext,
+            open_envelope,
+        )
+        if is_legacy_plaintext(raw):
+            # Auto-detect legacy plaintext → read it, schedule re-seal on next save
+            data = json.loads(raw.decode("utf-8"))
+            # Store a fresh salt so next _save will seal properly
+            import os
+            self._kdf_salt = os.urandom(16)
+            return data
+        # Normal sealed envelope
+        self._kdf_salt = extract_kdf_salt(raw)
+        key = self._get_key(self._kdf_salt)
+        return open_envelope(raw, key)
 
     def _save(self, data: dict) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        with self._path.open("w", encoding="utf-8") as fh:
-            json.dump(data, fh, indent=2)
+        if not self._is_keyed():
+            # Unkeyed — plain JSON (byte-unchanged legacy path, F2)
+            with self._path.open("w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=2)
+            return
+        # Keyed path — AEAD envelope
+        import os
+        from src.services.crosswalk_crypto import seal_with_salt
+        if self._kdf_salt is None:
+            self._kdf_salt = os.urandom(16)
+        key = self._get_key(self._kdf_salt)
+        blob = seal_with_salt(data, key, self._kdf_salt)
+        self._path.write_bytes(blob)
 
     def put(self, pseudonym: str, hawkid: str) -> None:
         """

@@ -31,3 +31,11 @@ __pycache__/
 
 # batch run artifacts (generated)
 *-batch-result.json
+
+# 011 operational-hardening secrets + artifacts
+*.salt
+*.crosswalk
+registry.db
+registry.db-shm
+registry.db-wal
+*.archived-*.json

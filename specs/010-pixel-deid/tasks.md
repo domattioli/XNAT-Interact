@@ -19,9 +19,10 @@ US4=throughput(S5). SC-001 holdout (S6) spans all.
 - [ ] T001 Create package skeleton `src/services/pixel_deid/__init__.py` and empty modules
   (`detect.py`, `profiles.py`, `consensus.py`, `verdict.py`, `quarantine.py`); add
   `data/device_profiles/` and `models/craft/` dirs with `.gitkeep`.
-- [ ] T002 [P] Add deps to `requirements*.txt` / packaging: `presidio-image-redactor`,
-  `presidio-analyzer`, `pytesseract`, `onnxruntime` (CPU), spaCy `en_core_web_lg`; document the
-  Tesseract-5 system binary prereq in `docs/` install notes.
+- [ ] T002 [P] Add deps to `requirements.txt`: `presidio-image-redactor`, `presidio-analyzer`,
+  `pytesseract`, `onnxruntime` (CPU), spaCy `en_core_web_lg`; document the Tesseract-5 system binary
+  prereq in `docs/` install notes. All heavy deps imported **lazily** in `pixel_deid/*` so the rest
+  of the suite stays light (F3).
 
 ## Phase 2: Foundational (synthetic fixtures — blocks all stories)
 
@@ -74,8 +75,9 @@ US4=throughput(S5). SC-001 holdout (S6) spans all.
   `redact()` irreversible-on-copy fill, dilation; return verdict + masked pixels. [FR-001, FR-008]
 - [ ] T014 [US3] `verdict.py`: fail-closed routing — unprofiled & low detector confidence, OR
   PHI-pattern outside maskable region, OR profile/detector disagreement > tolerance → `quarantine`. [FR-006]
-- [ ] T015 [US3] `verdict.py`: audit entry via 009 `src/services/registry.py` — regions masked,
-  tiers fired, PHI categories; **no raw PHI text**. [FR-008, SC-004]
+- [ ] T015 [US3] `verdict.py`: audit entry via 009 `registry.record_audit(actor, action, target)`
+  (fixed 3-col seam — F1) — encode evidence (region count, tiers fired, PHI categories) as a compact
+  JSON string in `target`; **no raw PHI text**. [FR-008, SC-004]
 - [ ] T016 [P] [US3] `tests/test_010_verdict.py`: clean/redacted/quarantine routing; benign-marker
   preserve; audit has no raw PHI.
 
@@ -87,10 +89,12 @@ existing suites stay green.
 
 - [ ] T017 [US1] `quarantine.py`: quarantine store — write held case + evidence sidecar JSON
   (flagged regions, tiers, categories; no raw PHI); held, never auto-uploaded/auto-over-masked. [FR-015]
-- [ ] T018 [US1] `deidentify.py`: `needs_pixel_review` delegates to `verdict.assess_case` (verdict
-  != clean ⇒ review path); keep signature back-compat. [FR-001]
-- [ ] T019 [US1] `xnat_experiment_data.py`: PHI gate consumes the verdict — `clean|redacted`
-  proceed, `quarantine` blocks upload (additive/opt-in param, default path preserved like 009). [FR-012, FR-013]
+- [ ] T018 [US1] `deidentify.py`: keep `needs_pixel_review(pixel_array)` back-compat (bare array →
+  conservative review, F6) AND add a dataset-aware entry that delegates to `verdict.assess_case`
+  (verdict != clean ⇒ review path). Don't break existing callers/tests. [FR-001]
+- [ ] T019 [US1] `xnat_experiment_data.py`: add `ReviewDecision.QUARANTINE` member (F2); PHI gate
+  maps verdict → decision — `clean|redacted` proceed, `quarantine` blocks upload via the existing
+  `FriendlyError` recourse path (additive/opt-in param, default path preserved like 009). [FR-012, FR-013]
 - [ ] T020 [P] [US1] `tests/test_010_quarantine_gate.py`: quarantine blocks upload + evidence
   written; clean/redacted proceed; assert 992-offline suite unaffected (default path).
 
@@ -105,12 +109,15 @@ existing suites stay green.
 
 - [ ] T023 [POLISH] `tests/test_010_holdout_fn0.py`: labeled synthetic holdout — crisp/faint ×
   profiled/unprofiled × single/multi-frame. Assert **FN=0**: every residual-PHI case is fully
-  masked OR quarantined; no clean/redacted verdict leaks PHI pixels. [SC-001]
+  masked OR quarantined; no clean/redacted verdict leaks PHI pixels. MUST include the **no-CRAFT,
+  faint, unprofiled, single-frame cell** (F5) → must `quarantine`, never pass clean. Marker
+  `pixeldeid`; skip-graceful when heavy deps/model absent (F3). [SC-001]
 - [ ] T024 [POLISH] Quarantine-rate check on profiled in-distribution holdout < 10% (SC-002);
   benign-marker preservation ≥ 90% (SC-003).
-- [ ] T025 [POLISH] CI CPU lane runs the holdout (no GPU); full offline suite green; add the
-  pixel-deid benchmark row (metric `phi_pixel_false_negative_rate`, baseline = spike 0.0 faint
-  single-pass). [SC-006]
+- [ ] T025 [POLISH] Dedicated opt-in CPU lane installs heavy deps (tesseract binary + spaCy lg +
+  onnxruntime + CRAFT model) and runs the `pixeldeid`-marked holdout (no GPU); default lane stays
+  light + green via lazy imports + skip-graceful (F3); add the pixel-deid benchmark row (metric
+  `phi_pixel_false_negative_rate`, baseline = spike 0.0 faint single-pass). [SC-006]
 - [ ] T026 [POLISH] Vendored CRAFT model push via **git CLI direct** (binary; never MCP per
   DomI #85) + magic-byte/size verify; docs note model provenance + license.
 - [ ] T027 [POLISH] Update `specs/README.md` (row for 010) + `docs/DATA_MODEL.md §4.2` (replace the

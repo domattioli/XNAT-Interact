@@ -476,7 +476,7 @@ def _ocr_crop(frames: list[np.ndarray], box: tuple) -> str:
         if crop.size == 0:
             continue
         try:
-            text = pytesseract.image_to_string(crop, config="--psm 7").strip()
+            text = pytesseract.image_to_string(crop, config="--psm 7", timeout=10).strip()
             if text:
                 return text
         except Exception:

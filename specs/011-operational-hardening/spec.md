@@ -45,8 +45,19 @@ UIowa production (`rpacs.iibi.uiowa.edu`) or real PHI.
 
 ## Clarifications
 
-*(none yet — `/speckit.clarify` pass pending; candidate ambiguities flagged inline as
-`[NEEDS CLARIFICATION]`)*
+### Session 2026-06-09
+
+1. **Crosswalk encryption key (FR-003)**: **passphrase + scrypt KDF**. Librarian supplies a
+   passphrase; the at-rest key is derived via `scrypt`. No new infra, works headless/localhost, the
+   passphrase is never persisted. (Rejected: OS keychain — platform-specific, awkward in headless
+   agent runs; external KMS — overkill for single-librarian localhost.)
+2. **Postgres backend (US2/#34)**: **SQLAlchemy Core**. Schema + queries expressed once; both SQLite
+   and Postgres derive from it, eliminating dual-dialect drift. Accept the new dependency.
+3. **`boot-and-verify-local-xnat` home (US3)**: **repo script** (`scripts/`), versioned with the code
+   that needs it. (DomI-skill promotion deferred — can extract later if the cross-repo recurrence
+   justifies it.)
+4. **Salt rotation**: **out of scope** for 011 — provisioning generates-if-absent; rotation is manual
+   re-provision only. A rotation flow that re-derives existing pseudonyms is a separate future feature.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -101,8 +112,8 @@ SQLite registry into Postgres and assert row-for-row parity.
 2. **Given** a populated SQLite registry, **When** the SQLite→Postgres migration runs, **Then**
    counts match per table and a parity failure rolls back.
 3. **Given** UNIQUE/index constraints from the 009 schema, **When** applied on Postgres, **Then**
-   the same constraints are enforced (dup insert rejected).
-   `[NEEDS CLARIFICATION: introduce a thin DB-abstraction layer vs. SQLAlchemy Core — affects scope]`
+   the same constraints are enforced (dup insert rejected). Schema + queries are expressed once via
+   **SQLAlchemy Core**; both backends derive from it.
 
 ---
 
@@ -128,8 +139,8 @@ non-localhost host.
 3. **Given** a configured host that is not `localhost`/`127.0.0.1`, **When** it runs, **Then** it
    refuses with a safety error and starts nothing (no prod contact).
 4. **Given** a failing probe (e.g. auth), **When** it runs, **Then** it exits non-zero naming the
-   failed probe. `[NEEDS CLARIFICATION: ship as repo script vs. DomI skill `boot-and-verify-local-xnat`
-   — the recurrence is cross-repo, so a DomI skill may be the right home]`
+   failed probe. Shipped as a **repo script** (`scripts/`), versioned with this codebase;
+   DomI-skill extraction deferred.
 
 ---
 
@@ -143,8 +154,8 @@ non-localhost host.
 - **FR-002**: The salt MUST NEVER be written to logs, telemetry, error messages, argv, tests, or the
   repo (extends the 009 security invariant to the deploy path).
 - **FR-003**: `CrosswalkStore` MUST encrypt the HawkID mapping at rest; plaintext search of the
-  backing file for a known HawkID MUST fail. Decryption requires a librarian-held key.
-  `[NEEDS CLARIFICATION: key source — passphrase-derived (scrypt) vs. OS keychain vs. KMS]`
+  backing file for a known HawkID MUST fail. The at-rest key is **derived from a librarian passphrase
+  via `scrypt`**; the passphrase is never persisted, logged, or committed.
 - **FR-004**: A deploy command MUST run `migrate_from_configtables` against the live JSON, assert
   parity, record an audit entry, and archive (not in-place delete) the source JSON.
 - **FR-005**: Parity failure MUST roll back fully (registry unchanged) — reuse the 009 guarantee.
@@ -189,11 +200,12 @@ non-localhost host.
 ## Out of Scope
 
 - Real-data / production deployment against UIowa XNAT (this spec is localhost + synthetic only).
-- Salt **rotation** automation beyond manual re-provision `[NEEDS CLARIFICATION: include rotation?]`.
+- Salt **rotation** beyond manual re-provision (re-deriving existing pseudonyms is a future feature).
 - The advanced pixel-PHI de-id (shipped separately as `010-pixel-deid`).
 - Arthroscopy / simulation sibling tracks.
 
 ## Dependencies
 
 - 009 substrate (`identity.py`, `registry.py`, `CrosswalkStore`, `migrate_from_configtables`) — built.
-- A localhost XNAT container image + an encryption primitive (US2/US3/FR-003 choices pending clarify).
+- A localhost XNAT container image; `scrypt` KDF + an AEAD cipher (FR-003); SQLAlchemy Core + a
+  localhost Postgres container (US2).

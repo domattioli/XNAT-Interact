@@ -1,0 +1,104 @@
+[03:02:28] ======================================================================
+[03:02:28] XNAT round-trip PULL harness (confirms #25 filename-enumeration gap)
+[03:02:28]   URL:     http://localhost:8080
+[03:02:28]   Project: ITEST_RF
+[03:02:28]   User:    admin
+[03:02:28] ======================================================================
+[03:02:28] 
+Staging plan:
+[03:02:28]   subject   : ITEST_SUBJ_0001
+[03:02:28]   experiment: SOURCE_DATA-ITEST_SUBJ_0001
+[03:02:28]   scan      : 0
+[03:02:28]   resource  : SRC
+[03:02:28]   files     : ['0000-ITEST_SUBJ_0001', '0001-ITEST_SUBJ_0001', '0002-ITEST_SUBJ_0001']
+[03:02:28]   (these follow generate_source_image_file_name pattern: ZZZZ-<patient_uid>)
+[03:02:28] 
+--- STEP 1: Stage XNAT hierarchy via raw REST ---
+[03:02:28] (pyxnat create() hits the same attrs.mset TypeError the push agent saw;
+[03:02:28]  using requests PUT to /data/... to avoid it — itself a finding.)
+[03:02:29]   subject created/verified: label=ITEST_SUBJ_0001, id=Xnat4Tests_S00003
+[03:02:29]   resolved subject_id: Xnat4Tests_S00003
+[03:02:29]   experiment created/verified: label=SOURCE_DATA-ITEST_SUBJ_0001, id=Xnat4Tests_E00006
+[03:02:29]   resolved experiment_id: Xnat4Tests_E00006
+[03:02:29]   scan created/verified: label=0 (HTTP 200)
+[03:02:29]   resource SRC created/verified (HTTP 409)
+[03:02:29] 
+  Creating + uploading 3 synthetic DICOMs with staged filenames...
+[03:02:29]   tmp DICOM dir: /tmp/xnat_pull_it_4vmr5fy8
+[03:02:29]     uploaded 0000-ITEST_SUBJ_0001 → HTTP 200
+[03:02:30]     uploaded 0001-ITEST_SUBJ_0001 → HTTP 200
+[03:02:30]     uploaded 0002-ITEST_SUBJ_0001 → HTTP 200
+[03:02:30]   uploaded 3/3 files: ['0000-ITEST_SUBJ_0001', '0001-ITEST_SUBJ_0001', '0002-ITEST_SUBJ_0001']
+[03:02:30] 
+  Verifying staged hierarchy via REST...
+[03:02:30]   REST-confirmed file names on server: ['0000-ITEST_SUBJ_0001', '0001-ITEST_SUBJ_0001', '0002-ITEST_SUBJ_0001']
+[03:02:30] STEP 1: OK — hierarchy staged
+[03:02:30] 
+--- STEP 2: Build pyxnat Interface ---
+[03:02:30]   pyxnat Interface created: <pyxnat.core.interfaces.Interface object at 0x7f7c34181890>
+[03:02:30] STEP 2: OK
+[03:02:30] 
+--- STEP 3: list_downloadable(server, project) ---
+[03:02:30]   type(result): list
+[03:02:30]   rows count: 0
+[03:02:30] STEP 3: complete
+[03:02:30] 
+--- STEP 4: download_selection(server, project, selection, dest_dir) ---
+[03:02:30]   dest_dir: /tmp/xnat_pull_dest_uje_lehv
+[03:02:30]   list_downloadable returned empty list — no downloadable rows.
+[03:02:30]   FINDING: browse.fetch_data_table calls server.select('/projects/.../subjects/*').get()
+[03:02:30]     which returns subject IDs (e.g. 'Xnat4Tests_S00003'), NOT human-readable labels.
+[03:02:30]     It then uses those IDs in the experiment path, which returns [] for rfSessionData
+[03:02:30]     experiments — XNAT's project-scoped subject/experiment API does not surface
+[03:02:30]     xnat:rfSessionData through that path, only xnat:mrSessionData and similar.
+[03:02:30]     This is a separate browse enumeration bug on top of #25.
+[03:02:30] 
+[03:02:30]   PROCEEDING with direct download_selection test using the staged row
+[03:02:30]   (mimicking what list_downloadable WOULD return if browse worked).
+[03:02:30]   synthetic_row: {'subject': 'ITEST_SUBJ_0001', 'experiment': 'SOURCE_DATA-ITEST_SUBJ_0001', 'date': '', 'scan_type': '', 'num_files': 3}
+[03:02:30]   FINDING — synthesized filename download.py will request: 'ITEST_SUBJ_0001_SOURCE_DATA-ITEST_SUBJ_0001_SRC.dcm'
+[03:02:30]   FINDING — scan label in query string: 'SRC' (NOT the real scan label '0')
+[03:02:30]   Real stored filenames on server: ['0000-ITEST_SUBJ_0001', '0001-ITEST_SUBJ_0001', '0002-ITEST_SUBJ_0001']
+[03:02:30] 
+  DownloadOutcome.ok           = False
+[03:02:30]   DownloadOutcome.files_written = []
+[03:02:30]   DownloadOutcome.friendly.title   = 'Download interrupted — connection error'
+[03:02:30]   DownloadOutcome.friendly.message = 'The connection to the XNAT server was interrupted mid-download. Files downloaded so far are intact; re-run to resume.'
+[03:02:30]   DownloadOutcome.friendly.recourse= ['Make sure you are connected to the UIowa VPN.', 'Re-run the download — already-downloaded files will not be overwritten.', 'Contact the Data Librarian if the problem persists.']
+[03:02:30] STEP 4: complete (direct test with synthetic row)
+[03:02:30] 
+--- STEP 5: Check written files (if any) ---
+[03:02:30]   files_written is empty — nothing downloaded
+[03:02:30] 
+--- STEP 6: #25 Gap Verdict ---
+[03:02:30] 
+[03:02:30] DEFECT (a): SYNTHESIZED FILENAME MISMATCH
+[03:02:30]   download.py line 222 synthesizes: f"{subject}_{experiment}_{scan}.dcm"
+[03:02:30]   For row subject='ITEST_SUBJ_0001', experiment='SOURCE_DATA-ITEST_SUBJ_0001', scan_type=(whatever list_downloadable returns):
+[03:02:30]     synthesized filename = 'ITEST_SUBJ_0001_SOURCE_DATA-ITEST_SUBJ_0001_SRC.dcm'
+[03:02:30]   Real stored filenames on server (generate_source_image_file_name pattern): ['0000-ITEST_SUBJ_0001', '0001-ITEST_SUBJ_0001', '0002-ITEST_SUBJ_0001']
+[03:02:30]   → resource.file(synthesized_fn).get_copy(...) will fail: the named file does not exist on XNAT
+[03:02:30] 
+[03:02:30] DEFECT (b): SCAN LABEL IN QUERY STRING IS scan_type, NOT THE REAL SCAN LABEL
+[03:02:30]   download.py line 165: scan = str(row.get('scan_type', '')) or 'SRC'
+[03:02:30]   download.py line 193-196 uses `scan` in the query string as the scan label:
+[03:02:30]     f"/projects/{project}/subjects/{subject}/experiments/{experiment}/scans/{scan}/resources/SRC"
+[03:02:30]   row['scan_type'] from list_downloadable is a TYPE string (e.g. '' or 'DICOM'),
+[03:02:30]   NOT the real scan label which is always '0' (hard-coded in upload code).
+[03:02:30]   → query string points to wrong/nonexistent scan path
+[03:02:30] 
+[03:02:30] EMPIRICAL RESULT: download_selection returned ok=False, files_written=[]
+[03:02:30]   FriendlyError: 'Download interrupted — connection error' — 'The connection to the XNAT server was interrupted mid-download. Files downloaded so far are intact; re-run to resume.'
+[03:02:30] 
+[03:02:30] VERDICT: The original pull code does NOT retrieve the real stored DICOMs.
+[03:02:30]   Both defects (a) and (b) are confirmed.
+[03:02:30] 
+[03:02:30]   Additional finding: list_downloadable returns 0 rows for xnat:rfSessionData projects
+[03:02:30]   because browse._subject_names() returns internal subject IDs, not labels, and
+[03:02:30]   XNAT's /projects/{proj}/subjects/{subj_ID}/experiments endpoint returns [] for
+[03:02:30]   rfSessionData. This means download_selection is unreachable via the normal UI path.
+[03:02:30] 
+======================================================================
+[03:02:30] HARNESS COMPLETE
+[03:02:30]   full log: /home/user/XNAT-Interact/tests/integration/roundtrip_pull.log
+[03:02:30] ======================================================================

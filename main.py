@@ -16,22 +16,28 @@ from src.xnat_experiment_data import *
 from src.xnat_scan_data import *
 from src.xnat_resource_data import ORDataIntakeForm
 from src.batch_upload import BatchUploadRepresentation
+from src.services.config import AppConfig as _AppConfig
 
-def parse_args() -> Tuple[str, str, bool]:
+_app_config = _AppConfig.load()
+
+def parse_args() -> Tuple[str, bool]:
     """
     Parse command-line arguments for XNAT login and connection.
 
     Returns:
-        Tuple[str, str, bool]: A tuple containing the XNAT username, password, and a flag indicating verbose mode.
+        Tuple[str, bool]: A tuple containing the XNAT username and a flag indicating verbose mode.
+
+    NOTE: --password has been intentionally removed.  Credentials must not be
+    passed via argv (visible in process listings and shell history).  The
+    password is collected via the secure interactive prompt in prompt_login().
     """
     parser = argparse.ArgumentParser(description='XNAT Login and Connection')
     parser.add_argument('--username', type=str, default=None, help='XNAT username')
-    parser.add_argument('--password', type=str, default=None, help='XNAT password')
     parser.add_argument('--verbose', action='store_true', default=True, help='Enable verbose output')
     args = parser.parse_args()
     if args.verbose:    print( f"~~Verbosity turned on~~\n" )
     else:               print( f"~~Verbosity turned off~~\n" )
-    return args.username, args.password, args.verbose
+    return args.username, args.verbose
 
 
 def prompt_function( verbose: bool ) -> str:
@@ -92,13 +98,12 @@ def prompt_source_and_group() -> Tuple[str, str]:
     return input( "Acquisition Site: " ), input( "Surgical Procedure: " )
     
 
-def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, verbose: Opt[bool]=True ) -> Tuple[XNATLogin, XNATConnection, ConfigTables]:
+def try_login_and_connection( username: Opt[str]=None, verbose: Opt[bool]=True ) -> Tuple[XNATLogin, XNATConnection, ConfigTables]:
     """
     Attempt to login and connect to the XNAT server.
 
     Args:
-        username (Optional[str]): XNAT username.
-        password (Optional[str]): XNAT password.
+        username (Optional[str]): XNAT username (may be pre-supplied via --username).
         verbose (Optional[bool]): Whether to enable verbose output.
 
     Returns:
@@ -106,18 +111,15 @@ def try_login_and_connection( username: Opt[str]=None, password: Opt[str]=None, 
 
     Raises:
         ValueError: If the login credentials do not lead to a successful connection.
+
+    NOTE: Password is always collected via the secure interactive prompt.
+    It is never read from argv, env vars, or config files.
     """
-    if username is not None and password is not None:
-        if verbose:
-            print( f"\n...logging in and trying to connect to the server as '{username}' with password {'*' * len( password )} ...\n" )
-        validated_login = XNATLogin( { 'Username': username, 'Password': password, 'Url': 'https://rpacs.iibi.uiowa.edu/xnat/' }, verbose=verbose )
-        xnat_connection = XNATConnection( login_info=validated_login, stay_connected=True, verbose=verbose )
-    else:
-        if verbose: print( f'\n\tPlease enter your XNAT login credentials to connect to the server:' )
-        username, password = prompt_login( username=username, password=password )
-        if verbose: print( f'\n...logging in and trying to connect to the server...\n' )
-        validated_login = XNATLogin( { 'Username': username, 'Password': password, 'Url': 'https://rpacs.iibi.uiowa.edu/xnat/' }, verbose=verbose )
-        xnat_connection = XNATConnection( login_info=validated_login, stay_connected=True, verbose=verbose )
+    if verbose: print( f'\n\tPlease enter your XNAT login credentials to connect to the server:' )
+    username, password = prompt_login( username=username, password=None )
+    if verbose: print( f'\n...logging in and trying to connect to the server...\n' )
+    validated_login = XNATLogin( { 'Username': username, 'Password': password, 'Url': _app_config.server_url }, verbose=verbose )
+    xnat_connection = XNATConnection( login_info=validated_login, stay_connected=True, verbose=verbose )
 
     if xnat_connection.is_verified and xnat_connection.is_open:
         config = ConfigTables( validated_login, xnat_connection, verbose=False ) # don't want to see all this info every time because there is so much and it is really only intended for the librarian to debug with
@@ -261,9 +263,9 @@ def download_queried_data( validated_login: XNATLogin, xnat_connection: XNATConn
         print( f'\n\tWould you like to preview all data currently in the database, or perform a specific query?\t--\tPlease enter "1" for Yes or "2" for No.' )
         preview_data = ORDataIntakeForm.prompt_until_valid_answer_given( 'Preview Data?', acceptable_options=['1', '2'] )
         if preview_data == '1':
-            constraints =  [('xnat:esvSessionData/PROJECT', '=', 'GROK_AHRQ_Data'),
+            constraints =  [('xnat:esvSessionData/PROJECT', '=', _app_config.project_name),
                             'OR',
-                            ('xnat:rfSessionData/PROJECT' , '=', 'GROK_AHRQ_Data' )
+                            ('xnat:rfSessionData/PROJECT' , '=', _app_config.project_name)
                             ]
             # Perform query that retrieves all experiments.
             all_data_pd = format_as_table( xnat.select('xnat:esvSessionData').where( constraints ) ) # type: ignore
@@ -272,7 +274,7 @@ def download_queried_data( validated_login: XNATLogin, xnat_connection: XNATConn
             all_data_pd.rename( columns={'date': 'operation_date'}, inplace=True )
 
             # Perform query that retrieves the subject names, given the subject ids from the prior query.
-            new_constraints =  [('xnat:subjectData/PROJECT', '=', 'GROK_AHRQ_Data'), 'AND']
+            new_constraints =  [('xnat:subjectData/PROJECT', '=', _app_config.project_name), 'AND']
             sub_constraints = []
             subject_ids = all_data_pd['subject_id'].unique()
             for i, subject_id in enumerate(subject_ids):
@@ -433,9 +435,9 @@ def ask_user_to_confirm_that_they_are_on_the_uiowa_network() -> bool:
 
 def main():
     header_footer_print( header_or_footer='header' )
-    username, password, verbose = parse_args()
+    username, verbose = parse_args()
     assert ask_user_to_confirm_that_they_are_on_the_uiowa_network(), 'You must be on the UIowa network to use this application.'
-    validated_login, xnat_connection, config = try_login_and_connection( username=username, password=password, verbose=verbose )
+    validated_login, xnat_connection, config = try_login_and_connection( username=username, verbose=verbose )
     assert validated_login.is_valid, 'The login credentials provided are not valid, please confirm your username and password; if the error persists, contact the Data Librarian.\n{validated_login}'
     try:
         while True:

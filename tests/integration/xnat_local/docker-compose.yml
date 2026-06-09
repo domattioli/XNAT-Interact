@@ -1,0 +1,18 @@
+version: "3.8"
+
+# Orchestrates the local XNAT integration test image built from the existing Dockerfile.
+# Credentials are throwaway localhost-only defaults (admin/admin).
+# Usage:
+#   docker compose up -d         # start
+#   docker compose down          # stop + remove container (data lost)
+#   docker compose logs -f       # follow startup
+
+services:
+  xnat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xnat-local-it
+    ports:
+      - "8080:8080"
+    restart: "no"

@@ -1,141 +1,88 @@
 # XNAT-Interact
 
-This repository contains scripts for getting your source and derived fluoroscopic image data to and from our XNAT RPACS server.
-
-## First Things First:
-- You will need to register with XNAT and then be added as a member to the RPACS XNAT server by the Data Librarian.
-    - Make sure that you register a new account with your HawkID.
-    - You must be using your VPN when you access the link included in the invitation email!
-
-- NOTE: the SSL certificate for our accounts seems to require an annual renewal. It was most recently requested for renewal as of 2025-03-04.
----
-
-## Installation
-
-### **Option 1: Cloning the Repository (*For General Use*)**
-*If you **only need to use the software and do not plan to contribute changes**, follow these steps*:
-
-0. Open a command prompt/terminal.
-1. Ensure that [git](https://git-scm.com/) is installed on your machine:
-    ```bash
-    git --version
-    ```
-   - If you get an error, install git (for Windows, go [here](https://gitforwindows.org/)).
-
-2. Ensure that Python 3.8 (64-bit) is installed:
-    ```bash
-    python --version
-    ```
-   - If Python 3 is not installed, download [Python 3.8](https://www.python.org/downloads/release/python-380/).
-   - If you have both Python 2 and Python 3 installed, use `python3` instead.
-
-3. Navigate to your preferred directory:
-    ```bash
-    cd path_to_my_fav_local_folder_for_storing_repositories_of_code
-    ```
-
-4. Clone the repository:
-    ```bash
-    git clone https://github.com/domattioli/XNAT-Interact.git
-    ```
-
-5. Navigate into the cloned directory:
-    ```bash
-    cd XNAT-Interact
-    ```
-
-6. Create and activate a virtual environment:
-    ```bash
-    python -m venv .my_venv_for_xnat_interact
-    ```
-   **Activate the virtual environment:**
-   - **Windows**:
-     ```bash
-     .my_venv_for_xnat_interact\Scripts\activate
-     ```
-   - **Unix (Mac/Linux)**:
-     ```bash
-     source .my_venv_for_xnat_interact/bin/activate
-     ```
-
-7. Install the required dependencies:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-8. Run a test to verify correct installation:
-    ```bash
-    python update_and_test.py
-    ```
+A tool for de-identifying and uploading/downloading surgical fluoroscopic images to the University of Iowa RPACS XNAT server.
 
 ---
 
-### **Option 2: Forking the Repository (*For Contributing Changes*)**
-*If you want to **make changes to the code and push them to GitHub**, follow these steps instead*:
+## Before You Start
 
-1. **Fork this repository**:
-   - Go to [XNAT-Interact](https://github.com/domattioli/XNAT-Interact) on GitHub.
-   - Click the **Fork** button (top right) to create your own copy of the repository.
+You need three things:
 
-2. **Clone your forked repository** (replace `YOUR-USERNAME` with your GitHub username):
-    ```bash
-    git clone https://github.com/YOUR-USERNAME/XNAT-Interact.git
-    ```
+1. **An XNAT account** — contact the Data Librarian (your lab's designated person) to be added to the project. Register with your HawkID.
+2. **UIowa VPN** — you must be connected to the [UIowa Cisco VPN](https://its.uiowa.edu/support/article/1876) whenever you run this tool off-campus.
+3. **Python 3.8+** — a 64-bit Python 3 installation.
 
-3. **Navigate into the directory**:
-    ```bash
-    cd XNAT-Interact
-    ```
+> **SSL certificate note:** The XNAT server certificate requires annual renewal. If you see an SSL error, contact the Data Librarian — you cannot connect until it is renewed.
 
-4. **Set the upstream remote** (so you can sync with the original repo later):
-    ```bash
-    git remote add upstream https://github.com/domattioli/XNAT-Interact.git
-    ```
+---
 
-5. **Create and activate a virtual environment (same as in Option 1)**.
+## Quick Start
 
-6. **Create a new branch for your changes**:
-    ```bash
-    git checkout -b my-feature-branch
-    ```
+Open a terminal and run these steps once to set up:
 
-7. **Make your changes and commit them**:
-    ```bash
-    git add .
-    git commit -m "Describe the changes you made"
-    ```
-
-8. **Push your changes to your fork**:
-    ```bash
-    git push origin my-feature-branch
-    ```
-
-9. **Create a pull request**:
-   - Go to your fork on GitHub (`https://github.com/YOUR-USERNAME/XNAT-Interact`).
-   - Click **"Compare & pull request"**.
-   - Select:
-     - **Base repository:** `domattioli/XNAT-Interact`
-     - **Base branch:** `main`
-     - **Head repository:** `YOUR-USERNAME/XNAT-Interact`
-     - **Head branch:** `my-feature-branch`
-   - Add a description and click **"Create pull request"**.
-   - 
-### **Option 2: Installing via `pip` (To-Do)**
-🚧 **Note:** This installation method is not yet implemented. Future versions of this repository may support installation via `pip`. 🚧
-        - This will require setting up the environment.yaml github workflow, I think.
-Once available, you will be able to install `XNAT-Interact` directly using:
 ```bash
-pip install XNAT-Interact
+# 1. Clone the repository
+git clone https://github.com/domattioli/XNAT-Interact.git
+cd XNAT-Interact
+
+# 2. Create and activate a virtual environment
+python -m venv .venv
+
+# Windows:
+.venv\Scripts\activate
+# Mac/Linux:
+source .venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Verify your installation and pull the latest code
+python update_and_test.py
 ```
+
+Then open `main.py` and follow the prompts. When asked for a password, type it at the prompt — never put credentials in a file.
+
+The server address and project name are configured automatically. If you need to point to a different server or project, set the environment variables `XNAT_SERVER_URL` and `XNAT_PROJECT_NAME` before running.
+
 ---
 
+## Staying Up to Date
 
-## **Example Usage**
-### **UIowa VPN -- Required**
-- If you are not running the following code from a university machine, you must be logged into the [UIowa Cisco VPN](https://its.uiowa.edu/support/article/1876) before running any commands.
-- **Note:** You cannot go back once you begin one of the tasks (e.g., uploading a case). If you make a mistake, press **Ctrl + C** to exit and restart the task.
+Run this at the start of each session to pull the latest code and check your environment:
 
-## **Best Practice: Run the following script at the start of each session**:
 ```bash
 python update_and_test.py
 ```
+
+---
+
+## Contributing Changes
+
+1. Fork the repo on GitHub ([XNAT-Interact](https://github.com/domattioli/XNAT-Interact)).
+2. Clone your fork and create a branch: `git checkout -b my-feature`.
+3. Make changes, commit, push to your fork, then open a pull request targeting `main`.
+
+---
+
+## Data, Metadata & Identity
+
+What the data is and why it's collected, plus how every metadata field — **especially the DICOM
+UIDs** — is handled during de-identification and upload, is documented here:
+
+- [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) — purpose/motivation, and the identity /
+  de-identification / duplicate-detection model.
+- [`docs/METADATA.md`](docs/METADATA.md) — reference for every metadata parameter and UID
+  (`StudyInstanceUID` / `SeriesInstanceUID` / `SOPInstanceUID`, the private-tag block, intake-form
+  fields) and how the pipeline reads, rewrites, or preserves each.
+
+In brief: patient identity is destroyed; surgeon identity is a keyed pseudonym; cases/images are
+de-duplicated on image *content* (UIDs corroborate, never authoritative); no per-image human
+review.
+
+---
+
+## Getting Help
+
+Contact your Data Librarian or open an issue on GitHub. For SSL certificate problems, email IIBI staff directly.
+
+> **Note:** A packaged `pip install` version is planned for a future release to remove the manual install steps above.

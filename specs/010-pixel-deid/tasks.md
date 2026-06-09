@@ -133,3 +133,29 @@ existing suites stay green.
 ## Definition of done
 - All FR-001..FR-015 covered; SC-001 FN=0 holdout green (hard gate); SC-005 ≤15 min; offline suite
   green + CPU CI lane; no raw PHI anywhere; default upload path unbroken (additive wiring).
+
+---
+
+## Build status — 2026-06-09
+
+| Stage | Tasks | State |
+|---|---|---|
+| Setup + fixtures | T001–T003 | ✅ done |
+| S1 detector | T004–T007 | ✅ done (24 tests; `--psm 3` perf fix) |
+| S2 profiles + consensus | T008–T011 | ✅ done (25 tests) |
+| S3 verdict engine | T012–T016 | ✅ done (26 tests; FN=0 fail-closed routing) |
+| S4 quarantine + gate | T017–T020 | ✅ done (31 tests; additive, 992 original suite green) |
+| S5 throughput | T021–T022 | ✅ done (serial-default; 9 min/200 < 15 min SC-005) |
+| S6 validation | T023–T025, T027 | ✅ holdout FN=0 + rate checks + benchmark + docs |
+| S6 model push | T026 | ⏸ deferred — CRAFT ONNX vendored-later (graceful-degrade; not blocking FN=0) |
+
+**Suite:** 1101 passed / 7 xfailed offline (slow throughput + pixeldeid holdout opt-in). FN=0 holdout
+green incl. the crux unprofiled-faint-no-CRAFT → quarantine cell.
+
+**Key build lessons (this session):**
+- `--psm 11` (sparse) Tesseract exploded to 20–42 s/frame on low-info frames → `--psm 3` = 0.36 s,
+  same boxes. OCR calls now hard-timeout + graceful-degrade ([], FN-safe).
+- ProcessPool fork-after-NLP-load **deadlocks** (a hung worker is not an exception, so "degrade to
+  serial" never fired) → `assess_batch` defaults **serial**; parallel is opt-in `spawn`+timeout.
+- Orphaned subagent pytest loops (running the pre-fix slow code) saturated the 4-core box and made
+  every timing probe time out — the 122–263 s "model load" was pure contention, not code (clean = 5.4 s).

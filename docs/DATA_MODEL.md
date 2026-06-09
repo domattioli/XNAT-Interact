@@ -142,8 +142,28 @@ the **central anatomy** — so generous over-redaction of edge bands costs nothi
 - **Human touch is one-time, not per-case:** define a mask when a genuinely new C-arm model first
   appears, and validate the pipeline's false-negative rate once (so de-id is IRB-defensible).
 
-Refactor target: replace the always-`True` `needs_pixel_review` placeholder with an automated
-classifier returning `ACCEPT` for the vast majority and `QUARANTINE` for the rare rest.
+**Status — BUILT** (`010-pixel-deid`, `src/services/pixel_deid/`). The always-`True`
+`needs_pixel_review` placeholder is replaced by a tiered, CPU-only verdict engine returning
+`clean | redacted | quarantine`:
+
+- **Tier 0 — device-profile blind mask** (`profiles.py`): contrast-independent zero-FN anchor,
+  keyed on `Manufacturer`/`ManufacturerModelName` (+ private `0019` block).
+- **Tier 0′ — cross-frame variance consensus** (`consensus.py`): static bright overlay pops out
+  across a multi-frame case regardless of text contrast.
+- **Tier 2 — multipass detector** (`detect.py`): Tesseract over `{orig,invert,stretch,clahe}`
+  (`--psm 3`, hard-timeout, graceful-degrade) + an optional ONNX CRAFT detector
+  (`models/craft/`, vendored later — absent ⇒ degrades to `[]`).
+- **Tier 3/4 — PHI classification** (`verdict.py`): Presidio NER + a benign allow-list
+  (laterality/view/kVp markers preserved).
+- **Fail-closed routing:** unprofiled device with no positive clean evidence, PHI text outside the
+  mask, or profile/detector disagreement → **quarantine** (held with evidence, never auto-uploaded;
+  `quarantine.py`). Profiled-and-masked → redacted; profiled-and-empty → clean.
+
+FN-safety (SC-001): every residual-PHI case is fully masked **or** quarantined — no clean/redacted
+verdict leaks PHI pixels. Throughput (SC-005): ~2.7 s/case serial → 200 cases ≈ 9 min (< 15 min
+budget). Audit entries carry categories/counts only — never raw PHI text. Deferred: advanced
+learned-detector decoding (vendored CRAFT ONNX) and a validated-zero-FN holdout on real device
+samples.
 
 ---
 

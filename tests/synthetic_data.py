@@ -168,6 +168,206 @@ def make_burned_in_phi_pixel_array(
     return arr.astype(dtype)
 
 
+def make_faint_burned_in_phi_pixel_array(
+    text: str = "PATIENT NAME 01/02/1980",
+    *,
+    rows: int = 64,
+    cols: int = 256,
+    dtype=None,
+    bg: int = 60,
+    fg: int = 90,
+) -> "np.ndarray":
+    """
+    Return a numpy array (uint8 by default) with ``text`` rendered as LOW-CONTRAST
+    burned-in PHI.
+
+    Unlike ``make_burned_in_phi_pixel_array`` which renders near-white text on a
+    black background, this function fills the background with a constant ``bg``
+    value and renders the text in a near-background ``fg`` color, creating a
+    faint overlay that simulates low-contrast burned-in labels that single-pass
+    OCR or simple thresholding may miss.
+
+    Parameters
+    ----------
+    text:
+        The string to render (fake PHI for testing — never real patient data).
+    rows, cols:
+        Pixel dimensions of the output array.
+    dtype:
+        numpy dtype for the output array.  Defaults to ``np.uint8``.  Pass
+        ``np.uint16`` to simulate 16-bit DICOM pixel data.
+    bg:
+        Background constant fill value.
+    fg:
+        Foreground (text) color value — near-background, faint.
+
+    Returns
+    -------
+    np.ndarray of shape (rows, cols) with dtype ``dtype``.
+    """
+    import cv2
+
+    if dtype is None:
+        dtype = np.uint8
+
+    arr = np.full((rows, cols), bg, dtype=np.uint8)  # Fill with bg, not zero
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.5
+    thickness = 1
+    color = fg  # Faint text color near background
+    origin = (4, rows // 2)
+
+    cv2.putText(arr, text, origin, font, font_scale, color, thickness, cv2.LINE_AA)
+
+    return arr.astype(dtype)
+
+
+def make_multiframe_phi_case(
+    text: str = "MRN 00471123",
+    *,
+    n_frames: int = 8,
+    rows: int = 128,
+    cols: int = 256,
+    dtype=None,
+    seed: int = 0,
+    faint: bool = False,
+) -> "np.ndarray":
+    """
+    Return a numpy array of shape (n_frames, rows, cols) with a STATIC burned-in
+    text overlay (same pixel position every frame) composited over MOVING synthetic
+    anatomy.
+
+    The text banner is identical across all frames (low variance). The background
+    anatomy is random per frame (high variance), simulating a realistic fluoroscopy
+    or OR video acquisition. This fixture is designed for tests of cross-frame
+    consensus / variance-based de-identification.
+
+    Parameters
+    ----------
+    text:
+        The burned-in PHI text to render (fake for testing).
+    n_frames:
+        Number of frames in the output sequence.
+    rows, cols:
+        Pixel dimensions of each frame.
+    dtype:
+        numpy dtype for the output array. Defaults to ``np.uint8``.
+    seed:
+        Random seed for anatomy generation (background noise).
+    faint:
+        If True, render the text as low-contrast (via ``make_faint_burned_in_phi_pixel_array``).
+        If False, render as near-white (via ``make_burned_in_phi_pixel_array``).
+
+    Returns
+    -------
+    np.ndarray of shape (n_frames, rows, cols) with dtype ``dtype``.
+    """
+    if dtype is None:
+        dtype = np.uint8
+
+    rng = np.random.default_rng(seed)
+    frames = np.zeros((n_frames, rows, cols), dtype=np.uint8)
+
+    # Render the static text overlay once (either faint or bright)
+    if faint:
+        text_overlay = make_faint_burned_in_phi_pixel_array(
+            text, rows=rows, cols=cols, dtype=np.uint8
+        )
+    else:
+        text_overlay = make_burned_in_phi_pixel_array(
+            text, rows=rows, cols=cols, dtype=np.uint8
+        )
+
+    # Generate per-frame anatomy (random shifted noise) and composite text
+    for i in range(n_frames):
+        # Random anatomy: shifted noise blob simulating moving structure
+        anatomy = rng.integers(20, 80, size=(rows, cols), dtype=np.uint8)
+        # Optional: add a small noise shift per frame for more realism
+        shift = rng.integers(-5, 6, size=2)
+        anatomy = np.roll(anatomy, shift, axis=(0, 1))
+
+        # Composite: text overlay (nonzero pixels) on top of anatomy
+        frames[i] = np.where(text_overlay > 0, text_overlay, anatomy)
+
+    return frames.astype(dtype)
+
+
+def make_unprofiled_device_dataset(
+    text: str = "DOE^JOHN MRN 00471123",
+    *,
+    rows: int = 128,
+    cols: int = 256,
+    seed: int = 0,
+):
+    """
+    Build an **in-memory** pydicom Dataset with burned-in PHI pixels, Modality
+    "XA" (fluoroscopy), and **NO private device-profile block** (0x0019).
+
+    This represents an acquisition from a device with no registered profile,
+    so tests can verify behavior on unrecognized equipment. The burned-in PHI
+    is rendered into the pixel data via ``make_burned_in_phi_pixel_array``.
+
+    Parameters
+    ----------
+    text:
+        The fake PHI string to burn into pixels (never real patient data).
+    rows, cols:
+        Pixel dimensions of the image.
+    seed:
+        Random seed (not used in this version, but kept for consistency).
+
+    Returns
+    -------
+    pydicom.dataset.FileDataset
+        A DICOM dataset with burned-in PHI, no device profile.
+    """
+    import pydicom
+    from pydicom.dataset import FileDataset, FileMetaDataset
+    from pydicom.uid import (
+        ExplicitVRLittleEndian,
+        SecondaryCaptureImageStorage,
+        generate_uid,
+    )
+
+    file_meta = FileMetaDataset()
+    file_meta.MediaStorageSOPClassUID = SecondaryCaptureImageStorage
+    file_meta.MediaStorageSOPInstanceUID = generate_uid()
+    file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+    file_meta.ImplementationClassUID = generate_uid()
+
+    ds = FileDataset(None, {}, file_meta=file_meta, preamble=b"\0" * 128)
+
+    # --- identity / study metadata ---
+    ds.SOPClassUID = SecondaryCaptureImageStorage
+    ds.SOPInstanceUID = file_meta.MediaStorageSOPInstanceUID
+    ds.Modality = "XA"  # Fluoroscopy
+    ds.ContentDate = "20240101"
+    ds.ContentTime = "120000"
+
+    # --- FAKE PHI ---
+    ds.PatientName = "DOE^JOHN"
+    ds.PatientID = "MRN-0001234"
+    ds.ReferringPhysicianName = "SMITH^JANE"
+    ds.AccessionNumber = "ACC-987654"
+    ds.StudyID = "STUDY-42"
+    ds.InstitutionName = "UIOWA HOSPITAL"
+
+    # NOTE: NO private tag block (0x0019 device profile) — represents unprofiled device
+
+    # --- pixel data with burned-in PHI ---
+    phi_arr = make_burned_in_phi_pixel_array(text, rows=rows, cols=cols, dtype=np.uint8)
+    ds.Rows, ds.Columns = rows, cols
+    ds.SamplesPerPixel = 1
+    ds.PhotometricInterpretation = "MONOCHROME2"
+    ds.BitsAllocated = 8
+    ds.BitsStored = 8
+    ds.HighBit = 7
+    ds.PixelRepresentation = 0
+    ds.PixelData = phi_arr.tobytes()
+
+    return ds
+
+
 # --------------------------------------------------------------------------- #
 # JPG / MP4 (arthroscopy)
 # --------------------------------------------------------------------------- #

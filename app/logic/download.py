@@ -36,6 +36,31 @@ from app.logic.browse import fetch_data_table, COLUMNS
 
 
 # ---------------------------------------------------------------------------
+# Path-safety helper (C2 #33 — zip-slip / path traversal)
+# ---------------------------------------------------------------------------
+def _safe_resource_join(base_dir: Path, server_filename: str) -> Path:
+    """Join a server-supplied filename under ``base_dir``, refusing traversal.
+
+    XNAT resource file listings are server-controlled; a hostile or malformed
+    filename such as ``../../x`` would otherwise escape ``base_dir`` (write
+    outside the destination) and later crash ``relative_to(tmp_path)`` during
+    zip assembly.  Resolve the candidate and require it to stay within
+    ``base_dir``; raise ``ValueError`` otherwise so callers surface a
+    FriendlyError instead of writing through the traversal.
+    """
+    # Drop any absolute-path / drive prefix; keep the join relative to base.
+    cleaned = str(server_filename).lstrip("/\\")
+    candidate = (base_dir / cleaned)
+    base_resolved = base_dir.resolve()
+    candidate_resolved = candidate.resolve()
+    if base_resolved != candidate_resolved and not candidate_resolved.is_relative_to(base_resolved):
+        raise ValueError(
+            f"Refusing path-traversal filename from server: {server_filename!r}"
+        )
+    return candidate
+
+
+# ---------------------------------------------------------------------------
 # Result type
 # ---------------------------------------------------------------------------
 
@@ -299,7 +324,21 @@ def download_selection(
 
         # Download each real file.
         for filename in real_filenames:
-            dest_file = subject_dir / filename
+            try:
+                dest_file = _safe_resource_join(subject_dir, filename)
+            except ValueError as _trav:
+                fe = FriendlyError(
+                    title="Unsafe filename from server — download blocked",
+                    message=(
+                        f"The server returned a file named '{filename}' for subject "
+                        f"'{subject}' that would write outside the destination folder. "
+                        f"This download was blocked as a safety precaution."
+                    ),
+                    recourse=[
+                        "Contact the Data Librarian — the scan resource may be corrupt.",
+                    ],
+                )
+                return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
             try:
                 result = resource.file(filename).get_copy(dest_file)
                 written = Path(result)
@@ -445,7 +484,21 @@ def assemble_zip(
             subj_dir.mkdir(parents=True, exist_ok=True)
 
             for fn in real_filenames:
-                dest_file = subj_dir / fn
+                try:
+                    dest_file = _safe_resource_join(subj_dir, fn)
+                except ValueError:
+                    fe = FriendlyError(
+                        title="Unsafe filename from server — zip blocked",
+                        message=(
+                            f"The server returned a file named '{fn}' for subject "
+                            f"'{subject}' that would write outside the staging folder. "
+                            f"Zip assembly was blocked as a safety precaution."
+                        ),
+                        recourse=[
+                            "Contact the Data Librarian — the scan resource may be corrupt.",
+                        ],
+                    )
+                    return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
                 try:
                     result = resource.file(fn).get_copy(dest_file)
                     files_written.append(Path(result))

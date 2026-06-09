@@ -1,0 +1,8 @@
+{
+  "device_id": "siemens_axiom_artis",
+  "description": "Siemens AXIOM Artis fluoroscopy system — typical burned-in PHI region (top-left banner)",
+  "boxes": [
+    [0, 48, 150, 70]
+  ],
+  "tolerance": 8
+}

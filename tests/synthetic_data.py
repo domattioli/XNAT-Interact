@@ -368,6 +368,91 @@ def make_unprofiled_device_dataset(
     return ds
 
 
+def make_profiled_device_dataset(
+    text: str = "DOE^JOHN MRN 00471123",
+    *,
+    rows: int = 128,
+    cols: int = 256,
+    manufacturer: str = "Siemens",
+    model_name: str = "AXIOM_Artis",
+    seed: int = 0,
+):
+    """
+    Build an **in-memory** pydicom Dataset with burned-in PHI pixels, Modality
+    "XA" (fluoroscopy), and Manufacturer/ManufacturerModelName tags set for
+    device-profile matching.
+
+    This represents an acquisition from a device with a registered profile,
+    so tests can verify profile-based masking. The burned-in PHI is rendered
+    into the pixel data via ``make_burned_in_phi_pixel_array``.
+
+    Parameters
+    ----------
+    text:
+        The fake PHI string to burn into pixels (never real patient data).
+    rows, cols:
+        Pixel dimensions of the image.
+    manufacturer:
+        Manufacturer tag value (e.g., "Siemens", "GE", "Philips").
+    model_name:
+        ManufacturerModelName tag value (e.g., "AXIOM_Artis").
+    seed:
+        Random seed (not used in this version, but kept for consistency).
+
+    Returns
+    -------
+    pydicom.dataset.FileDataset
+        A DICOM dataset with burned-in PHI and device identification.
+    """
+    import pydicom
+    from pydicom.dataset import FileDataset, FileMetaDataset
+    from pydicom.uid import (
+        ExplicitVRLittleEndian,
+        SecondaryCaptureImageStorage,
+        generate_uid,
+    )
+
+    file_meta = FileMetaDataset()
+    file_meta.MediaStorageSOPClassUID = SecondaryCaptureImageStorage
+    file_meta.MediaStorageSOPInstanceUID = generate_uid()
+    file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+    file_meta.ImplementationClassUID = generate_uid()
+
+    ds = FileDataset(None, {}, file_meta=file_meta, preamble=b"\0" * 128)
+
+    # --- identity / study metadata ---
+    ds.SOPClassUID = SecondaryCaptureImageStorage
+    ds.SOPInstanceUID = file_meta.MediaStorageSOPInstanceUID
+    ds.Modality = "XA"  # Fluoroscopy
+    ds.ContentDate = "20240101"
+    ds.ContentTime = "120000"
+
+    # --- Device identification (for profile matching) ---
+    ds.Manufacturer = manufacturer
+    ds.ManufacturerModelName = model_name
+
+    # --- FAKE PHI ---
+    ds.PatientName = "DOE^JOHN"
+    ds.PatientID = "MRN-0001234"
+    ds.ReferringPhysicianName = "SMITH^JANE"
+    ds.AccessionNumber = "ACC-987654"
+    ds.StudyID = "STUDY-42"
+    ds.InstitutionName = "UIOWA HOSPITAL"
+
+    # --- pixel data with burned-in PHI ---
+    phi_arr = make_burned_in_phi_pixel_array(text, rows=rows, cols=cols, dtype=np.uint8)
+    ds.Rows, ds.Columns = rows, cols
+    ds.SamplesPerPixel = 1
+    ds.PhotometricInterpretation = "MONOCHROME2"
+    ds.BitsAllocated = 8
+    ds.BitsStored = 8
+    ds.HighBit = 7
+    ds.PixelRepresentation = 0
+    ds.PixelData = phi_arr.tobytes()
+
+    return ds
+
+
 # --------------------------------------------------------------------------- #
 # JPG / MP4 (arthroscopy)
 # --------------------------------------------------------------------------- #

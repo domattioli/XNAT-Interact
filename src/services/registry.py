@@ -67,6 +67,7 @@ MigrationReport
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -165,7 +166,7 @@ def _open_connection(db_path: str | Path) -> sqlite3.Connection:
 
 class Registry:
     """
-    SQLite-backed operational registry.
+    SQLite-backed operational registry (default) with optional Postgres backend.
 
     Opens (or creates) the database at *db_path*, applies the schema, and
     provides transactional upsert methods for each table.
@@ -174,9 +175,56 @@ class Registry:
     ----------
     db_path : str | Path
         Filesystem path to the SQLite file.  Created if it does not exist.
+    backend_url : str | None
+        Optional SQLAlchemy URL.  When provided (or when the environment
+        variable ``XNAT_REGISTRY_PG_DSN`` is set) the CoreRegistry backend
+        from ``registry_backend`` is used instead of the raw sqlite3 path.
+        If SQLAlchemy is not installed the selector silently falls back to the
+        default sqlite3 path and logs a warning.
     """
 
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(self, db_path: str | Path, *, backend_url: Optional[str] = None) -> None:
+        # ------------------------------------------------------------------
+        # Backend selector (T013, additive per F6)
+        # ------------------------------------------------------------------
+        _pg_dsn = backend_url or os.environ.get("XNAT_REGISTRY_PG_DSN")
+        self._core: "object | None" = None  # CoreRegistry instance if PG/core path active
+
+        if _pg_dsn:
+            try:
+                from src.services.registry_backend import CoreRegistry, make_engine
+                _engine = make_engine(_pg_dsn)
+                self._core = CoreRegistry(_engine)
+                # Skip the sqlite3 init path entirely
+                return
+            except ImportError:
+                # SQLAlchemy absent → fall through to sqlite3 default
+                import warnings
+                warnings.warn(
+                    "SQLAlchemy not installed; XNAT_REGISTRY_PG_DSN ignored, "
+                    "falling back to sqlite3 backend.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+            except Exception as exc:  # noqa: BLE001
+                raise GatewayError(
+                    FriendlyError(
+                        title="Registry backend initialisation failed",
+                        message=(
+                            # NEVER interpolate the raw DSN — it may carry a password.
+                            "Could not connect to the configured registry backend. "
+                            "Check the DSN and database availability."
+                        ),
+                        recourse=[
+                            "Verify XNAT_REGISTRY_PG_DSN is a valid SQLAlchemy URL.",
+                            "Ensure the database server is reachable.",
+                        ],
+                    )
+                ) from exc
+
+        # ------------------------------------------------------------------
+        # Default raw sqlite3 path (byte-unchanged from pre-T013)
+        # ------------------------------------------------------------------
         self._db_path = Path(db_path)
         try:
             self._conn = _open_connection(self._db_path)
@@ -199,6 +247,10 @@ class Registry:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _using_core(self) -> bool:
+        """True when the CoreRegistry (SQLAlchemy) backend is active."""
+        return self._core is not None
+
     def _apply_schema(self) -> None:
         with self._conn:
             self._conn.executescript(_SCHEMA_SQL)
@@ -213,6 +265,8 @@ class Registry:
 
     def upsert_surgeon(self, pseudonym: str, role: Optional[str] = None) -> None:
         """Insert or replace a surgeon row."""
+        if self._using_core():
+            return self._core.upsert_surgeon(pseudonym, role=role)  # type: ignore[union-attr]
         try:
             with self._conn:
                 self._conn.execute(
@@ -236,6 +290,8 @@ class Registry:
         reliability_weight: Optional[float] = None,
     ) -> None:
         """Insert or replace a rater row."""
+        if self._using_core():
+            return self._core.upsert_rater(rater_id, expertise_tier=expertise_tier, reliability_weight=reliability_weight)  # type: ignore[union-attr]
         try:
             with self._conn:
                 self._conn.execute(
@@ -264,6 +320,8 @@ class Registry:
         device: Optional[str] = None,
     ) -> None:
         """Insert or replace a case row."""
+        if self._using_core():
+            return self._core.upsert_case(case_key, surgeon_pseudonym=surgeon_pseudonym, procedure=procedure, date_hash=date_hash, device=device)  # type: ignore[union-attr]
         try:
             with self._conn:
                 self._conn.execute(
@@ -299,6 +357,8 @@ class Registry:
         (US3 SC-001, FR-009).  A duplicate insert is handled atomically via
         ON CONFLICT — no partial write occurs.
         """
+        if self._using_core():
+            return self._core.upsert_image_hash(content_hash, case_key=case_key, orig_sopuid=orig_sopuid, instance_number=instance_number)  # type: ignore[union-attr]
         try:
             with self._conn:
                 self._conn.execute(
@@ -330,6 +390,8 @@ class Registry:
         Resolved via the UNIQUE index on image_hashes.content_hash —
         O(1) lookup, no full-table scan (US3, FR-009, SC-001).
         """
+        if self._using_core():
+            return self._core.image_exists(content_hash)  # type: ignore[union-attr]
         cur = self._conn.execute(
             "SELECT 1 FROM image_hashes WHERE content_hash = ? LIMIT 1",
             (content_hash,),
@@ -338,6 +400,8 @@ class Registry:
 
     def case_image_hashes(self, case_key: str) -> Set[str]:
         """Return the set of content hashes belonging to *case_key*."""
+        if self._using_core():
+            return self._core.case_image_hashes(case_key)  # type: ignore[union-attr]
         cur = self._conn.execute(
             "SELECT content_hash FROM image_hashes WHERE case_key = ?",
             (case_key,),
@@ -350,6 +414,8 @@ class Registry:
 
     def record_audit(self, actor: str, action: str, target: str) -> None:
         """Append one row to the audit_log (append-only by convention)."""
+        if self._using_core():
+            return self._core.record_audit(actor, action, target)  # type: ignore[union-attr]
         try:
             with self._conn:
                 self._conn.execute(
@@ -541,7 +607,10 @@ class Registry:
     # ------------------------------------------------------------------
 
     def close(self) -> None:
-        """Close the underlying SQLite connection."""
+        """Close the underlying SQLite connection (or engine)."""
+        if self._using_core():
+            self._core.close()  # type: ignore[union-attr]
+            return
         try:
             self._conn.close()
         except sqlite3.Error:

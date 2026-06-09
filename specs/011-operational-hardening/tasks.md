@@ -82,8 +82,20 @@ build in priority order US1 → US2 → US3. Each story ends green before the ne
 
 | Stage | Tasks | Status |
 |---|---|---|
-| 0 setup | T001–T002 | ⏳ |
-| 1 US1 deploy | T003–T010 | ⏳ |
-| 2 US2 postgres | T011–T016 | ⏳ |
-| 3 US3 boot | T017–T019 | ⏳ |
-| 4 validation+docs | T020–T023 | ⏳ |
+| 0 setup | T001–T002 | ✅ |
+| 1 US1 deploy | T003–T010 | ✅ 14 crypto+deploy tests green (cryptography verified after env `cffi` fix) |
+| 2 US2 postgres | T011–T016 | ✅ contract green on sqlite3 + sqlite-core; 13 pg params skip w/o DSN; sqlite3 default unchanged |
+| 3 US3 boot | T017–T019 | ✅ 12 boot/verify tests green; localhost-guard + idempotent + probe-fail naming |
+| 4 validation+docs | T020–T023 | ✅ default lane 1155 passed / 0 failed (was 1101); docs + README + DATA_MODEL updated |
+
+### Build notes
+- **F6 honored**: US2 is an *additive* Postgres backend behind `XNAT_REGISTRY_PG_DSN`; the raw-`sqlite3`
+  `Registry` path is byte-unchanged — 009/010 suites stayed green (regression gate T016 + T020).
+- **Security fix during review**: removed a raw-DSN interpolation from a `FriendlyError` message in
+  `registry.py` (a Postgres DSN can carry a password → log leak). Now references the env var only.
+- **Env defect surfaced**: this sandbox shipped `cryptography` without a working `cffi`/`_cffi_backend`
+  → Rust-binding panic that *bypassed* Python `try/except`; the crypto tests were skip-guarded by the
+  subagent. Installed `cffi`, pinned it in `requirements.txt`, and re-ran — all 14 US1 crypto+deploy
+  tests pass for real (FR-003 plaintext-grep-fail + wrong-key-fail verified, not assumed).
+- **Coverage gap (honest)**: the migrate parity-fail *rollback* path is asserted in code but full
+  FK-enforced rollback testing needs a real Postgres (deferred to the opt-in `pg` lane).

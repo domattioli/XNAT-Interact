@@ -290,12 +290,23 @@ crosswalks sit in the same shared store as operational data despite needing a se
   | `audit_log` | append-only | timestamp, actor pseudonym, action, target |
 - **Identity crosswalks** (`pseudonym ↔ real HawkID` + salt) live in a **separate,
   access-controlled, encrypted store — librarian-only**, never in the operational DB.
-- **Later: PostgreSQL** ([#34](https://github.com/domattioli/XNAT-Interact/issues/34)) when the
-  lab reaches genuine **concurrent multi-writer** scale — SQLite (however synced) does not give
-  safe concurrent multi-writer semantics; Postgres provides real server-side transactions/locking
-  (and closes the stress-test concurrency class, #32 A). XNAT already runs on Postgres.
-- **Migration:** one-time import from the ConfigTables JSON into the SQLite schema; transactions
-  replace the fingerprint guard.
+  **Status — BUILT (011 US1):** `CrosswalkStore` now encrypts at rest via an AEAD envelope
+  (AES-256-GCM, scrypt-derived key from a librarian passphrase; `src/services/crosswalk_crypto.py`).
+  Encryption is opt-in (passphrase/key ctor arg); the unkeyed legacy plaintext path is unchanged and
+  auto-upgrades on first keyed write. The salt is provisioned by `scripts/provision_identity_salt.sh`
+  (CSPRNG, `0600`, no-clobber, never echoed) and loaded via `load_identity_salt`. Salt/passphrase/
+  HawkID never appear in logs, argv, tests, or the repo.
+- **PostgreSQL** ([#34](https://github.com/domattioli/XNAT-Interact/issues/34)) for genuine
+  **concurrent multi-writer** scale — SQLite does not give safe concurrent multi-writer semantics;
+  Postgres provides real server-side transactions/locking (closes #32 A). XNAT already runs on
+  Postgres. **Status — BUILT (011 US2, opt-in):** an additive SQLAlchemy Core backend
+  (`src/services/registry_backend.py`) engages only when `XNAT_REGISTRY_PG_DSN` is set; the default
+  raw-`sqlite3` path is byte-unchanged. The 009 registry contract passes identically on sqlite3,
+  sqlite-via-Core, and Postgres (when a DSN is present). `migrate_sqlite_to_pg` does a parity-checked
+  table-by-table move.
+- **Migration:** `src/services/deploy_009.py` (`deploy()`) runs the one-time ConfigTables-JSON →
+  SQLite import via `migrate_from_configtables` (parity-asserted, full rollback on mismatch), records
+  an audit entry (counts only, no PHI), and archives — not deletes — the source JSON.
 
 ---
 

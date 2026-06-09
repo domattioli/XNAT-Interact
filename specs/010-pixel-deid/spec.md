@@ -5,6 +5,18 @@
 **Status**: Draft
 **Input**: User description: "SOTA CPU-only methods to robustly scan and de-id up to 200 image-sized cases at upload time; replace the always-True `needs_pixel_review` placeholder."
 
+## Clarifications (2026-06-09)
+
+- **Throughput**: 200-case batch pixel de-id must finish in **≤15 min** CPU-only (SC-005).
+- **Detector tier**: v1 includes a **learned ONNX-CPU text detector** (CRAFT/docTR) alongside
+  Presidio/Tesseract + multipass — not deferred (FR-004).
+- **Device profiles**: seed the registry with **1–2 starter profiles authored from the device
+  tags / private-block patterns in current synthetic/test data** as a worked example + schema;
+  real profiles added operationally (FR-002).
+- **Quarantine**: a quarantined case is **blocked from upload and held in a quarantine store with
+  its evidence** (flagged regions) for later operator review/mask/release — never auto-uploaded
+  (FR-006, FR-013, FR-015).
+
 ## Context
 
 Source images are fluoroscopy / OR C-arm frames (modality XA/RF). DICOM **tag**
@@ -147,12 +159,17 @@ completes within the SC-005 budget.
   `quarantine`.
 - **FR-002**: System MUST maintain a **device-profile registry** mapping device
   identity (model / private-block profile) to text-bearing overlay regions, and
-  blind-mask those regions for profiled devices (contrast-independent).
+  blind-mask those regions for profiled devices (contrast-independent). v1 MUST ship
+  **1–2 starter profiles authored from the device tags / private-block patterns present
+  in the current synthetic/test data**, plus the registry schema, as a worked example;
+  additional real-device profiles are added operationally.
 - **FR-003**: System MUST, for multi-frame cases, compute a **cross-frame variance
   consensus mask** that identifies static bright overlay regions independent of text
   contrast, and add it to the redaction union.
 - **FR-004**: System MUST run a **multipass text detector** (original + inverted +
-  contrast-stretched + CLAHE) and union all detected text boxes into the redaction set.
+  contrast-stretched + CLAHE) and union all detected text boxes into the redaction set. The
+  detector tier MUST include a **learned ONNX-CPU text-region detector** (e.g. CRAFT or docTR)
+  in addition to the Tesseract/Presidio OCR path, for faint/stylized text the OCR path misses.
 - **FR-005**: System MUST classify detected text as PHI vs benign using a PHI
   recognizer (names, MRN, dates, DOB, facility) so benign markers (laterality/view)
   are preserved (FR-009).
@@ -178,6 +195,9 @@ completes within the SC-005 budget.
   blocks upload pending operator action.
 - **FR-014**: All test fixtures MUST be **synthetic** burned-in PHI; no real PHI,
   no production endpoints.
+- **FR-015**: A quarantined case MUST be written to a **quarantine store** alongside its
+  evidence (flagged regions, tiers fired, PHI categories — no raw PHI text) and held for
+  operator review/mask/release; it MUST NOT be auto-uploaded or auto-over-masked.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -206,8 +226,7 @@ completes within the SC-005 budget.
 - **SC-004**: The de-id verdict and audit entry contain no raw PHI text (privacy of the
   pipeline itself).
 - **SC-005**: A 200-case synthetic batch completes pixel de-id on a CPU-only multi-core
-  machine within an acceptable upload-time budget [NEEDS CLARIFICATION: exact wall-clock
-  ceiling — minutes? target value?].
+  machine in **≤15 minutes** wall-clock (no GPU).
 - **SC-006**: Offline suite green + the SC-001 holdout runs as a CI regression gate
   (CPU lane, no GPU).
 
@@ -223,8 +242,9 @@ completes within the SC-005 budget.
   consensus, fail-closed routing) is built in-repo.
 - "Image-sized case" means a small per-case frame count (image-scale, not full OR
   video); large-video de-id is out of scope for v1.
-- Advanced learned detectors (CRAFT/DBNet/docTR via ONNX-CPU) are a pluggable upgrade
-  to the detector tier, not required for v1 if Presidio+multipass meets SC-001 on the
-  holdout.
+- A learned ONNX-CPU text-region detector (CRAFT or docTR) IS in scope for v1 (FR-004),
+  bundled as a vendored model running under onnxruntime-CPU; it backstops the OCR path on
+  faint/stylized text. Model choice (CRAFT vs docTR) is a plan-stage decision driven by the
+  SC-001 holdout + the SC-005 budget.
 - Quarantine UX / operator review tooling reuses the existing upload-flow confirmation
   gate; building a new review UI is out of scope here.

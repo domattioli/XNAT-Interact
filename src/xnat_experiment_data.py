@@ -33,13 +33,16 @@ class ReviewDecision(Enum):
     """
     Outcome returned by a pixel_review_confirmer callable.
 
-    CONFIRMED  — reviewer attests no burned-in PHI is visible; upload may proceed.
-    REDACT     — reviewer supplies redaction boxes; apply_redaction is called before upload.
-    ABORT      — reviewer refuses to confirm; upload is blocked.
+    CONFIRMED   — reviewer attests no burned-in PHI is visible; upload may proceed.
+    REDACT      — reviewer supplies redaction boxes; apply_redaction is called before upload.
+    ABORT       — reviewer refuses to confirm; upload is blocked.
+    QUARANTINE  — automated assessment flagged this case for operator review;
+                  upload is blocked and the case is held in the quarantine store.
     """
-    CONFIRMED = "confirmed"
-    REDACT    = "redact"
-    ABORT     = "abort"
+    CONFIRMED  = "confirmed"
+    REDACT     = "redact"
+    ABORT      = "abort"
+    QUARANTINE = "quarantine"
 
 
 class UploadError(Exception):
@@ -102,6 +105,115 @@ def _interactive_pixel_review_confirmer(context: str) -> Tuple[ReviewDecision, _
         return ReviewDecision.CONFIRMED, []
     # Any non-'1' answer → ABORT (fail-closed)
     return ReviewDecision.ABORT, []
+
+
+# ---------------------------------------------------------------------------
+# T019 — Automated pixel confirmer factory (OPT-IN)
+# ---------------------------------------------------------------------------
+
+def make_automated_pixel_confirmer(
+    frames,
+    dataset,
+    *,
+    registry=None,
+    model_dir: str = "models/craft",
+    profiles_dir: str = "data/device_profiles",
+    quarantine_store=None,
+    case_id: Opt[str] = None,
+):
+    """
+    Build a ``pixel_review_confirmer``-compatible callable that runs the
+    automated de-id pipeline (verdict.assess_case) instead of prompting a human.
+
+    This is the OPT-IN automated path.  The DEFAULT ``pixel_review_confirmer``
+    remains ``_interactive_pixel_review_confirmer`` — no existing call site is
+    changed by this function.
+
+    Verdict → ReviewDecision mapping:
+
+    =================== ========================= ========================
+    Verdict             ReviewDecision             boxes
+    =================== ========================= ========================
+    Verdict.CLEAN       ReviewDecision.CONFIRMED   []
+    Verdict.REDACTED    ReviewDecision.REDACT       assessment.regions
+    Verdict.QUARANTINE  ReviewDecision.QUARANTINE  []  (case written to store)
+    =================== ========================= ========================
+
+    All heavy imports (assess_case, Verdict, QuarantineStore) are performed
+    LAZILY inside the returned closure so that importing
+    ``src.xnat_experiment_data`` remains cheap and does not pull in
+    presidio / cv2 / onnxruntime at module load time.
+
+    Parameters
+    ----------
+    frames:
+        List of numpy frame arrays for the case.
+    dataset:
+        pydicom Dataset for device-identity lookup.
+    registry:
+        Optional audit registry; forwarded to assess_case.
+    model_dir:
+        CRAFT model directory; forwarded to assess_case.
+    profiles_dir:
+        Device profiles directory; forwarded to assess_case.
+    quarantine_store:
+        Optional ``QuarantineStore`` instance.  When supplied and the verdict
+        is QUARANTINE, ``quarantine_store.quarantine_case`` is called to persist
+        the evidence before the confirmer returns.
+    case_id:
+        Case identifier for quarantine storage.  Required when
+        *quarantine_store* is given; ignored otherwise.
+
+    Returns
+    -------
+    Callable[[str], Tuple[ReviewDecision, list]]
+        A ``pixel_review_confirmer``-compatible callable.
+    """
+    # Capture everything the closure needs at call time.
+    _frames         = frames
+    _dataset        = dataset
+    _registry       = registry
+    _model_dir      = model_dir
+    _profiles_dir   = profiles_dir
+    _qstore         = quarantine_store
+    _case_id        = case_id
+
+    def _automated_confirmer(context: str):  # noqa: ARG001 — context unused but required by protocol
+        # Lazy imports — keep module-level import cheap.
+        from src.services.pixel_deid.verdict import assess_case, Verdict  # noqa: PLC0415
+
+        assessment = assess_case(
+            _frames,
+            _dataset,
+            registry=_registry,
+            model_dir=_model_dir,
+            profiles_dir=_profiles_dir,
+        )
+
+        if assessment.verdict == Verdict.CLEAN:
+            return ReviewDecision.CONFIRMED, []
+
+        if assessment.verdict == Verdict.REDACTED:
+            return ReviewDecision.REDACT, assessment.regions
+
+        # Verdict.QUARANTINE — persist evidence then signal the gate.
+        if _qstore is not None and _case_id is not None:
+            try:
+                _qstore.quarantine_case(
+                    _case_id,
+                    assessment,
+                    frames=_frames,
+                    dataset=_dataset,
+                )
+            except Exception as _exc:  # noqa: BLE001 — never block on store failure
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "make_automated_pixel_confirmer: quarantine_store write failed: %s", _exc
+                )
+
+        return ReviewDecision.QUARANTINE, []
+
+    return _automated_confirmer
 
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -278,6 +390,25 @@ class ExperimentData():
                     recourse=[
                         "Inspect each image for burned-in patient name, date-of-birth, or MRN.",
                         "Re-run and confirm when review is complete.",
+                    ],
+                )
+            )
+
+        if decision == ReviewDecision.QUARANTINE:
+            raise UploadError(
+                FriendlyError(
+                    title="Upload blocked — case automatically quarantined for burned-in PHI review",
+                    message=(
+                        "This case was automatically quarantined for burned-in-PHI review; "
+                        "it was NOT uploaded. A reviewer must inspect the flagged regions "
+                        "in the quarantine store and release it."
+                    ),
+                    recourse=[
+                        "Locate the case in the quarantine store and inspect the evidence.json "
+                        "file for flagged regions, tiers fired, and PHI categories.",
+                        "Apply corrective redaction to the pixel data (manually or by re-running "
+                        "de-id on the released frames).",
+                        "Re-run the upload after the case has been reviewed and released from quarantine.",
                     ],
                 )
             )

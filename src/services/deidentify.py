@@ -108,6 +108,47 @@ def needs_pixel_review(pixel_array: np.ndarray) -> bool:
     return True
 
 
+def assess_pixel_phi(
+    frames: "List[np.ndarray]",
+    dataset,
+    **kw,
+) -> bool:
+    """
+    Dataset-aware pixel PHI assessment.
+
+    Delegates to ``verdict.assess_case`` and returns True when the verdict is
+    anything other than CLEAN (i.e. REDACTED or QUARANTINE both require action).
+
+    This is the OPT-IN, automated-path entry-point.  It does NOT replace
+    ``needs_pixel_review``; existing callers of that function are unaffected.
+
+    All heavy dependencies (presidio, pytesseract, cv2, onnxruntime) are
+    imported lazily inside this function — importing deidentify.py remains
+    cheap for the rest of the test suite.
+
+    Parameters
+    ----------
+    frames:
+        List of 2D/3D uint8 numpy arrays, one per case frame.
+    dataset:
+        pydicom Dataset for device-identity lookup.
+    **kw:
+        Forwarded to ``verdict.assess_case`` (registry, model_dir,
+        profiles_dir, margin).
+
+    Returns
+    -------
+    bool
+        True  → verdict is REDACTED or QUARANTINE (upload review/gate needed).
+        False → verdict is CLEAN (no masked region, profiled device).
+    """
+    # Lazy import keeps the module import cheap.
+    from src.services.pixel_deid.verdict import assess_case, Verdict  # noqa: PLC0415
+
+    assessment = assess_case(frames, dataset, **kw)
+    return assessment.verdict != Verdict.CLEAN
+
+
 def apply_redaction(
     pixel_array: np.ndarray,
     boxes: List[Tuple[int, int, int, int]],

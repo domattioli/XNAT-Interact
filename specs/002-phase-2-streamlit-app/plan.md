@@ -1,10 +1,10 @@
-# Implementation Plan: Streamlit "See-Your-Data" App (Phase 2)
+# Implementation Plan: Streamlit “See-Your-Data” App (Phase 2)
 
 **Branch**: `002-phase-2-streamlit-app` | **Date**: 2026-06-04 | **Spec**: [spec.md](spec.md)
 
 ## Summary
 
-Build a **local Streamlit app** that runs on the student's VPN-connected machine
+Build a **local Streamlit app** that runs on the student’s VPN-connected machine
 and opens in a browser, giving a friendly **login → browse → upload → download**
 experience over the **already-tested Phase 1 service layer** (`src/services/`).
 The GUI renders existing logic; it does not re-implement it. Deliver as a
@@ -38,7 +38,7 @@ Download) + 1 optional Terminal/Learn panel; one shared session/auth state.
 
 *GATE: must pass before and after design.*
 
-- **I — PHI Safety**: FR-007 (pre-upload "what will be uploaded / PHI-removed"
+- **I — PHI Safety**: FR-007 (pre-upload “what will be uploaded / PHI-removed”
   preview + mandatory burned-in-PHI confirmation, reusing Phase 1), FR-015 (local
   PHI cleanup), thumbnails rendered from de-identified data only. ✅
 - **II — Fail Softly**: FR-011 (every error → friendly panel with recourse,
@@ -67,7 +67,7 @@ specs/002-phase-2-streamlit-app/
 └── tasks.md
 
 app/                          # NEW: thin Streamlit front-end over src/services/
-├── main.py                   # entrypoint: `streamlit run app/main.py`; page router
+├── main.py                   # page router (launched from repo-root streamlit_app.py)
 ├── session.py                # AppSession state, auth handle, screen routing helpers
 ├── components/
 │   ├── error_panel.py        # renders a Phase 1 FriendlyError as a friendly panel

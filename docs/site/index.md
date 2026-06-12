@@ -21,7 +21,7 @@ You need three things in place before you open the app for the first time:
 
 **① Get an XNAT account**
 Register at the UIowa XNAT portal using your HawkID. Contact the **Data
-Librarian** (your lab's designated point of contact) to get the registration
+Librarian** (your lab’s designated point of contact) to get the registration
 link and to be officially added to your research project. You cannot log in
 until both steps are done.
 
@@ -43,7 +43,7 @@ Installation is handled by ITS, not by you directly. There are two paths:
 
 **Primary — Software Center (recommended for most students)**
 If you are on a UIowa-managed laptop or desktop, open the ITS Software Center
-app (Windows) or Jamf Self Service (macOS), search for "XNAT-Interact", and
+app (Windows) or Jamf Self Service (macOS), search for “XNAT-Interact”, and
 click Install. No admin password or terminal is required. Your machine
 receives updates automatically through the same catalog.
 
@@ -64,7 +64,7 @@ For full installation details, see the
 The XNAT server is only reachable through the UIowa Cisco VPN. If the app
 cannot connect, check your VPN connection first before anything else.
 
-**The server's SSL certificate is renewed every year.**
+**The server’s SSL certificate is renewed every year.**
 If you see an SSL certificate error when the app tries to connect, the
 certificate may have lapsed. Contact the Data Librarian — the certificate
 renewal is an administrator task and cannot be resolved on your end. Once it
@@ -82,6 +82,11 @@ You can also [open an issue on GitHub](https://github.com/domattioli/XNAT-Intera
 for software bugs or general questions.
 
 ---
+
+## See the application
+
+Eight screens of the desktop app, captured from the live application running
+against a real XNAT server: [The XNAT-Interact UI, screen by screen](ui-demo.html).
 
 ## How we know it works
 

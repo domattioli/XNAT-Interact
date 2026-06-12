@@ -4,7 +4,7 @@
 
 ## Summary
 
-Build a **local Streamlit app** that runs on the student’s VPN-connected machine
+Build a **local Streamlit app** that runs on the student's VPN-connected machine
 and opens in a browser, giving a friendly **login → browse → upload → download**
 experience over the **already-tested Phase 1 service layer** (`src/services/`).
 The GUI renders existing logic; it does not re-implement it. Deliver as a

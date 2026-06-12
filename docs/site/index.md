@@ -21,7 +21,7 @@ You need three things in place before you open the app for the first time:
 
 **① Get an XNAT account**
 Register at the UIowa XNAT portal using your HawkID. Contact the **Data
-Librarian** (your lab’s designated point of contact) to get the registration
+Librarian** (your lab's designated point of contact) to get the registration
 link and to be officially added to your research project. You cannot log in
 until both steps are done.
 
@@ -64,7 +64,7 @@ For full installation details, see the
 The XNAT server is only reachable through the UIowa Cisco VPN. If the app
 cannot connect, check your VPN connection first before anything else.
 
-**The server’s SSL certificate is renewed every year.**
+**The server's SSL certificate is renewed every year.**
 If you see an SSL certificate error when the app tries to connect, the
 certificate may have lapsed. Contact the Data Librarian — the certificate
 renewal is an administrator task and cannot be resolved on your end. Once it

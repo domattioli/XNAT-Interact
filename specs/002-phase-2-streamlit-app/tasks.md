@@ -61,7 +61,7 @@ burned-in-PHI review step. Tests REQUIRED (Constitution IV).
   expired-cert / missing-project via `FakeXNAT` → friendly panel + recourse, no
   traceback (SC-002).
 - [ ] T016 [US1] [P] `tests/test_app_browse.py`: table search/filter renders the
-  fake’s cases; thumbnail appears on selection; empty-server state.
+  fake's cases; thumbnail appears on selection; empty-server state.
 - [ ] T017 [US1] `tests/test_app_upload_single.py`: form options come from
   `ConfigTables`; PHI gate **blocks upload until confirmed** (SC-003); confirmed
   upload records expected gateway calls; local PHI cleaned up.

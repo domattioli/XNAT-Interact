@@ -61,3 +61,5 @@ Append-only; one line per lane run: `<date> <phase> <result> <evidence-path>`.
 2026-06-12 P3-malformed RERUN post-fix: truncated/not_a_dicom/three_channel -> FRIENDLY (named offender, no crash); others ACCEPTED — lane fully green behavior
 2026-06-12 P6-dedup WIRED+GREEN live: exact/subset/superset/partial -> DedupReviewRequired (reject), disjoint -> accept; root cause of historic dead gate = unwired kwargs + lowercase/uppercase hash mismatch (config.add_new_item uppercases; ImageHash lowercase) -> intersection always empty
 2026-06-12 FINAL suite 1276 passed / 0 failed / 7 xfailed; campaign phases P0-P8 complete
+2026-06-12 P5-annotations live round-trip PASS: upload v1 (2 annotators, RLE blobs+manifest) -> download byte-equal -> v2 upload; #33 M6 CONFIRMED live (manifest indexes only latest version; v1 blobs orphaned on server)
+2026-06-12 FIX #3 main.py preview query -> REST /data/experiments?project= (handles rf+mr mixed per #39; esv search would crash stock XNAT); subjectData positional merge removed; latent raise-FriendlyError-dataclass bug fixed; live 12 rows STRESS_VOL; suite 1284/0

@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-06-12T07:23:08.508666",
+  "surgeries": 2,
+  "frames": 3,
+  "project": "SMOKE_DRV",
+  "publishes": [
+    {
+      "uid": "STRESS_V_0001",
+      "ok": true,
+      "error": null,
+      "seconds": 1.0690689086914062,
+      "n_files": 3
+    },
+    {
+      "uid": "STRESS_V_0002",
+      "ok": false,
+      "error": "SourceRFSession is_valid=False",
+      "seconds": 0.0,
+      "n_files": 3
+    }
+  ],
+  "empty_shells": [],
+  "inventory": {
+    "subjects_count": 4,
+    "experiments_count": 4,
+    "per_subject_file_counts": {
+      "Xnat4Tests_S00001": 1,
+      "Xnat4Tests_S00002": 1,
+      "Xnat4Tests_S00003": 1,
+      "Xnat4Tests_S00004": 1
+    }
+  }
+}

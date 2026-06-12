@@ -1,0 +1,34 @@
+{
+  "timestamp": "2026-06-12T08:07:29.278850",
+  "surgeries": 2,
+  "frames": 3,
+  "project": "STRESS_VOL",
+  "publishes": [
+    {
+      "uid": "STRESS_V_0001",
+      "ok": true,
+      "error": null,
+      "seconds": 0.7588224411010742,
+      "n_files": 3
+    },
+    {
+      "uid": "STRESS_V_0002",
+      "ok": true,
+      "error": null,
+      "seconds": 0.7568609714508057,
+      "n_files": 3
+    }
+  ],
+  "empty_shells": [
+    "Xnat4Tests_S00050",
+    "Xnat4Tests_S00049"
+  ],
+  "inventory": {
+    "subjects_count": 2,
+    "experiments_count": 2,
+    "per_subject_file_counts": {
+      "Xnat4Tests_S00050": 0,
+      "Xnat4Tests_S00049": 0
+    }
+  }
+}

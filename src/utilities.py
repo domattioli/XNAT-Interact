@@ -913,10 +913,10 @@ class ConfigTables( UIDandMetaInfo ):
         def serialize( obj, depth=0 ):
             if isinstance( obj, dict ):
                 items = [f'\n{" " * (depth + indent)}"{k}": {serialize(v, depth + indent)}' for k, v in obj.items()]
-                return f'{{{','.join(items)}\n{" " * depth}}}'
+                return f'{{{{",".join(items)}}\n{" " * depth}}}'
             elif isinstance( obj, list ):
                 items = [serialize(v, depth) for v in obj]  # Keep depth unchanged for arrays
-                return f'[{', '.join(items)}]'
+                return f'[{", ".join(items)}]'
             elif isinstance( obj, str ):    return json.dumps( obj )
             else:                           return str( obj )
         return serialize( data )
@@ -938,7 +938,7 @@ class ConfigTables( UIDandMetaInfo ):
         temp_dir = tempfile.mkdtemp()
         try:
             temp_ffn = str(Path(temp_dir) / write_fn)
-            with open( temp_ffn, 'w' ) as f:            json.dump( f, f, indent=2, separators=( ',', ':' ) )
+            with open( temp_ffn, 'w' ) as f:            json.dump( data, f, indent=2, separators=( ',', ':' ) )
 
             # Push that to xnat (filename is what goes on server, temp_ffn is local source)
             self.xnat_connection.gateway.put_file( _conventions.project_qs( self.xnat_connection.xnat_project_name ), self.xnat_backups_folder_name, write_fn, temp_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
@@ -950,3 +950,480 @@ class ConfigTables( UIDandMetaInfo ):
                 return None, write_fn
         finally:
             shutil.rmtree( temp_dir, ignore_errors=True )
+    
+    def _fingerprint_file( self, ffn ) -> str:
+        """Return hex-encoded sha256 of the bytes at *ffn* (str or Path)."""
+        with open( ffn, 'rb' ) as _f:   return hashlib.sha256( _f.read() ).hexdigest()
+
+    def pull_from_xnat( self, write_ffn: Opt[Path]=None, verbose: Opt[bool]=True ) -> Opt[Path]:
+        _proj_qs = _conventions.project_qs( self.xnat_connection.xnat_project_name )
+        if write_ffn is None:   write_ffn = self.xnat_connection.gateway.get_file_copy( _proj_qs, self.xnat_config_folder_name, self.config_fn, self.config_ffn )
+        else:
+            assert isinstance( write_ffn, Path ), f"Provided write file path must be a valid Path object: {write_ffn}"
+            assert write_ffn.suffix == '.json', f"Provided write file path must have a '.json' extension: {write_ffn}"
+            write_ffn = self.xnat_connection.gateway.get_file_copy( _proj_qs, self.xnat_config_folder_name, self.config_fn, write_ffn )
+        self._load( write_ffn, verbose )
+        if verbose:                     print( f'\t...ConfigTables successfully populated from XNAT data.\n' )
+
+        # Capture a fingerprint of the downloaded bytes so push_to_xnat can
+        # detect if the server copy changed between our download and our upload.
+        self._server_fingerprint_at_load = self._fingerprint_file( write_ffn )
+
+        self._reinitialize_tables_with_extra_columns()
+        return write_ffn
+
+
+    def ensure_primary_keys_validity( self ) -> None:
+        '''Ensure that Subjects found in Image Hashes table are also found in the Subjects table.
+        TBD...
+        '''
+        # # Test 1: Ensure that all subjects in the Image Hashes table are also in the Subjects table
+        # unique_referenced_subject_uids = self._tables['IMAGE_HASHES']['SUBJECT'].unique()
+        # unique_subjects = self.list_of_all_items_in_table( 'SUBJECTS' )
+        # assert sorted( unique_referenced_subject_uids ) == sorted(unique_subjects ), 'The unique subjects in the IMAGE_HASHES table do not match the unique subjects in the SUBJECTS table'
+        # # Test 2: Ensure ...
+        pass
+
+
+    def _check_for_lost_update( self ) -> None:
+        """
+        Re-fetch the current server copy and compare its fingerprint to the one
+        captured when we last called pull_from_xnat.  If they differ, someone
+        else has modified the shared catalog since we loaded it, and we MUST NOT
+        silently overwrite their work.
+
+        Raises
+        ------
+        FriendlyError  (as ValueError)
+            When the server copy has changed since our download, preventing a
+            silent lost-update clobber.
+
+        TODO (follow-up issue): implement true optimistic locking or an
+        interactive merge helper so users can reconcile concurrent edits instead
+        of having to discard their own changes and re-apply them manually.
+        """
+        baseline = getattr( self, '_server_fingerprint_at_load', None )
+        if baseline is None:
+            # No fingerprint recorded (e.g. first-time init path that never
+            # called pull_from_xnat).  Skip the check — nothing to compare.
+            return
+
+        # Download the current server copy to a temporary file.
+        import tempfile as _tempfile
+        with _tempfile.NamedTemporaryFile( suffix='.json', delete=False ) as _tmp:
+            _tmp_path = _tmp.name
+        try:
+            self.xnat_connection.gateway.get_file_copy(
+                _conventions.project_qs( self.xnat_connection.xnat_project_name ),
+                self.xnat_config_folder_name,
+                self.config_fn,
+                _tmp_path,
+            )
+            current_fingerprint = self._fingerprint_file( _tmp_path )
+        finally:
+            if os.path.exists( _tmp_path ):     os.remove( _tmp_path )
+
+        if current_fingerprint != baseline:
+            from src.services.errors import FriendlyError
+            fe = FriendlyError(
+                title="Shared catalog changed since you loaded it",
+                message=(
+                    "The shared catalog (MetaTables.json) was modified by someone else "
+                    "after you downloaded it. Saving now would silently overwrite their "
+                    "work. Your local changes have NOT been saved to the server."
+                ),
+                recourse=[
+                    "Call pull_from_xnat() to reload the latest version from the server.",
+                    "Re-apply your edits on top of the freshly-loaded copy.",
+                    "Then call push_to_xnat() again.",
+                    "Contact the Data Librarian if you need help merging concurrent edits.",
+                ],
+            )
+            raise LostUpdateError( f"{fe.title}: {fe.message}" )
+
+    def push_to_xnat( self, verbose: Opt[bool]=True ) -> bool:
+        # Create a backup before we do anything.
+        _, out = self.create_backup( verbose=verbose )
+        try:
+            self.ensure_primary_keys_validity()
+            if self.save( verbose ) is False:   return False
+            # T029: detect-and-refuse lost-update before overwriting the server copy.
+            self._check_for_lost_update()
+            #
+            _proj_qs = _conventions.project_qs( self.xnat_connection.xnat_project_name )
+            self.xnat_connection.gateway.put_file( _proj_qs, self.xnat_config_folder_name, self.config_fn, self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
+            # H4: refresh fingerprint so a second push in the same session compares
+            # against the just-written content, not the pre-first-push baseline.
+            self._server_fingerprint_at_load = self._fingerprint_file( self.config_ffn )
+            if verbose:                     print( f'\t...ConfigTables (config.json) successfully updated on XNAT!\n' )
+            return True
+        except LostUpdateError:
+            # H3: lost-update is a distinct signal — callers must be able to tell
+            # it apart from a generic network/save failure.  Re-raise as-is.
+            raise
+        except Exception as e:
+            # Delete the backupfile
+            _proj_qs = _conventions.project_qs( self.xnat_connection.xnat_project_name )
+            if out is not None:     self.xnat_connection.gateway.delete_file( _proj_qs, self.xnat_backups_folder_name, out )
+            print( f'\tERROR! --- Failed to push ConfigTables to XNAT server. Error message: {e}\n' )
+            return False
+
+
+    def save( self, verbose: Opt[bool]=True ) -> bool: # Convert all tables to JSON; Write the data to the file
+        '''Only saves locally. To save to the server, all the 'catalog_new_data' method(s) in the experiment class(es) must be called.'''
+        try:
+            self._validate_login_for_important_functions( assert_librarian=False ) # To-do: is this necessary if the user musts create a valid xnat connection first (which should check the same thing)?
+            tables_json = {name: df.to_dict( 'records' ) for name, df in self.tables.items()}
+            data = {'metadata': self.metadata, 'tables': tables_json }
+            # json_str = json.dumps( data, indent=2, separators=( ',', ':' ) )
+            json_str = self._custom_json_serializer( data )
+            with open( self.config_ffn, 'w' ) as f:         f.write( json_str )
+            if verbose:                         print( f'\tSUCCESS! --- saved ConfigTables to: {self.config_ffn}\n' )
+            return True
+        except Exception as e:
+            print( f'\tERROR! --- Failed to save ConfigTables to: {self.config_ffn}. Error message: {e}\n' )
+            return False
+
+
+    def is_user_registered( self, user_name: Opt[str]=None ) -> bool:
+        """
+        Check if a user is registered in the system.
+
+        Args:
+            username (str): The username to check.
+
+        Returns:
+            bool: True if the user is registered, False otherwise.
+        """
+        '''Note that this will automatically capitalize the inputted user_name.'''
+        if user_name is None:   user_name = self.accessor_username
+        return user_name.upper() in self.tables['REGISTERED_USERS']['NAME'].values
+
+
+    def register_new_user( self, user_name: str, verbose: Opt[bool]=True ) -> bool:
+        try:
+            self._validate_login_for_important_functions( assert_librarian=True )   
+            if not self.is_user_registered( user_name ):
+                self.add_new_item( 'REGISTERED_USERS', user_name )
+            if verbose:                     print( f'\tSUCCESS! --- Registered new user: {user_name}\n' )
+            return True
+        except Exception as e:
+            print( f'\tERROR! --- Failed to register new user: {user_name}. Error message: {e}\n' )
+            return False
+
+
+    def list_of_all_tables( self ) -> list:                             return list( self.tables.keys() )
+
+
+    def list_of_all_items_in_table( self, table_name: str ) -> list:
+        """
+        List all items in the specified metadata table.
+
+        Args:
+            table_name (str): The name of the table.
+
+        Returns:
+            List[str]: A list of all items in the specified table.
+        """
+        if table_name.upper() in self.tables and not self.tables[table_name.upper()].empty:
+            return list (self.tables[table_name.upper()]['NAME'] )
+        else:   return [] # Return an empty list if the table does not exist or is empty
+            
+
+    def table_exists( self, table_name: str ) -> bool:                  return table_name.upper() in self.list_of_all_tables()
+
+
+    def item_exists( self, table_name: str, item_name: str ) -> bool:
+        table = self.tables[table_name.upper()]
+        if 'NAME' in table.columns:
+            return not table.empty and item_name.upper() in table['NAME'].str.upper().values
+        return False
+
+
+    def add_new_table( self, table_name: str, extra_column_names: Opt[typehintList[str]] = None, verbose: Opt[bool] = True ) -> None:
+        assert self.is_user_registered(), f"User '{self.accessor_username}' must first be registed before adding new items."
+        table_name = table_name.upper()
+        assert not self.table_exists( table_name ), f'Cannot add table "{table_name}" because it already exists.'
+        self._tables[table_name] = self._init_table_w_default_cols()
+        if extra_column_names: # checks if it is not None and if the dict is not empty
+            for c in extra_column_names: 
+                self._tables[table_name][c.upper()] = pd.Series( [None] * len( self._tables[table_name] ) ) # don't forget to convert new column name to uppercase
+            self._update_metadata( new_table_extra_columns={table_name: extra_column_names} )
+        else:
+            self._update_metadata()
+        if verbose:                     print( f'\tSUCCESS! --- Added new "{table_name}" table.\n' )
+
+
+    def add_new_item( self, table_name: str, item_name: str, item_uid: Opt[str] = None, extra_columns_values: Opt[typehintDict[str, str]] = None, verbose: Opt[bool] = True ) -> Tuple[bool, str]:
+        table_name, item_name = table_name.upper(), item_name.upper()
+        assert self.is_user_registered(), f"User '{self.accessor_username}' must first be registed before adding new items."
+        assert self.table_exists( table_name ), f"Cannot add item '{item_name}' to table '{table_name}' because that table does not yet exist.\n\tTry creating the new table before adding '{item_name}' as a new item."
+        if self.item_exists( table_name, item_name ):
+            success, out_str = False, f'\tWARNING! --- Cannot add item "{item_name}" because it already exists in Table "{table_name}".'
+        else:   # Ensure all provided extra column names exist in the table, considering case-insensitivity
+            if extra_columns_values:    extra_columns_values = {k.upper(): v for k, v in extra_columns_values.items()}
+            table_columns_upper = [col.upper() for col in self.tables[table_name].columns]
+            assert extra_columns_values is None or all( k in table_columns_upper for k in extra_columns_values.keys()), f"Provided extra column names '{extra_columns_values.keys()}' must exist in table '{table_name}'"
+
+            # Create a uid for the item if one was not provided already.
+            if item_uid is None:        new_item_uid = self.generate_uid()
+            else:
+                assert self.is_valid_pydcom_uid( item_uid ), f"Provided uid '{item_uid}' is not a valid dicom UID."
+                new_item_uid = item_uid
+
+            # Add the new row to the table, using the default columns and the extra columns if provided
+            if extra_columns_values:    new_data = pd.DataFrame( [ [item_name, new_item_uid, self.now_datetime, self.accessor_uid] + list( extra_columns_values.values() ) ], columns=self.tables[table_name].columns)
+            else:                       new_data = pd.DataFrame( [ [item_name, new_item_uid, self.now_datetime, self.accessor_uid] ], columns=self.tables[table_name].columns )
+            
+            self._tables[table_name] = pd.concat( [self.tables[table_name], new_data], ignore_index=True )
+            self._update_metadata()
+            success, out_str = True, f'\tSUCCESS! --- Added "{item_name}" to table "{table_name}".'
+
+            # T006: write-through to registry for overlapping tables.
+            # Additive-only; never raises; JSON is still the source of truth.
+            if success and self._registry is not None:
+                try:
+                    _tn = table_name  # already uppercased above
+                    if _tn == 'IMAGE_HASHES':
+                        _subj = None
+                        if extra_columns_values:
+                            _subj = (extra_columns_values.get('SUBJECT') or
+                                     extra_columns_values.get('subject'))
+                        _inst = None
+                        if extra_columns_values:
+                            _raw_inst = (extra_columns_values.get('INSTANCE_NUM') or
+                                         extra_columns_values.get('instance_num'))
+                            if _raw_inst is not None:
+                                try:
+                                    _inst = int(_raw_inst)
+                                except (TypeError, ValueError):
+                                    _inst = None
+                        _case_key = _subj.upper() if _subj else None
+                        # Attempt upsert with case_key; if FK fails (case not yet
+                        # registered in registry), retry with case_key=None so the
+                        # hash is still recorded (additive, never blocks).
+                        try:
+                            self._registry.upsert_image_hash(
+                                item_name,
+                                case_key=_case_key,
+                                instance_number=_inst,
+                            )
+                        except Exception:  # noqa: BLE001
+                            self._registry.upsert_image_hash(
+                                item_name,
+                                case_key=None,
+                                instance_number=_inst,
+                            )
+                    elif _tn == 'SUBJECTS':
+                        _acq = None
+                        _grp = None
+                        if extra_columns_values:
+                            _acq = (extra_columns_values.get('ACQUISITION_SITE') or
+                                    extra_columns_values.get('acquisition_site'))
+                            _grp = (extra_columns_values.get('GROUP') or
+                                    extra_columns_values.get('group'))
+                        self._registry.upsert_case(
+                            item_name,
+                            procedure=_grp,
+                            device=_acq,
+                        )
+                    elif _tn == 'SURGEONS':
+                        self._registry.upsert_surgeon(item_name)
+                except Exception:  # noqa: BLE001 — fail-soft
+                    pass
+
+        if verbose:                     print( out_str )
+        return success, out_str
+    
+
+    def get_uid( self, table_name: str, item_name: str ) -> str:
+        table_name, item_name = table_name.upper(), item_name.upper()
+        assert self.item_exists( table_name, item_name ), f"Item '{item_name}' does not exist in table '{table_name}'"
+        return str( self.tables[table_name].loc[self.tables[table_name]['NAME'] == item_name, 'UID'].values[0] )
+
+
+    def get_name( self, table_name: str, item_uid: str ) -> str:
+        table_name, item_uid = table_name.upper(), item_uid.upper()
+        assert self.item_exists( table_name, item_uid ), f"Item '{item_uid}' does not exist in table '{table_name}'"
+        return str( self.tables[table_name].loc[self.tables[table_name]['UID'] == item_uid, 'NAME'].values[0] )
+
+
+    def get_table( self, table_name: str ) -> pd.DataFrame:
+        table_name = table_name.upper()
+        assert self.table_exists( table_name ), f"Table '{table_name}' does not exist."
+        return self.tables[table_name]
+
+
+    def __str__( self ) -> str:
+        output = [f'\n-- ConfigTables --\n\tAccessed by:\t{self.accessor_username}']
+        output.append( f'\t*Last Modified:\t{self.metadata["LAST_MODIFIED"]}')
+        table_info = pd.DataFrame(columns=['Table Name', '# Items', '# Columns'])
+        for table_name, table_data in self.tables.items():
+            new_row_df = pd.DataFrame([[table_name, len(table_data), len(table_data.columns)]], 
+                                    columns=['Table Name', '# Items', '# Columns'])
+            table_info = pd.concat([table_info, new_row_df], ignore_index=True)
+        output.append( '\n'.join('\t' + line for line in table_info.to_string( index=False ).split('\n') ) )
+        return '\n'.join( output )
+
+
+#--------------------------------------------------------------------------------------------------------------------------
+## Class for ensuring common formatting of date-time strings.
+class USCentralDateTime():
+    '''
+    # Convert to us central standard time.
+    # Example usage:
+    tst1 = USCentralDateTime( '2022-01-01 11:00:00 PST' )
+    print( tst1 )
+    print( 'USCentral Date: ' + tst1.date + ', time: ' + tst1.time )
+    print( USCentralDateTime( 'nonsense time o\'clock' ) )
+    '''
+    def __init__( self, dt_str: Opt[str] = None ):
+        if dt_str is None:    dt_str = '1900-01-01 00:00:00'
+        self._date, self._time, self._dt = '', '', None
+        self._raw_dt_str = dt_str
+        self._parse_date_time()
+
+
+    def _parse_date_time( self ):
+        tzinfos = {'PST': -8 * 3600}
+        dt = parser.parse( self._raw_dt_str, fuzzy=True, tzinfos=tzinfos )
+        if dt.tzinfo is None or dt.tzinfo.utcoffset( dt ) is None:
+            dt = dt.replace( tzinfo=pytz.timezone( 'US/Central' ) )
+        self._dt = dt.astimezone( pytz.timezone( 'US/Central') )
+
+
+    @property
+    def date( self )    -> str:     return self.dt.date().strftime( '%Y%m%d' )
+    @property
+    def time( self )    -> str:     return self.dt.time().strftime( '%H%M%S.%f' )[:-3]
+    @property
+    def dt( self )      -> datetime:return self._dt # type: ignore
+    @property
+    def dt_str( self )  -> str:     return str( self.dt.strftime( '%Y-%m-%d %H:%M:%S.%f' ) ) + ' US-CST'
+
+
+    def __str__( self ) -> str:     return f'{self.dt} US-CST'
+
+
+#--------------------------------------------------------------------------------------------------------------------------
+# Class for representing images as unique hashes.
+class ImageHash( UIDandMetaInfo ):
+    '''ImageHash()
+    A class for creating a unique hash for an image. A list of seen-hashes will allow us to prevent duplicate images in the db.
+        - Cataloging of the hashes is done elsewhere.
+
+    Hashes are computed through the following algorithm:
+    1.  Ensure/convert to grayscale
+    2.  Convert to uint8 (normalize to 0-255 pixel values)
+        - Currently supported types are signed- and unsigned-int8, 16, 32, and 64 bits.
+            - Floats are not supported. Not sure how to handle them.
+        - We want to convert images down to uint8 to account for possible outside-transformation of images.
+            - Don't want ImageHash( np.int16( img ) ) != ImageHash( np.float32( img ) )
+    3. Resize to 256x256.
+        - Some of our images derived from the same performance can look to similar
+            - Don't want to risk generating the same hash by downsampling too much.
+    
+    To-do: If need be, revisit the init to require only an image ffn so we can use cv2 ro imread it into a predictable way, i.e., rgb not bgr.
+
+    # Example usage:
+    tst1 = ImageHash( reference_table( XNatLogin( {...} ) ) ) # computes hash using the template dicom image stored in the UIDandMetaInfo attributes.
+    tst2 = ImageHash( reference_table( XNatLogin( {...} ) ), np.uint32( tst1.raw_img ) )
+    tst3 = ImageHash( reference_table( XNatLogin( {...} ) ), np.int16(  tst1.raw_img ) )
+    print( tst1 )
+    print( tst2 )
+    print( tst3 )
+    print( 'All hash strings the same:', tst1.hash_str == tst1.hash_str and tst1.hash_str == tst3.hash_str and tst2.hash_str == tst3.hash_str )
+    '''
+    def __init__( self, reference_table: Opt[ConfigTables]=None, img: Opt[np.ndarray] = None ):
+        super().__init__()  # Call the __init__ method of the base class
+        self._validate_input( img )
+        self._processed_img, self._gray_img, self._hash_str  = self.dummy_image(), self.dummy_image(), ''
+        self._ConfigTables, self._in_img_hash_metatable = reference_table, False
+        self._convert_to_grayscale()
+        self._normalize_and_convert_to_uint8()
+        self._resize_image()
+        self._compute_hash_str()
+        if self.ConfigTables is not None and isinstance( self.ConfigTables, ConfigTables ):
+            self._check_img_hash_metatable()
+    
+
+    @property
+    def raw_img( self )                 -> np.ndarray:                      return self._raw_img
+    @property
+    def gray_img_bit_depth( self )      -> int:
+        assert self.gray_img is not None, f'Raw image must be defined before checking bit depth.'
+        gray_img_dtype = self.gray_img.dtype
+        if gray_img_dtype   in ( np.uint8, np.int8 ):
+            return 8
+        elif gray_img_dtype in ( np.uint16, np.int16 ):
+            return 16
+        elif gray_img_dtype in ( np.uint32, np.int32, np.float32 ):
+            return 32
+        elif gray_img_dtype in ( np.uint64, np.int64, np.float64 ):
+            return 64
+        else:
+            raise ValueError( f'Unsupported/unexpected bit depth: {gray_img_dtype}' )
+    @property
+    def gray_img( self )                -> np.ndarray:                      return self._gray_img
+    @property
+    def processed_img( self )           -> np.ndarray:                      return self._processed_img
+    @property
+    def hash_str( self )                -> str:                             return self._hash_str
+    @property
+    def ConfigTables( self )            -> Opt[Union[ConfigTables, list]]:  return self._ConfigTables
+    @property
+    def in_img_hash_metatable( self )   -> bool:                            return self._in_img_hash_metatable
+    
+
+    def _validate_input( self, img: Opt[np.ndarray] = None ):
+        if img is None:
+            self._raw_img = self.template_img
+        else:
+            self._raw_img = img.astype( np.uint64 ).copy()
+        assert self.raw_img.dtype in self.acceptable_img_dtypes, f'Bitdepth "{self.raw_img.dtype}" is unsupported; inputted image must be one of: {self.acceptable_img_dtypes}.'
+        assert 2 <= self.raw_img.ndim <= 3, f'Inputted image must be a 2D or 3D array.'
+
+
+    def _convert_to_grayscale( self ):
+        if len( self.raw_img.shape ) == 3:  # Ensure that the image is in grayscale
+            self._gray_img = np.mean( self.raw_img, axis=2 )
+            # self._processed_img = cv2.cvtColor( self.raw_img, cv2.COLOR_BGR2GRAY )
+        else:
+            self._gray_img = self.raw_img
+
+
+    def _normalize_and_convert_to_uint8( self ): # Normalize the image to the range 0-255
+        self._gray_img = cv2.normalize( self.gray_img, np.zeros( self.gray_img.shape, np.uint8 ), 0, 255, cv2.NORM_MINMAX ).astype( np.uint8 )
+
+
+    def _resize_image( self ):          self._processed_img = cv2.resize( self.gray_img, self.required_img_size_for_hashing )
+    
+
+    def _compute_hash_str( self ):
+        self._hash_str = hashlib.sha256( self.processed_img.tobytes() ).hexdigest() # alternatively: imagehash.average_hash( Image.fromarray( image ) )
+        assert self.hash_str is not None and len( self.hash_str ) == 64, f'Hash string must be 64 characters long.'
+    
+
+    def _check_img_hash_metatable( self ): # check if it exists in the config data
+        assert self.processed_img.shape == self.required_img_size_for_hashing, f'Processed image must be of size {self.required_img_size_for_hashing} (is currently size {self.processed_img.shape}).'
+        if isinstance( self.ConfigTables, ConfigTables ):   self._in_img_hash_metatable = self.ConfigTables.item_exists( table_name='IMAGE_HASHES', item_name=self.hash_str )
+        else:                                               self._in_img_hash_metatable = False
+    
+
+    def __str__( self ) -> str:
+        return f"-- ImageHash --\n\nShape:\t{self.processed_img.shape}\nDType:\t{self.processed_img.dtype}\t(min: {np.min(self.processed_img)}, max: {np.max(self.processed_img)})\nHash:\t{self.hash_str}\tIn ConfigTables:\t{self.in_img_hash_metatable}"
+
+
+    def plot( self ):
+        fig, ax = plt.subplots()
+        ax.imshow( self.processed_img, cmap='gray' )
+        ax.set_title( self.hash_str) 
+        ax.axis('off')
+        plt.show()
+
+    def dummy_image( self ) -> np.ndarray:
+        return np.full( self.required_img_size_for_hashing, np.nan )
+
+
+
+    

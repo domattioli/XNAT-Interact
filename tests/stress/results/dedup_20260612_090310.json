@@ -1,13 +1,13 @@
 {
-  "timestamp": "2026-06-12T08:44:37.652106",
-  "project": "DEDUP_WIRED",
+  "timestamp": "2026-06-12T09:03:00.894365",
+  "project": "DEDUP_WIRED5",
   "test_cases": [
     {
       "case": "exact",
       "uid": "DEDUP_EXACT",
       "expected": "reject",
-      "observed": "accept",
-      "dedup_review_required": false,
+      "observed": "reject",
+      "dedup_review_required": true,
       "error": null,
       "empty_shells_before": [],
       "empty_shells_after": []
@@ -16,8 +16,8 @@
       "case": "subset",
       "uid": "DEDUP_SUBSET",
       "expected": "reject",
-      "observed": "accept",
-      "dedup_review_required": false,
+      "observed": "reject",
+      "dedup_review_required": true,
       "error": null,
       "empty_shells_before": [],
       "empty_shells_after": []
@@ -26,8 +26,8 @@
       "case": "superset",
       "uid": "DEDUP_SUPERSET",
       "expected": "reject",
-      "observed": "accept",
-      "dedup_review_required": false,
+      "observed": "reject",
+      "dedup_review_required": true,
       "error": null,
       "empty_shells_before": [],
       "empty_shells_after": []
@@ -36,8 +36,8 @@
       "case": "partial",
       "uid": "DEDUP_PARTIAL",
       "expected": "reject",
-      "observed": "accept",
-      "dedup_review_required": false,
+      "observed": "reject",
+      "dedup_review_required": true,
       "error": null,
       "empty_shells_before": [],
       "empty_shells_after": []

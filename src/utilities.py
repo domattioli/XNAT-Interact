@@ -130,7 +130,7 @@ class _local_variables:
                                                             "Epic Start Time": "Time; Required; Official time on EPIC for the start time of the operation",
                                                             "Epic End Time": "Time; Optional",
                                                             "Side of Patient Body": "Text; Optional; [Unknown, Left, Right]",
-                                                            "OR Room Name/ Location": "Text; Optional",
+                                                            "OR Room Name/ Location": "Text; Optional", # Space after the slash is intentional -- for readability in the excel file.
                                                             "Supervising Surgeon HawkID": "Text; Optional",
                                                             "Supervising Surgeon Presence": "Text; Conditional; when HawkID is provided",
                                                             "Performing Surgeon HawkID": "Text; Required",
@@ -144,7 +144,7 @@ class _local_variables:
                                                             "Skills Assessment Requested": "Text; Required; [Y, N, Unknown]",
                                                             "Assessor HawkID": "Text; Required only if assessment requested",
                                                             "Additional Assessment Details": "Text; Conditional; only if assessment requested",
-                                                            "Name/ Type of Storage Device": "Text; Optional; eg., 'USB-A'",
+                                                            "Name/ Type of Storage Device": "Text; Optional; eg., 'USB-A'", # Space after the slash is intentional -- for readability in the excel file.
                                                             "Full Path to Data": "Text; Required; local path of data used when uploading",
                                                             "Was Radiology Contacted": "OText; ptional; [Y, N, Unknown]",
                                                             "Radiology Contact Date": "Date; Optional",

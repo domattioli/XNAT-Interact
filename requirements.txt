@@ -23,6 +23,10 @@ pyparsing
 python-dateutil
 pytz
 pyxnat
+# nibabel: NOT used directly, but pyxnat's derivatives module imports it unguarded at
+# Interface() construction (pyxnat/core/derivatives/bamos.py) -- without it main.py dies
+# with ModuleNotFoundError even though update_and_test.py reports success (issue #10).
+nibabel
 requests
 setuptools
 six

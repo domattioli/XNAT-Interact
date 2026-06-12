@@ -48,21 +48,27 @@ click Install. No admin password or terminal is required. Your machine
 receives updates automatically through the same catalog.
 
 **Fallback — signed self-served installer**
-If your machine is not ITS-managed, ask the Data Librarian for the signed
-installer link. Run it like any normal application installer — no admin
-rights or terminal required.
+If you are on a personal (BYOD) machine or a machine where the Software Center
+is not available, the Data Librarian can provide a link to a signed installer
+you download and run directly. The app installs to your user profile — no
+admin password needed.
+
+For full installation details, see the
+[Packaging and Delivery runbook](../PACKAGING.md).
 
 ---
 
 ## Heads up
 
-- **SSL certificate renewals:** the XNAT server certificate is renewed
-  annually. If the app reports an SSL error, contact the Data Librarian —
-  you cannot connect until it is renewed.
-- **Your password is never stored.** The app prompts for it each session and
-  sends it only to the XNAT server.
-- **De-identification happens on your machine.** Patient identifiers are
-  removed before anything is uploaded.
+**You must be on the VPN.**
+The XNAT server is only reachable through the UIowa Cisco VPN. If the app
+cannot connect, check your VPN connection first before anything else.
+
+**The server's SSL certificate is renewed every year.**
+If you see an SSL certificate error when the app tries to connect, the
+certificate may have lapsed. Contact the Data Librarian — the certificate
+renewal is an administrator task and cannot be resolved on your end. Once it
+is renewed, the app will connect normally.
 
 ---
 

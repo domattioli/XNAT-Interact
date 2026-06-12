@@ -607,3 +607,40 @@ def build_gateway(url: str, user: str, password: str) -> PyxnatGateway:
     PyxnatGateway
     """
     return PyxnatGateway(url=url, user=user, password=password)
+
+
+def build_server(url: str, user: str, password: str):
+    """
+    Build and return a connected pyxnat.Interface server handle.
+
+    Used by app/logic/auth.py's default connect factory. Unlike build_gateway()
+    which returns an XnatGateway ABC, this returns a raw pyxnat.Interface
+    compatible with the preflight checks (server.get('/')).
+
+    DECISION: Minimal path (sufficient for auth.py + browse.py/download.py).
+    Returns the connected Interface directly. The pyxnat.Interface object
+    already supports:
+      - server.select(qs) — QueryString selection (used by browse, download)
+      - server.get('/') — liveness check (used by auth)
+
+    Optional hooks (guarded by hasattr in caller code):
+      - server.list_subjects_with_labels(project) — not on Interface; caller guards
+      - server.label_for_subject(id) — not on Interface; caller guards
+      - server.file_count(...) — not on Interface; caller guards
+
+    Parameters
+    ----------
+    url:      Full XNAT server URL, e.g. ``https://rpacs.iibi.uiowa.edu/xnat/``
+    user:     XNAT username
+    password: XNAT password
+
+    Returns
+    -------
+    pyxnat.Interface — connected and authenticated to the server.
+
+    Raises
+    ------
+    Any exception raised by pyxnat.Interface() during connection or auth.
+    """
+    import pyxnat  # local import keeps the module importable without pyxnat installed
+    return pyxnat.Interface(server=url, user=user, password=password)

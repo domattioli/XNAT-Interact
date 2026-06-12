@@ -913,7 +913,7 @@ class ConfigTables( UIDandMetaInfo ):
         def serialize( obj, depth=0 ):
             if isinstance( obj, dict ):
                 items = [f'\n{" " * (depth + indent)}"{k}": {serialize(v, depth + indent)}' for k, v in obj.items()]
-                return f'{{",".join(items)}\n{" " * depth}}}'
+                return '{' + ",".join(items) + '\n' + " " * depth + '}'
             elif isinstance( obj, list ):
                 items = [serialize(v, depth) for v in obj]  # Keep depth unchanged for arrays
                 return f'[{", ".join(items)}]'
@@ -1275,7 +1275,7 @@ class USCentralDateTime():
     tst1 = USCentralDateTime( '2022-01-01 11:00:00 PST' )
     print( tst1 )
     print( 'USCentral Date: ' + tst1.date + ', time: ' + tst1.time )
-    print( USCentralDateTime( 'nonsense time o\'clock' ) )
+    print( USCentralDateTime( 'nonsense time o'clock' ) )
     '''
     def __init__( self, dt_str: Opt[str] = None ):
         if dt_str is None:    dt_str = '1900-01-01 00:00:00'
@@ -1423,7 +1423,3 @@ class ImageHash( UIDandMetaInfo ):
 
     def dummy_image( self ) -> np.ndarray:
         return np.full( self.required_img_size_for_hashing, np.nan )
-
-
-
-    

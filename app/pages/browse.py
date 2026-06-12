@@ -28,6 +28,50 @@ from src.services.config import AppConfig
 from src.services.errors import FriendlyError
 
 
+# --- Display mapping: maps COLUMNS keys to user-facing display names ---
+# scan_id is excluded (internal addressing field, not displayed)
+DISPLAY_MAP = {
+    "subject": "Subject",
+    "experiment": "Experiment",
+    "date": "Date",
+    "scan_type": "Scan Type",
+    "num_files": "# Files",
+}
+
+
+def _display_frame(filtered: list[dict]) -> object:
+    """
+    Convert filtered rows to a DataFrame with only display columns, properly named.
+
+    Selects the 5 user-facing columns in order (excludes scan_id),
+    then renames using DISPLAY_MAP.
+
+    Parameters
+    ----------
+    filtered : list[dict]
+        Rows from filter_rows, each with all COLUMNS keys.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with columns in display order, renamed for readability.
+        scan_id excluded.
+    """
+    import pandas as pd
+
+    # Build DataFrame from filtered rows
+    df = pd.DataFrame(filtered, columns=COLUMNS)
+
+    # Select only display columns in order
+    display_cols = ["subject", "experiment", "date", "scan_type", "num_files"]
+    df = df[display_cols]
+
+    # Rename to display names
+    df = df.rename(columns=DISPLAY_MAP)
+
+    return df
+
+
 def render() -> None:
     """Render the Browse XNAT Data page."""
     st.title("Browse XNAT Data")
@@ -110,11 +154,7 @@ def render() -> None:
 
     # --- Table ---
     if filtered:
-        # Reorder columns to match COLUMNS spec (subject, experiment, date, scan_type, num_files)
-        import pandas as pd
-        df = pd.DataFrame(filtered, columns=COLUMNS)
-        # Rename for display readability
-        df.columns = ["Subject", "Experiment", "Date", "Scan Type", "# Files"]
+        df = _display_frame(filtered)
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
         st.info("No rows match the current search filter.")

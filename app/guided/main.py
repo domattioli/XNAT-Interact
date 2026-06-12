@@ -95,7 +95,7 @@ def _render_authenticated() -> None:
         st.warning("🧪 DEMO MODE — synthetic data, no real XNAT server. Nothing here is real.")
 
     # Logout button
-    if st.button("�eb46 Log Out", key="btn_logout"):
+    if st.button("🚪 Log Out", key="btn_logout"):
         state.clear_auth()
         wizard_state.reset_wizard()
         st.rerun()

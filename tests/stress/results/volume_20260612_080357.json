@@ -1,0 +1,34 @@
+{
+  "timestamp": "2026-06-12T08:03:54.625627",
+  "surgeries": 2,
+  "frames": 3,
+  "project": "PZ_FIX",
+  "publishes": [
+    {
+      "uid": "STRESS_V_0001",
+      "ok": false,
+      "error": "OSError: [Errno 36] File name too long: '{\\n    \\"FORM_LAST_MODIFIED\\": \\"2026-06-12T03:03:54.728647-05:00\\",\\n    \\"SUBJECT_UID\\": \\"2_25_25363386288421175830179719127954565443\\",\\n    \\"FILER_HAWKID\\": \\"testuser\\",\\n    \\"FORM_AVAILABLE_FOR_PERFORMANCE\\": \\"False\\",\\n    \\"OPERATION_DATE\\": \\"2024-01-15\\",\\n    \\"SCAN_QUALITY\\": \\"usable\\",\\n    \\"SURGICAL_PROCEDURE_INFO\\": {\\n        \\"INSTITUTION_NAME\\": \\"UNIVERSITY_OF_IOWA_HOSPITALS_AND_CLINICS\\",\\n        \\"PROCEDURE_TYPE\\": \\"TRAUMA\\",\\n        \\"PROCEDURE_NAME\\": \\"INTRAMEDULLARY_NAIL-TIBIA\\",\\n        \\"EPIC_START_TIME\\": \\"08:00\\",\\n        \\"EPIC_END_TIME\\": \\"09:00\\",\\n        \\"PATIENT_SIDE\\": \\"RIGHT\\",\\n        \\"OR_LOCATION\\": \\"OR-1\\",\\n        \\"SUPERVISING_SURGEON_UID\\": \\"UNKNOWN\\",\\n        \\"SUPERVISING_SURGEON_PRESENCE\\": \\"PRESENT\\",\\n        \\"PERFORMING_SURGEON_UID\\": \\"UNKNOWN\\",\\n        \\"PERFORMER_YEAR_IN_RESIDENCY\\": \\"1\\",\\n        \\"PERFORMER_WAS_ASSISTED\\": \\"None\\",\\n        \\"PERFORMER_NUM_OF_SIMILAR_LOGGED_CASES\\": \\"0\\",\\n        \\"PERFORMANCE_ENUMERATED_TASK_PER_PERFORMER\\": \\"{\\'unknown\\': \\'lead\\'}\\",\\n        \\"LIST_UNUSUAL_FEATURES\\": \\"none\\",\\n        \\"DIAGNOSTIC_NOTES\\": \\"none\\",\\n        \\"MISC_PROCEDURE_COMMENTS\\": \\"none\\"\\n    },\\n    \\"SKILLS_ASSESSMENT_INFO\\": {\\n        \\"ASSESSMENT_TITLE\\": \\"N\\",\\n        \\"ASSESSOR_UID\\": \\"NOT-APPLICABLE\\",\\n        \\"ASSESSMENT_DETAILS\\": \\"none\\"\\n    },\\n    \\"STORAGE_DEVICE_INFO\\": {\\n        \\"STORAGE_DEVICE_NAME_AND_TYPE\\": \\"USB-A\\",\\n        \\"RELEVANT_FOLDER\\": \\"/tmp/stress_vol_0/STRESS_V_0001\\",\\n        \\"RADIOLOGY_CONTACT_DATE\\": \\"None\\",\\n        \\"RADIOLOGY_CONTACT_TIME\\": \\"None\\"\\n    }\\n}'",
+      "seconds": 0.840111494064331,
+      "n_files": 3
+    },
+    {
+      "uid": "STRESS_V_0002",
+      "ok": false,
+      "error": "OSError: [Errno 36] File name too long: '{\\n    \\"FORM_LAST_MODIFIED\\": \\"2026-06-12T03:03:55.581121-05:00\\",\\n    \\"SUBJECT_UID\\": \\"2_25_45243634510116309455978487917111981879\\",\\n    \\"FILER_HAWKID\\": \\"testuser\\",\\n    \\"FORM_AVAILABLE_FOR_PERFORMANCE\\": \\"False\\",\\n    \\"OPERATION_DATE\\": \\"2024-01-15\\",\\n    \\"SCAN_QUALITY\\": \\"usable\\",\\n    \\"SURGICAL_PROCEDURE_INFO\\": {\\n        \\"INSTITUTION_NAME\\": \\"UNIVERSITY_OF_IOWA_HOSPITALS_AND_CLINICS\\",\\n        \\"PROCEDURE_TYPE\\": \\"TRAUMA\\",\\n        \\"PROCEDURE_NAME\\": \\"INTRAMEDULLARY_NAIL-TIBIA\\",\\n        \\"EPIC_START_TIME\\": \\"08:00\\",\\n        \\"EPIC_END_TIME\\": \\"09:00\\",\\n        \\"PATIENT_SIDE\\": \\"RIGHT\\",\\n        \\"OR_LOCATION\\": \\"OR-1\\",\\n        \\"SUPERVISING_SURGEON_UID\\": \\"UNKNOWN\\",\\n        \\"SUPERVISING_SURGEON_PRESENCE\\": \\"PRESENT\\",\\n        \\"PERFORMING_SURGEON_UID\\": \\"UNKNOWN\\",\\n        \\"PERFORMER_YEAR_IN_RESIDENCY\\": \\"1\\",\\n        \\"PERFORMER_WAS_ASSISTED\\": \\"None\\",\\n        \\"PERFORMER_NUM_OF_SIMILAR_LOGGED_CASES\\": \\"0\\",\\n        \\"PERFORMANCE_ENUMERATED_TASK_PER_PERFORMER\\": \\"{\\'unknown\\': \\'lead\\'}\\",\\n        \\"LIST_UNUSUAL_FEATURES\\": \\"none\\",\\n        \\"DIAGNOSTIC_NOTES\\": \\"none\\",\\n        \\"MISC_PROCEDURE_COMMENTS\\": \\"none\\"\\n    },\\n    \\"SKILLS_ASSESSMENT_INFO\\": {\\n        \\"ASSESSMENT_TITLE\\": \\"N\\",\\n        \\"ASSESSOR_UID\\": \\"NOT-APPLICABLE\\",\\n        \\"ASSESSMENT_DETAILS\\": \\"none\\"\\n    },\\n    \\"STORAGE_DEVICE_INFO\\": {\\n        \\"STORAGE_DEVICE_NAME_AND_TYPE\\": \\"USB-A\\",\\n        \\"RELEVANT_FOLDER\\": \\"/tmp/stress_vol_1/STRESS_V_0002\\",\\n        \\"RADIOLOGY_CONTACT_DATE\\": \\"None\\",\\n        \\"RADIOLOGY_CONTACT_TIME\\": \\"None\\"\\n    }\\n}'",
+      "seconds": 0.7873084545135498,
+      "n_files": 3
+    }
+  ],
+  "empty_shells": [
+    "Xnat4Tests_S00043",
+    "Xnat4Tests_S00044"
+  ],
+  "inventory": {
+    "subjects_count": 2,
+    "experiments_count": 0,
+    "per_subject_file_counts": {
+      "Xnat4Tests_S00043": 0,
+      "Xnat4Tests_S00044": 0
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "timestamp": "2026-06-12T08:05:32.159896",
+  "surgeries": 2,
+  "frames": 3,
+  "project": "PZ_FIX",
+  "publishes": [
+    {
+      "uid": "STRESS_V_0001",
+      "ok": true,
+      "error": null,
+      "seconds": 0.7002744674682617,
+      "n_files": 3
+    },
+    {
+      "uid": "STRESS_V_0002",
+      "ok": true,
+      "error": null,
+      "seconds": 0.7465522289276123,
+      "n_files": 3
+    }
+  ],
+  "empty_shells": [
+    "Xnat4Tests_S00043",
+    "Xnat4Tests_S00044",
+    "Xnat4Tests_S00045",
+    "Xnat4Tests_S00046"
+  ],
+  "inventory": {
+    "subjects_count": 6,
+    "experiments_count": 0,
+    "per_subject_file_counts": {
+      "Xnat4Tests_S00043": 0,
+      "Xnat4Tests_S00044": 0,
+      "Xnat4Tests_S00045": 0,
+      "Xnat4Tests_S00046": 0,
+      "Xnat4Tests_S00047": 1,
+      "Xnat4Tests_S00048": 1
+    }
+  }
+}

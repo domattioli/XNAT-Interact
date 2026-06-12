@@ -41,3 +41,4 @@ Append-only; one line per lane run: `<date> <phase> <result> <evidence-path>`.
 2026-06-12 P3-happy push harness all 10 steps OK after nibabel install + XNAT_IDENTITY_SALT set; subject+experiment+scan+files on server PASS
 2026-06-12 P4-pull download_selection empty-scan_type row -> files_written=[] ok=False — #25/C1 residue CONFIRMED live
 2026-06-12 BUG xnat_resource_data.py:415 raise FriendlyError (dataclass) -> TypeError; fix in flight
+2026-06-12 P3-dual contract suite RUN_XNAT_DUAL=1: 24 passed vs live XNAT (fixture tears down container post-run)

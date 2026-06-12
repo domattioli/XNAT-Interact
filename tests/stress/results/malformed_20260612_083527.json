@@ -1,1 +1,60 @@
-{"timestamp": "2026-06-12T08:34:37.195032", "project": "STRESS_MAL2", "test_cases": [{"case": "truncated", "uid": "MAL_TRUNCATED", "outcome_class": "FRIENDLY", "error": "GatewayError: The following image files could not be read:\\n   • truncated: Unable to decode the pixel data as the dataset's 'file_meta' has no (0002,0010) 'Transfer Syntax UID\\nTraceback (most recent call last):\\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 377, in publish_surgery\\n    rf = SourceRFSession(intake_form=form, config=config)\\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \"/home/user/XNAT-Interact/src/xnat_experiment_data.py\", line 778, in __init__\\n  ", "accepted": false, "empty_shells_before": [], "empty_shells_after": []}, {"case": "no_instance_number", "uid": "MAL_NO_INSTANCE_NUMBER", "outcome_class": "ACCEPTED", "error": null, "accepted": true, "empty_shells_before": [], "empty_shells_after": []}, {"case": "three_channel", "uid": "MAL_THREE_CHANNEL", "outcome_class": "FRIENDLY", "error": "GatewayError: The following image files could not be read:\\n   • three_channel: Missing required element: (0028,0006) 'Planar Configuration'\\nTraceback (most recent call last):\\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 377, in publish_surgery\\n    rf = SourceRFSession(intake_form=form, config=config)\\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \"/home/user/XNAT-Interact/src/xnat_experiment_data.py\", line 778, in __init__\\n    self._populate_df( config=config )", "accepted": false, "empty_shells_before": [], "empty_shells_after": []}, {"case": "dup_private_tag", "uid": "MAL_DUP_PRIVATE_TAG", "outcome_class": "ACCEPTED", "error": null, "accepted": true, "empty_shells_before": [], "empty_shells_after": []}, {"case": "huge_surgery", "uid": "MAL_HUGE_SURGERY", "outcome_class": "ACCEPTED", "error": null, "accepted": true, "empty_shells_before": [], "empty_shells_after": []}, {"case": "not_a_dicom", "uid": "MAL_NOT_A_DICOM", "outcome_class": "FRIENDLY", "error": "GatewayError: The following image files could not be read:\\n   • not_a_dicom: Inputted file must be a dicom file: /tmp/stress_mal_not_a_dicom/MAL_NOT_A_DICOM/not_a_dicom.dcm\\nTraceback (most recent call last):\\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 377, in publish_surgery\\n    rf = SourceRFSession(intake_form=form, config=config)\\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \"/home/user/XNAT-Interact/src/xnat_experiment_data.py\", line 778, in __init__\\n    s", "accepted": false, "empty_shells_before": [], "empty_shells_after": []}]}
+{
+  "timestamp": "2026-06-12T08:34:37.195032",
+  "project": "STRESS_MAL2",
+  "test_cases": [
+    {
+      "case": "truncated",
+      "uid": "MAL_TRUNCATED",
+      "outcome_class": "FRIENDLY",
+      "error": "GatewayError: The following image files could not be read:\n  • truncated: Unable to decode the pixel data as the dataset's 'file_meta' has no (0002,0010) 'Transfer Syntax UID\nTraceback (most recent call last):\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 377, in publish_surgery\n    rf = SourceRFSession(intake_form=form, config=config)\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/user/XNAT-Interact/src/xnat_experiment_data.py\", line 778, in __init__\n  ",
+      "accepted": false,
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    },
+    {
+      "case": "no_instance_number",
+      "uid": "MAL_NO_INSTANCE_NUMBER",
+      "outcome_class": "ACCEPTED",
+      "error": null,
+      "accepted": true,
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    },
+    {
+      "case": "three_channel",
+      "uid": "MAL_THREE_CHANNEL",
+      "outcome_class": "FRIENDLY",
+      "error": "GatewayError: The following image files could not be read:\n  • three_channel: Missing required element: (0028,0006) 'Planar Configuration'\nTraceback (most recent call last):\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 377, in publish_surgery\n    rf = SourceRFSession(intake_form=form, config=config)\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/user/XNAT-Interact/src/xnat_experiment_data.py\", line 778, in __init__\n    self._populate_df( config=config )",
+      "accepted": false,
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    },
+    {
+      "case": "dup_private_tag",
+      "uid": "MAL_DUP_PRIVATE_TAG",
+      "outcome_class": "ACCEPTED",
+      "error": null,
+      "accepted": true,
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    },
+    {
+      "case": "huge_surgery",
+      "uid": "MAL_HUGE_SURGERY",
+      "outcome_class": "ACCEPTED",
+      "error": null,
+      "accepted": true,
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    },
+    {
+      "case": "not_a_dicom",
+      "uid": "MAL_NOT_A_DICOM",
+      "outcome_class": "FRIENDLY",
+      "error": "GatewayError: The following image files could not be read:\n  • not_a_dicom: Inputted file must be a dicom file: /tmp/stress_mal_not_a_dicom/MAL_NOT_A_DICOM/not_a_dicom.dcm\nTraceback (most recent call last):\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 377, in publish_surgery\n    rf = SourceRFSession(intake_form=form, config=config)\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/user/XNAT-Interact/src/xnat_experiment_data.py\", line 778, in __init__\n    s",
+      "accepted": false,
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    }
+  ]
+}

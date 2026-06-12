@@ -1,0 +1,34 @@
+{
+  "timestamp": "2026-06-12T07:32:26.925807",
+  "surgeries": 2,
+  "frames": 3,
+  "project": "XSI_FIX",
+  "publishes": [
+    {
+      "uid": "STRESS_V_0001",
+      "ok": false,
+      "error": "TypeError: quote_from_bytes() expected bytes\nTraceback (most recent call last):\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 394, in publish_surgery\n    rf.publish_to_xnat(\n  File \"/home/user/XNAT-Interact/src/xnat_experiment_data.py\", line 490, in publish_to_xnat\n    exp_inst.attrs.mset( {  f'xnat:experimentData/ACQUISITION_SITE': self.intake_form.acquisition_site, # type: ignore -- doesnt recognize .attrs attribute of exp_inst\n  File \"/usr/local/lib/python3.11/dist-packages/pyxnat/core/attributes.py\", line 101, in mset\n    query_str = '?xsiType=%s' % quote(self._get_datatype()) + ''.join(t)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/parse.py\", line 915, in quote\n    return quote_from_bytes(string, safe)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/parse.py\", line 945, in quote_from_bytes\n    raise TypeError(\"quote_from_bytes() expected bytes\")\nTypeError: quote_from_bytes() expected bytes\n",
+      "seconds": 0.39826250076293945,
+      "n_files": 3
+    },
+    {
+      "uid": "STRESS_V_0002",
+      "ok": false,
+      "error": "TypeError: quote_from_bytes() expected bytes\nTraceback (most recent call last):\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 394, in publish_surgery\n    rf.publish_to_xnat(\n  File \"/home/user/XNAT-Interact/src/xnat_experiment_data.py\", line 490, in publish_to_xnat\n    exp_inst.attrs.mset( {  f'xnat:experimentData/ACQUISITION_SITE': self.intake_form.acquisition_site, # type: ignore -- doesnt recognize .attrs attribute of exp_inst\n  File \"/usr/local/lib/python3.11/dist-packages/pyxnat/core/attributes.py\", line 101, in mset\n    query_str = '?xsiType=%s' % quote(self._get_datatype()) + ''.join(t)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/parse.py\", line 915, in quote\n    return quote_from_bytes(string, safe)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.11/urllib/parse.py\", line 945, in quote_from_bytes\n    raise TypeError(\"quote_from_bytes() expected bytes\")\nTypeError: quote_from_bytes() expected bytes\n",
+      "seconds": 0.3566000461578369,
+      "n_files": 3
+    }
+  ],
+  "empty_shells": [
+    "Xnat4Tests_S00021",
+    "Xnat4Tests_S00022"
+  ],
+  "inventory": {
+    "subjects_count": 2,
+    "experiments_count": 0,
+    "per_subject_file_counts": {
+      "Xnat4Tests_S00021": 0,
+      "Xnat4Tests_S00022": 0
+    }
+  }
+}

@@ -267,12 +267,24 @@ def download_selection(
                 )
                 scan_sel = server.select(scan_qs)
 
-                # Try pyxnat-style .resources() method if available
+                # Try pyxnat-style .resources() method if available.
+                # Prefer object-iteration + .label(): on real pyxnat (XNAT 1.9.3),
+                # resources().get() returns NUMERIC resource IDs (e.g. '76') and
+                # selecting .resource('76') silently enumerates ZERO files.
+                # Iterating yields resource objects whose .label() ('SRC') works.
                 if hasattr(scan_sel, "resources") and callable(scan_sel.resources):
                     try:
-                        resources_to_process = list(scan_sel.resources().get()) or []
+                        resources_to_process = [
+                            r.label() for r in scan_sel.resources() if hasattr(r, "label")
+                        ] or []
                     except Exception:
                         resources_to_process = []
+                    if not resources_to_process:
+                        # Fallback for test doubles whose resources() only supports .get().
+                        try:
+                            resources_to_process = list(scan_sel.resources().get()) or []
+                        except Exception:
+                            resources_to_process = []
 
                 # Fallback: use list_resources method if available
                 if not resources_to_process and hasattr(server, "list_resources") and callable(server.list_resources):
@@ -290,13 +302,13 @@ def download_selection(
                 if not resource_label:
                     continue
 
-                resource_qs = (
+                scan_qs = (
                     f"/projects/{project_name}/subjects/{subject}"
-                    f"/experiments/{experiment}/scans/{scan}/resources/{resource_label}"
+                    f"/experiments/{experiment}/scans/{scan}"
                 )
 
                 try:
-                    resource = server.select(resource_qs).resource(resource_label)
+                    resource = server.select(scan_qs).resource(resource_label)
                 except Exception as exc:
                     from src.services.errors import handle as _handle
                     fe = _handle(
@@ -322,9 +334,22 @@ def download_selection(
                 # Replaces the prior synthesized single-filename approach.
                 row_num_files: int = int(row.get("num_files", -1)) if row.get("num_files") is not None else -1
                 try:
-                    real_filenames: List[str] = list(resource.list_files()) if hasattr(resource, "list_files") else []
-                    # server_count: authoritative per-resource count; fall back to row value.
-                    _resource_count: int = int(resource.num_files()) if hasattr(resource, "num_files") else -1
+                    if hasattr(resource, "list_files"):
+                        # Test doubles / gateway surface.
+                        real_filenames: List[str] = list(resource.list_files())
+                    elif hasattr(resource, "files"):
+                        # Real pyxnat: resource.files() yields file objects with .label().
+                        real_filenames = [f.label() for f in resource.files()]
+                    else:
+                        real_filenames = []
+                    # server_count: authoritative per-resource count; fall back to
+                    # enumerated-label count (real pyxnat has no num_files), then row value.
+                    if hasattr(resource, "num_files"):
+                        _resource_count: int = int(resource.num_files())
+                    elif hasattr(resource, "files"):
+                        _resource_count = len(real_filenames)
+                    else:
+                        _resource_count = -1
                     server_count: int = _resource_count if _resource_count >= 0 else max(row_num_files, 0)
                 except Exception:  # noqa: BLE001
                     real_filenames = []
@@ -532,13 +557,13 @@ def assemble_zip(
             if not subject or not experiment:
                 continue
 
-            qs = (
+            scan_qs = (
                 f"/projects/{project_name}/subjects/{subject}"
-                f"/experiments/{experiment}/scans/{scan}/resources/{resource_label}"
+                f"/experiments/{experiment}/scans/{scan}"
             )
 
             try:
-                resource = server.select(qs).resource(resource_label)
+                resource = server.select(scan_qs).resource(resource_label)
             except Exception as exc:  # noqa: BLE001
                 from src.services.errors import handle as _handle
                 fe = _handle(
@@ -550,7 +575,14 @@ def assemble_zip(
                 )
                 return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
 
-            real_filenames: List[str] = list(resource.list_files()) if hasattr(resource, "list_files") else []
+            if hasattr(resource, "list_files"):
+                # Test doubles / gateway surface.
+                real_filenames: List[str] = list(resource.list_files())
+            elif hasattr(resource, "files"):
+                # Real pyxnat: resource.files() yields file objects with .label().
+                real_filenames = [f.label() for f in resource.files()]
+            else:
+                real_filenames = []
             if not real_filenames:
                 continue  # empty resource — skip
 

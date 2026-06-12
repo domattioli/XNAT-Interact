@@ -1,0 +1,19 @@
+# Optional — Phase-10 pixel de-identification (burned-in PHI detection) deps.
+#
+# NOT required to run the app, the CLI, or the test suite. These are lazy-imported
+# only inside src/services/pixel_deid/* and skipped gracefully when absent.
+#
+# Why separate: presidio-image-redactor pulls python-gdcm, which builds via CMake and
+# fails on stock macOS / Python 3.9 (no CMakeLists in the sdist under scikit-build-core),
+# aborting `pip install -r requirements.txt` and taking the core deps down with it.
+#
+# Install ONLY when you need the pixel-deid lane, and after the system prerequisites:
+#   - Tesseract 5 binary on PATH:  brew install tesseract   (apt: tesseract-ocr)
+#   - spaCy model:                 python -m spacy download en_core_web_lg
+#   - a CMake toolchain for python-gdcm:  brew install cmake
+#
+#   pip install -r requirements-pixeldeid.txt
+presidio-image-redactor
+presidio-analyzer
+pytesseract
+onnxruntime

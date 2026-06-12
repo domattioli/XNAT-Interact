@@ -404,27 +404,30 @@ class ORDataIntakeForm( ResourceFile ):
         self._running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_TIME'] = str( self.radiology_contact_time )
 
         # T015 (FR-011): pseudonymize surgeon HawkIDs before the dict is
-        # committed.  Salt is required; absent salt → FriendlyError (do NOT
-        # write cleartext surgeon identity to the form or registry).
+        # committed.  Salt is required; absent salt → GatewayError wrapping
+        # FriendlyError (do NOT write cleartext surgeon identity to the form
+        # or registry).
         from src.services.identity import load_identity_salt as _load_salt
         from src.services.xnat_gateway import GatewayError as _GatewayError
         from src.services.errors import FriendlyError as _FriendlyError
         try:
             _salt = _load_salt()
         except _GatewayError as _exc:
-            raise _FriendlyError(
-                title="Surgeon pseudonymization requires identity salt",
-                message=(
-                    "The XNAT_IDENTITY_SALT environment variable is not set. "
-                    "Surgeon HawkIDs cannot be pseudonymized without the salt. "
-                    "The intake form has NOT been saved to prevent cleartext "
-                    "surgeon identity from being written to the dataset."
-                ),
-                recourse=[
-                    "Set XNAT_IDENTITY_SALT to the hex salt provided by the Data Librarian.",
-                    "Alternatively, set it to the path of a restricted file containing the hex salt.",
-                    "Contact the Data Librarian if you do not have the salt.",
-                ],
+            raise _GatewayError(
+                _FriendlyError(
+                    title="Surgeon pseudonymization requires identity salt",
+                    message=(
+                        "The XNAT_IDENTITY_SALT environment variable is not set. "
+                        "Surgeon HawkIDs cannot be pseudonymized without the salt. "
+                        "The intake form has NOT been saved to prevent cleartext "
+                        "surgeon identity from being written to the dataset."
+                    ),
+                    recourse=[
+                        "Set XNAT_IDENTITY_SALT to the hex salt provided by the Data Librarian.",
+                        "Alternatively, set it to the path of a restricted file containing the hex salt.",
+                        "Contact the Data Librarian if you do not have the salt.",
+                    ],
+                )
             ) from _exc
         self._running_text_file['SURGICAL_PROCEDURE_INFO'] = pseudonymize_surgeon_ids(
             self._running_text_file['SURGICAL_PROCEDURE_INFO'],

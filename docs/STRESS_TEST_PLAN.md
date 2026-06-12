@@ -35,3 +35,9 @@ P8 issue sweep — file/comment findings: #32 (Q5 progress), #33 (verify-first v
 ## Results log
 
 Append-only; one line per lane run: `<date> <phase> <result> <evidence-path>`.
+
+2026-06-12 P0 baseline 1154p/22s/7xf PASS tests run local
+2026-06-12 P1 boot xnat_local 1.9.3 live :8080 PASS (mirror.gcr.io workaround for hub 429)
+2026-06-12 P3-happy push harness all 10 steps OK after nibabel install + XNAT_IDENTITY_SALT set; subject+experiment+scan+files on server PASS
+2026-06-12 P4-pull download_selection empty-scan_type row -> files_written=[] ok=False — #25/C1 residue CONFIRMED live
+2026-06-12 BUG xnat_resource_data.py:415 raise FriendlyError (dataclass) -> TypeError; fix in flight

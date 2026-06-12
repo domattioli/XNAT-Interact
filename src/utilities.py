@@ -130,7 +130,7 @@ class _local_variables:
                                                             "Epic Start Time": "Time; Required; Official time on EPIC for the start time of the operation",
                                                             "Epic End Time": "Time; Optional",
                                                             "Side of Patient Body": "Text; Optional; [Unknown, Left, Right]",
-                                                            "OR Room Name/ Location": "Text; Optional", # Space after the slash is intentional -- for readability in the excel file.
+                                                            "OR Room Name/ Location": "Text; Optional",
                                                             "Supervising Surgeon HawkID": "Text; Optional",
                                                             "Supervising Surgeon Presence": "Text; Conditional; when HawkID is provided",
                                                             "Performing Surgeon HawkID": "Text; Required",
@@ -144,7 +144,7 @@ class _local_variables:
                                                             "Skills Assessment Requested": "Text; Required; [Y, N, Unknown]",
                                                             "Assessor HawkID": "Text; Required only if assessment requested",
                                                             "Additional Assessment Details": "Text; Conditional; only if assessment requested",
-                                                            "Name/ Type of Storage Device": "Text; Optional; eg., 'USB-A'", # Space after the slash is intentional -- for readability in the excel file.
+                                                            "Name/ Type of Storage Device": "Text; Optional; eg., 'USB-A'",
                                                             "Full Path to Data": "Text; Required; local path of data used when uploading",
                                                             "Was Radiology Contacted": "OText; ptional; [Y, N, Unknown]",
                                                             "Radiology Contact Date": "Date; Optional",
@@ -913,7 +913,7 @@ class ConfigTables( UIDandMetaInfo ):
         def serialize( obj, depth=0 ):
             if isinstance( obj, dict ):
                 items = [f'\n{" " * (depth + indent)}"{k}": {serialize(v, depth + indent)}' for k, v in obj.items()]
-                return f'{{{{",".join(items)}}\n{" " * depth}}}'
+                return f'{{",".join(items)}}\n{" " * depth}}}'
             elif isinstance( obj, list ):
                 items = [serialize(v, depth) for v in obj]  # Keep depth unchanged for arrays
                 return f'[{", ".join(items)}]'
@@ -1275,7 +1275,7 @@ class USCentralDateTime():
     tst1 = USCentralDateTime( '2022-01-01 11:00:00 PST' )
     print( tst1 )
     print( 'USCentral Date: ' + tst1.date + ', time: ' + tst1.time )
-    print( USCentralDateTime( 'nonsense time o\'clock' ) )
+    print( USCentralDateTime( 'nonsense time o'clock' ) )
     '''
     def __init__( self, dt_str: Opt[str] = None ):
         if dt_str is None:    dt_str = '1900-01-01 00:00:00'

@@ -1,4 +1,4 @@
-# Implementation Plan: Streamlit “See-Your-Data” App (Phase 2)
+# Implementation Plan: Streamlit "See-Your-Data" App (Phase 2)
 
 **Branch**: `002-phase-2-streamlit-app` | **Date**: 2026-06-04 | **Spec**: [spec.md](spec.md)
 
@@ -38,7 +38,7 @@ Download) + 1 optional Terminal/Learn panel; one shared session/auth state.
 
 *GATE: must pass before and after design.*
 
-- **I — PHI Safety**: FR-007 (pre-upload “what will be uploaded / PHI-removed”
+- **I — PHI Safety**: FR-007 (pre-upload "what will be uploaded / PHI-removed"
   preview + mandatory burned-in-PHI confirmation, reusing Phase 1), FR-015 (local
   PHI cleanup), thumbnails rendered from de-identified data only. ✅
 - **II — Fail Softly**: FR-011 (every error → friendly panel with recourse,

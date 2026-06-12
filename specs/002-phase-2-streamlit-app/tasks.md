@@ -1,4 +1,4 @@
-# Tasks: Streamlit “See-Your-Data” App (Phase 2)
+# Tasks: Streamlit "See-Your-Data" App (Phase 2)
 
 **Input**: [spec.md](spec.md), [plan.md](plan.md)
 **Prerequisites**: **Phase 1 shipped** — `src/services/` (errors, config,
@@ -50,8 +50,8 @@ burned-in-PHI review step. Tests REQUIRED (Constitution IV).
 - [ ] T012 [US1] Build `app/pages/upload_single.py` form: 34-Q intake as a web
   form with **`ConfigTables` dropdowns** (surgeon/site/procedure), **date
   pickers**, **file/folder picker or drag-drop** (FR-006).
-- [ ] T013 [US1] Add the **PHI-review gate**: “what will be uploaded / what PHI
-  was removed” preview + mandatory burned-in-PHI confirmation (Phase 1 review) —
+- [ ] T013 [US1] Add the **PHI-review gate**: "what will be uploaded / what PHI
+  was removed" preview + mandatory burned-in-PHI confirmation (Phase 1 review) —
   upload blocked until confirmed (FR-007). Build an `UploadDraft` → Phase 1
   `PendingUpload`.
 - [ ] T014 [US1] Run the single upload through the Phase 1 gateway with a
@@ -99,13 +99,13 @@ burned-in-PHI review step. Tests REQUIRED (Constitution IV).
 
 ## Phase F: Polish & cross-cutting
 
-- [ ] T026 [P] Edge case: VPN drop mid-upload → friendly “connection lost” panel
+- [ ] T026 [P] Edge case: VPN drop mid-upload → friendly "connection lost" panel
   with resume/cleanup recourse (test via `FakeXNAT` failure injection).
 - [ ] T027 [P] Session-state robustness: browser refresh / re-run mid-flow does
   not lose a half-filled form or double-fire an upload (test the logic functions).
 - [ ] T028 [P] Surface the Phase 1 config lost-update guard when a registration
   via the form would clobber concurrent `MetaTables.json` edits.
-- [ ] T029 Add a short “how to launch the app” section to `README.md`
+- [ ] T029 Add a short "how to launch the app" section to `README.md`
   (`streamlit run streamlit_app.py`); keep it terminal-light, pending Phase 3 packaging.
 - [ ] T030 Run full suite; ensure SC-001…SC-007 met — no traceback reaches the
   browser, all screen logic covered offline against `FakeXNAT`, PHI gate enforced.

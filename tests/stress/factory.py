@@ -14,6 +14,178 @@ from typing import Dict, Set
 import numpy as np
 
 
+def synth_fluoro_frame(
+    seed: int,
+    rows: int,
+    cols: int,
+    dtype=np.uint16,
+) -> np.ndarray:
+    """
+    Generate a deterministic synthetic fluoroscopy frame.
+
+    Composites realistic X-ray anatomy:
+    - Dark vignetting background (10-20% intensity)
+    - Bright circular collimation field (~85% of frame)
+    - 2-3 bright elliptical "bone" shapes (femur-like with cortical edges)
+    - 1-2 thin bright guide-wire lines crossing the field
+    - Smooth low-frequency illumination gradient + Gaussian blur
+    - Poisson-like noise scaled to local intensity
+
+    All elements parameterized deterministically from numpy.random.default_rng(seed).
+
+    Parameters
+    ----------
+    seed : int
+        Random seed for deterministic generation.
+    rows, cols : int
+        Frame dimensions.
+    dtype : numpy dtype
+        Output dtype (uint8 or uint16); defaults to uint16.
+
+    Returns
+    -------
+    np.ndarray
+        Shape (rows, cols), dtype as specified.
+    """
+    rng = np.random.default_rng(seed)
+
+    # Normalize coordinates to [0, 1]
+    max_intensity = np.iinfo(dtype).max
+    mid_r, mid_c = rows / 2.0, cols / 2.0
+
+    # 1. Dark background with vignette
+    background = np.full((rows, cols), max_intensity * 0.15, dtype=np.float64)
+
+    # Vignette: dark edges via distance-based falloff
+    y, x = np.ogrid[:rows, :cols]
+    dist = np.sqrt((y - mid_r) ** 2 + (x - mid_c) ** 2)
+    max_dist = np.sqrt(mid_r**2 + mid_c**2)
+    vignette = 1.0 - 0.6 * (dist / max_dist) ** 1.5
+    vignette = np.clip(vignette, 0.1, 1.0)
+    background = background * vignette
+
+    # 2. Bright circular collimation field (~85% coverage)
+    collim_radius = 0.42 * min(mid_r, mid_c)
+    collim_mask = dist <= collim_radius
+    collim_transition = np.clip((collim_radius - dist) / 10, 0, 1)
+    collimation = np.zeros((rows, cols), dtype=np.float64)
+    collimation[collim_mask] = max_intensity * 0.70
+    # Soft edge via transition
+    collimation = collimation * collim_transition
+
+    # 3. Elliptical "bone" shapes (2-3 per seed)
+    bones = np.zeros((rows, cols), dtype=np.float64)
+    n_bones = rng.integers(2, 4)
+    for i in range(n_bones):
+        # Random position within collimation field
+        bone_center_r = mid_r + rng.uniform(-0.25 * mid_r, 0.25 * mid_r)
+        bone_center_c = mid_c + rng.uniform(-0.25 * mid_c, 0.25 * mid_c)
+
+        # Ellipse parameters
+        semi_a = rng.uniform(0.08 * min(rows, cols), 0.15 * min(rows, cols))
+        semi_b = rng.uniform(0.03 * min(rows, cols), 0.08 * min(rows, cols))
+        angle = rng.uniform(0, 180)
+
+        # Draw ellipse
+        cos_a = np.cos(np.deg2rad(angle))
+        sin_a = np.sin(np.deg2rad(angle))
+        dy = y - bone_center_r
+        dx = x - bone_center_c
+        rotated_y = dy * cos_a + dx * sin_a
+        rotated_x = -dy * sin_a + dx * cos_a
+        ellipse_mask = (rotated_y**2 / semi_a**2 + rotated_x**2 / semi_b**2) <= 1.0
+
+        # Bright interior
+        bone_interior = np.zeros((rows, cols), dtype=np.float64)
+        bone_interior[ellipse_mask] = max_intensity * 0.65
+
+        # Thick bright cortical edge
+        cortical_ring_width = 2.0
+        ellipse_outer = (
+            (rotated_y**2 / (semi_a + cortical_ring_width) ** 2 +
+             rotated_x**2 / (semi_b + cortical_ring_width) ** 2) <= 1.0
+        )
+        cortical = np.zeros((rows, cols), dtype=np.float64)
+        cortical[ellipse_outer & ~ellipse_mask] = max_intensity * 0.85
+
+        bones += bone_interior + cortical
+
+    bones = np.clip(bones, 0, max_intensity)
+
+    # 4. Guide-wire lines (1-2 thin bright polylines)
+    wires = np.zeros((rows, cols), dtype=np.float64)
+    n_wires = rng.integers(1, 3)
+    for i in range(n_wires):
+        # Random start/end positions
+        r0 = rng.uniform(0.2 * rows, 0.8 * rows)
+        c0 = rng.uniform(0.2 * cols, 0.8 * cols)
+        r1 = rng.uniform(0.2 * rows, 0.8 * rows)
+        c1 = rng.uniform(0.2 * cols, 0.8 * cols)
+
+        # Draw thin line via distance to line segment
+        t = np.maximum(
+            0,
+            np.minimum(
+                1,
+                ((y - r0) * (r1 - r0) + (x - c0) * (c1 - c0))
+                / (((r1 - r0) ** 2 + (c1 - c0) ** 2) + 1e-6),
+            ),
+        )
+        line_x = c0 + t * (c1 - c0)
+        line_y = r0 + t * (r1 - r0)
+        line_dist = np.sqrt((x - line_x) ** 2 + (y - line_y) ** 2)
+        line_width = 1.5
+        wire_mask = line_dist <= line_width
+        wire_intensity = np.maximum(0, 1.0 - line_dist / line_width)
+        wires[wire_mask] = np.maximum(
+            wires[wire_mask], max_intensity * 0.90 * wire_intensity[wire_mask]
+        )
+
+    # 5. Composite layers
+    frame = background + collimation + bones + wires
+    frame = np.clip(frame, 0, max_intensity)
+
+    # 6. Smooth illumination gradient (low-frequency)
+    gradient_strength = rng.uniform(0.05, 0.15)
+    gradient_angle = rng.uniform(0, 360)
+    grad_cos = np.cos(np.deg2rad(gradient_angle))
+    grad_sin = np.sin(np.deg2rad(gradient_angle))
+    gradient = 1.0 + gradient_strength * (
+        (y - mid_r) * grad_cos + (x - mid_c) * grad_sin
+    ) / max(mid_r, mid_c)
+    gradient = np.clip(gradient, 0.85, 1.15)
+    frame = frame * gradient
+    frame = np.clip(frame, 0, max_intensity)
+
+    # 7. Gaussian blur (smooth low-frequency detail)
+    try:
+        from scipy.ndimage import gaussian_filter
+
+        sigma = rng.uniform(1.5, 3.0)
+        frame = gaussian_filter(frame, sigma=sigma)
+    except ImportError:
+        # Fallback: cheap box blur with numpy
+        kernel_size = 3
+        kernel = np.ones((kernel_size, kernel_size)) / (kernel_size**2)
+        frame = np.convolve(
+            frame.ravel(), kernel.ravel(), mode="same"
+        ).reshape(frame.shape)
+
+    frame = np.clip(frame, 0, max_intensity)
+
+    # 8. Poisson-like noise (scaled to local intensity)
+    noise_strength = rng.uniform(0.02, 0.08)
+    poisson_noise = rng.poisson(max_intensity * noise_strength, size=(rows, cols))
+    poisson_noise = poisson_noise.astype(np.float64)
+    frame = frame + poisson_noise
+    frame = np.clip(frame, 0, max_intensity)
+
+    # 9. Normalize to dtype range and convert
+    frame = (frame / max_intensity * max_intensity).astype(dtype)
+
+    return frame
+
+
 def make_surgery(
     uid: str,
     seeds: set[int],
@@ -81,10 +253,9 @@ def make_surgery(
         ds.SOPInstanceUID = pydicom.uid.generate_uid(entropy_srcs=[uid, str(seed)])
         ds.NumberOfStudyRelatedInstances = len(seeds)
 
-        # Regenerate PixelData with seed-specific RNG
+        # Regenerate PixelData with realistic fluoroscopy synthesis
         # Keep dtype/bits consistent with synthetic_data conventions (uint16)
-        rng = np.random.default_rng(seed)
-        arr = rng.integers(0, 4096, size=(rows, cols), dtype=np.uint16)
+        arr = synth_fluoro_frame(seed, rows=rows, cols=cols, dtype=np.uint16)
         ds.Rows = rows
         ds.Columns = cols
         ds.PixelData = arr.tobytes()

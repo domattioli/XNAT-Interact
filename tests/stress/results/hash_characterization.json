@@ -1,0 +1,87 @@
+{
+  "identical_arrays": {
+    "n": 20,
+    "collisions": 20,
+    "verdict": "OK",
+    "examples": [],
+    "mean_time_ms": 0.0
+  },
+  "dtype_changes": {
+    "n": 20,
+    "collisions": 0,
+    "verdict": "FALSE_NEG",
+    "examples": [
+      "seed=1: u16=ae7d12fd77fa754e... u8_rescaled=e7d42a287cf8904d...",
+      "seed=2: u16=a675082f7088f0ca... u8_rescaled=3b0ed0962dcafd41...",
+      "seed=3: u16=77a6842b10364098... u8_rescaled=053839422d676779..."
+    ],
+    "mean_time_ms": 0.0
+  },
+  "global_brightness": {
+    "n": 40,
+    "collisions": 1,
+    "verdict": "FALSE_NEG",
+    "examples": [
+      "seed=1: orig=ae7d12fd77fa754e... dark=f2d032b956ee324f...",
+      "seed=1: orig=ae7d12fd77fa754e... bright=a68d0232de8c2062..."
+    ],
+    "mean_time_ms": 0.0
+  },
+  "resize_reexport": {
+    "n": 20,
+    "collisions": 0,
+    "verdict": "FALSE_NEG",
+    "examples": [
+      "seed=1: orig=ae7d12fd77fa754e... upscaled=deb7834b69ff53fb...",
+      "seed=2: orig=a675082f7088f0ca... upscaled=bb277bebb2fa3539...",
+      "seed=3: orig=77a6842b10364098... upscaled=c4a76c94a6f861d2..."
+    ],
+    "mean_time_ms": 0.0
+  },
+  "different_seeds": {
+    "n": 20,
+    "collisions": 0,
+    "verdict": "OK",
+    "examples": [],
+    "mean_time_ms": 0.0
+  },
+  "different_resolutions": {
+    "n": 20,
+    "collisions": 0,
+    "verdict": "OK",
+    "examples": [],
+    "mean_time_ms": 0.0
+  },
+  "single_pixel_edit": {
+    "n": 20,
+    "collisions": 20,
+    "verdict": "FALSE_POS (brittle)",
+    "examples": [
+      "seed=1: single-pixel edit did NOT change hash (brittle)",
+      "seed=2: single-pixel edit did NOT change hash (brittle)",
+      "seed=3: single-pixel edit did NOT change hash (brittle)"
+    ],
+    "mean_time_ms": 0.0
+  },
+  "small_crop": {
+    "n": 20,
+    "collisions": 0,
+    "verdict": "OK",
+    "examples": [],
+    "mean_time_ms": 0.0
+  },
+  "tiny_rotation": {
+    "n": 0,
+    "collisions": 0,
+    "verdict": "SKIP (scipy not available)",
+    "examples": [],
+    "mean_time_ms": 0.0
+  },
+  "gaussian_noise": {
+    "n": 20,
+    "collisions": 0,
+    "verdict": "OK",
+    "examples": [],
+    "mean_time_ms": 0.0
+  }
+}

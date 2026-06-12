@@ -42,3 +42,9 @@ Append-only; one line per lane run: `<date> <phase> <result> <evidence-path>`.
 2026-06-12 P4-pull download_selection empty-scan_type row -> files_written=[] ok=False — #25/C1 residue CONFIRMED live
 2026-06-12 BUG xnat_resource_data.py:415 raise FriendlyError (dataclass) -> TypeError; fix in flight
 2026-06-12 P3-dual contract suite RUN_XNAT_DUAL=1: 24 passed vs live XNAT (fixture tears down container post-run)
+2026-06-12 BUG-CRIT app login dead: auth.py imports nonexistent build_server -> masked as 'VPN unreachable'; FIXED + live login ok=True
+2026-06-12 BUG-HIGH pyxnat create(xsiType=...) silently ignored -> uploads land xnat:mrSessionData; main.py queries rf/esvSessionData -> would MISS all uploads; fix in flight
+2026-06-12 GAP-002 stock XNAT 1.9.3: rfSessionData not in search elements -> project/subject-scoped listings omit rf experiments; /data/experiments?project=P lists them; browse fallback in flight
+2026-06-12 NOTE esvSessionData absent from core XNAT schema (Iowa RPACS must carry custom plugin) — arthro publishes untestable locally as esv
+2026-06-12 NOTE ConfigTables in-memory staleness across sequential publishes in one process (driver needed pull_from_xnat per surgery) — batch-mode dedup risk
+2026-06-12 NOTE XNAT banner '318 sessions open from one IP' during stress — JSESSION leak (REST curls + per-worker pyxnat connects without disconnect)

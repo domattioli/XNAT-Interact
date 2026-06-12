@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-06-12T07:50:32.209154",
+  "surgeries": 1,
+  "frames": 1,
+  "project": "XSI_FIX2",
+  "publishes": [
+    {
+      "uid": "STRESS_V_0001",
+      "ok": false,
+      "error": "UploadError: Upload interrupted — you may be disconnected from the VPN. Some data may be partially uploaded; re-run to resume.\nTraceback (most recent call last):\n  File \"/home/user/XNAT-Interact/src/xnat_experiment_data.py\", line 508, in publish_to_xnat\n    xnat_connection.gateway.put_zip( scan_qs, resource_label, key_zipped_ffn, content=value_dict['CONTENT'], format=value_dict['FORMAT'], tags='DATA' ) # type: ignore\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/user/XNAT-Interact/src/services/xnat_gateway.py\", line 378, in put_zip\n    self.server.select(querystring).resource(resource_label).put_zip(ffn, content=content, format=format, tags=tags)\n  File \"/usr/local/lib/python3.11/dist-packages/pyxnat/core/resources.py\", line 2013, in put_zip\n    self.file(op.split(zip_location)[1] + do_extract\n  File \"/usr/local/lib/python3.11/dist-packages/pyxnat/core/resources.py\", line 2285, in put\n    catch_error(response.content, msg)\n  File \"/usr/local/lib/python3.11/dist-packages/pyxnat/core/errors.py\", line 81, in catch_error\n    raise DatabaseError(full_response)\npyxnat.core.errors.DatabaseError: pyxnat.file.put failure:\n                        URI: http://localhost:8080/data/projects/XSI_FIX2/subjects/2_25_157837206270003784256198213659149549135/experiments/SOURCE_DATA-2_25_157837206270003784256198213659149549135/scans/0/resources/50/files/dicom_files.zip?format=DICOM&content=IMAGE&tags=DATA&overwrite=false&inbody=true&extract=true\n                        status code: 404\n                        headers: {'Set-Cookie': 'SESSION_EXPIRATION_TIME=\"1781250632831,3600000\"; Version=1; Path=/', 'Date': 'Fri, 12 Jun 2026 07:50:32 GMT', 'Accept-Ranges': 'bytes', 'Server': 'Noelios-Restlet-Engine/1.1.10', 'X-Content-Type-Options': 'nosniff', 'X-XSS-Protection': '1; mode=block', 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': \"frame-ancestors 'self'\", 'Content-Type': 'text/html;charset=ISO-8859-1', 'Content-Length': '330', 'Keep-Alive': 'timeout=20', 'Connection': 'keep-alive'}\n                        content: b'<html>\\n<head>\\n   <title>Status page</title>\\n</head>\\n<body>\\n<h3>The server has not found anything matching the request URI</h3><p>You can get technical details <a href=\\"http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.5\\">here</a>.<br>\\nPlease continue your visit at our <a href=\\"/\\">home page</a>.\\n</p>\\n</body>\\n</html>\\n'\n                    \n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 394, in publish_surgery\n    rf.publish_to_xnat(\n  File \"/home/user/XNAT-Interact/src/xnat_experiment_data.py\", line 526, in publish_to_xnat\n    raise UploadError(fe) from _conn_exc\nsrc.xnat_experiment_data.UploadError: Upload interrupted — you may be disconnected from the VPN. Some data may be partially uploaded; re-run to resume.\n",
+      "seconds": 0.6683263778686523,
+      "n_files": 1
+    }
+  ],
+  "empty_shells": [
+    "Xnat4Tests_S00032",
+    "Xnat4Tests_S00033",
+    "Xnat4Tests_S00034"
+  ],
+  "inventory": {
+    "subjects_count": 3,
+    "experiments_count": 0,
+    "per_subject_file_counts": {
+      "Xnat4Tests_S00032": 0,
+      "Xnat4Tests_S00033": 0,
+      "Xnat4Tests_S00034": 0
+    }
+  }
+}

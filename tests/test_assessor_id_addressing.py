@@ -207,7 +207,7 @@ class TestInsertFile:
         mock_assessor.id.return_value = "PROJ_E00201"
         gw.server.select.return_value = mock_assessor
         gw.server._exec.return_value = b""
-        long_json = '{"k": "' + "x" * 300 + '"}' # >255 chars, not a valid path
+        long_json = '{"k": "' + "x" * 300 + '"}'  # >255 chars, not a valid path
         gw.insert_file(
             "/project/P/subject/S/experiment/E/assessor/ASS",
             "MYRSC", "out.json", long_json,

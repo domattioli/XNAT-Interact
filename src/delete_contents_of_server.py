@@ -2,10 +2,10 @@
 delete_contents_of_server.py — Hard-delete helper for XNAT project contents.
 
 USAGE (script mode):
-    python -m src.delete_contents_of_server \
-        --server https://rpacs.iibi.uiowa.edu/xnat/ \
-        --username dmattioli \
-        --method subjects|metatables|both \
+    python -m src.delete_contents_of_server \\
+        --server https://rpacs.iibi.uiowa.edu/xnat/ \\
+        --username dmattioli \\
+        --method subjects|metatables|both \\
         [--dry-run]
 
 SECURITY REQUIREMENTS

@@ -9,7 +9,7 @@ Public API
 ----------
 fetch_data_table(server, project_name) -> list[dict] | FriendlyError
     Query project for subjects/experiments/scans; return rows with columns:
-    subject, experiment, date, scan_type, num_files.
+    subject, experiment, date, scan_type, num_files, scan_id.
 
 filter_rows(rows, query) -> list[dict]
     Case-insensitive substring match across all column values.
@@ -22,8 +22,9 @@ and the XNAT data model in src/xnat_experiment_data.py):
     subject       — subject/case label (UID or name on XNAT)
     experiment    — experiment label (SOURCE_DATA-<uid>)
     date          — acquisition date from experiment attrs (may be "" if unset)
-    scan_type     — scan type label (e.g., DICOM, DICOM_MP4, DERIVED)
+    scan_type     — scan type label (e.g., DICOM, DICOM_MP4, DERIVED; display-only)
     num_files     — count of files in the scan resource (int; -1 if unavailable)
+    scan_id       — real scan label/ID for download resolution (e.g., '0', '1'; #25 fix)
 """
 from __future__ import annotations
 
@@ -36,7 +37,7 @@ from src.services.errors import FriendlyError
 # Column names (single source of truth — referenced by pages/browse.py too)
 # ---------------------------------------------------------------------------
 
-COLUMNS = ["subject", "experiment", "date", "scan_type", "num_files"]
+COLUMNS = ["subject", "experiment", "date", "scan_type", "num_files", "scan_id"]
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +205,7 @@ def fetch_data_table(
                     "date": "",
                     "scan_type": "",
                     "num_files": -1,
+                    "scan_id": "",
                 })
                 continue
             for exp in experiments:
@@ -216,6 +218,7 @@ def fetch_data_table(
                         "date": date,
                         "scan_type": "",
                         "num_files": -1,
+                        "scan_id": "",
                     })
                     continue
                 for scan in scans:
@@ -231,6 +234,7 @@ def fetch_data_table(
                         "date": date,
                         "scan_type": scan_type,
                         "num_files": n_files,
+                        "scan_id": scan,
                     })
     except Exception as exc:
         from src.services.errors import handle  # local import, keep module importable

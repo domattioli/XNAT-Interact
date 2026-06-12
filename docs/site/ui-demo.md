@@ -7,7 +7,7 @@ title: XNAT-Interact — Application UI
 
 These screenshots are captured from the actual Streamlit application running against a live XNAT 1.9.3 server with synthetic data — not mockups. Each screen below was rendered by `streamlit run streamlit_app.py` and photographed by an automated Playwright driver ([`tests/stress/screenshot_ui.py`](https://github.com/domattioli/XNAT-Interact/blob/xnat-fable/tests/stress/screenshot_ui.py)) during the 2026-06-12 validation campaign. The same run surfaced three release-blocking launch defects the offline test suite could not see; those are documented at the bottom.
 
-The application is a thin, friendly layer over the de-identification and transfer pipeline a non-programmer researcher uses to move surgical fluoroscopy to and from the lab’s XNAT project. Eight screens, one authenticated session.
+The application is a thin, friendly layer over the de-identification and transfer pipeline a non-programmer researcher uses to move surgical fluoroscopy to and from the lab's XNAT project. Eight screens, one authenticated session.
 
 ## Log in
 
@@ -17,13 +17,13 @@ Authentication is the only gate; every data screen sits behind it. The login scr
 
 ## Browse
 
-After connect, the session lands on a live table of the project’s sessions, queried through the same `app/logic/browse` path the validation campaign exercised against the real server. The two rows shown are synthetic hip-fluoroscopy cases published earlier in the session; the search box filters by subject, experiment, date, or scan type.
+After connect, the session lands on a live table of the project's sessions, queried through the same `app/logic/browse` path the validation campaign exercised against the real server. The two rows shown are synthetic hip-fluoroscopy cases published earlier in the session; the search box filters by subject, experiment, date, or scan type.
 
 ![Browse screen](assets/ui/04_browse.png)
 
 ## Upload
 
-Upload is a three-step wizard — intake form, preview, PHI confirmation — that mirrors the de-identification gate of the underlying `SourceRFSession.publish_to_xnat` pipeline. The surgeon, institution, and procedure dropdowns are populated from the server’s configuration registry, so the operator selects rather than free-types; no patient name or MRN field exists on the form by construction.
+Upload is a three-step wizard — intake form, preview, PHI confirmation — that mirrors the de-identification gate of the underlying `SourceRFSession.publish_to_xnat` pipeline. The surgeon, institution, and procedure dropdowns are populated from the server's configuration registry, so the operator selects rather than free-types; no patient name or MRN field exists on the form by construction.
 
 ![Upload screen](assets/ui/05_upload.png)
 
@@ -59,7 +59,7 @@ Running the real application — rather than the offline AppTest harness, which 
 
 | Defect | Symptom | Fix |
 |---|---|---|
-| `streamlit run app/main.py` could not import the `app` package | `ModuleNotFoundError: No module named 'app'` on every launch | a repo-root launcher (`streamlit_app.py`) that puts the root on `sys.path` and relocates the entrypoint so Streamlit’s page auto-discovery stops hijacking `app/pages/` |
+| `streamlit run app/main.py` could not import the `app` package | `ModuleNotFoundError: No module named 'app'` on every launch | a repo-root launcher (`streamlit_app.py`) that puts the root on `sys.path` and relocates the entrypoint so Streamlit's page auto-discovery stops hijacking `app/pages/` |
 | The router rendered twice | `StreamlitDuplicateElementKey` on every screen | guard the module-level `main()` call so importing the app does not also run it |
 | The browse table assigned five column names to six columns | `ValueError: Length mismatch: Expected axis has 6 elements, new values have 5` | a name-mapped display frame that is resilient to column-set changes |
 

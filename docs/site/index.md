@@ -43,7 +43,7 @@ Installation is handled by ITS, not by you directly. There are two paths:
 
 **Primary — Software Center (recommended for most students)**
 If you are on a UIowa-managed laptop or desktop, open the ITS Software Center
-app (Windows) or Jamf Self Service (macOS), search for “XNAT-Interact”, and
+app (Windows) or Jamf Self Service (macOS), search for "XNAT-Interact", and
 click Install. No admin password or terminal is required. Your machine
 receives updates automatically through the same catalog.
 

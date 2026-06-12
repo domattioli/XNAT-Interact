@@ -2,7 +2,7 @@
 Lane: P5 annotation round-trip stress test against live XNAT server.
 
 Purpose: Prove src/annotations upload/download against real server
-(assessor path was fixed this session: gateway resolves assessor label->accession ID).
+(assessor path was fixed this session: gateway resolves assessor label→accession ID).
 
 Steps:
   1. driver.connect() to fresh project; publish 1 surgery.

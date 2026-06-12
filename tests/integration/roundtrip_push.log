@@ -1,0 +1,101 @@
+[04:10:23] ======================================================================
+[04:10:23] XNAT round-trip push harness
+[04:10:23]   URL:     http://localhost:8080
+[04:10:23]   Project: ITEST_RF
+[04:10:23]   User:    admin
+[04:10:23] ======================================================================
+[04:10:23] Synthetic DICOM dir: /tmp/xnat_it_dcm_u73b4aei
+[04:10:23] 
+--- STEP 0: create synthetic DICOMs ---
+[04:10:23]   wrote /tmp/xnat_it_dcm_u73b4aei/frame_000.dcm (InstanceNumber=1)
+[04:10:23]   wrote /tmp/xnat_it_dcm_u73b4aei/frame_001.dcm (InstanceNumber=2)
+[04:10:23]   wrote /tmp/xnat_it_dcm_u73b4aei/frame_002.dcm (InstanceNumber=3)
+[04:10:23] STEP 0: OK
+[04:10:23] 
+--- STEP 1: import src modules ---
+[04:10:23]   AppConfig.server_url (resolved xnat_project_url): 'http://localhost:8080'
+[04:10:23]   AppConfig.project_name: 'ITEST_RF'
+[04:10:23] STEP 1: OK
+[04:10:23] 
+--- STEP 2: XNATLogin ---
+[04:10:24]   login.is_valid = True
+[04:10:24] STEP 2: OK
+[04:10:24] 
+--- STEP 3: XNATConnection ---
+[04:10:24]   conn.is_verified = False
+[04:10:24]   conn.is_open     = True
+[04:10:24] STEP 3: OK
+[04:10:24] 
+--- STEP 4-pre: bootstrap config on server if absent ---
+[04:10:24] STEP 4-pre: SKIPPED (no open+verified connection)
+[04:10:24] 
+--- STEP 4: ConfigTables ---
+[04:10:24] STEP 4: SKIPPED (config not seeded or connection not open)
+[04:10:24] 
+--- STEP 5: build intake-form pd.Series ---
+[04:10:24]   Series built with 28 entries
+[04:10:24]   Full Path to Data = /tmp/xnat_it_dcm_u73b4aei
+[04:10:24] STEP 5: OK
+[04:10:24] 
+--- STEP 6: ORDataIntakeForm ---
+[04:10:24] STEP 6: SKIPPED (no ConfigTables)
+[04:10:24] 
+--- STEP 7: SourceRFSession ---
+[04:10:24] STEP 7: SKIPPED (no form or config)
+[04:10:24] 
+--- STEP 8: rf.write() ---
+[04:10:24] STEP 8: SKIPPED
+[04:10:24] 
+--- STEP 9: rf.publish_to_xnat() ---
+[04:10:24] STEP 9: SKIPPED
+[04:10:24] 
+--- STEP 10: REST probe via curl ---
+[04:10:24] 
+  [subjects]
+[04:10:24]   <html>
+<head>
+   <title>Status page</title>
+</head>
+<body>
+<h3>The server has not found anything matching the request URI</h3><p>You can get technical details <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.5">here</a>.<br>
+Please continue your visit at our <a href="/">home page</a>.
+</p>
+</body>
+</html>
+[04:10:24] 
+  [experiments]
+[04:10:24]   <html>
+<head>
+   <title>Status page</title>
+</head>
+<body>
+<h3>Unable to identify project ITEST_RF</h3><p>You can get technical details <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.5">here</a>.<br>
+Please continue your visit at our <a href="/">home page</a>.
+</p>
+</body>
+</html>
+[04:10:24] 
+  Probing config resource on project...
+[04:10:24] 
+  [config resource files]
+[04:10:24]   <html>
+<head>
+   <title>Status page</title>
+</head>
+<body>
+<h3>Unable to identify project</h3><p>You can get technical details <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.5">here</a>.<br>
+Please continue your visit at our <a href="/">home page</a>.
+</p>
+</body>
+</html>
+[04:10:24] 
+  Probing subjects for intake-form resource...
+[04:10:24] 
+STEP 10: complete
+[04:10:24] 
+======================================================================
+[04:10:24] HARNESS COMPLETE
+[04:10:24]   subjects on server:    0
+[04:10:24]   experiments on server: 0
+[04:10:24]   full log:              /home/user/XNAT-Interact/tests/integration/roundtrip_push.log
+[04:10:24] ======================================================================

@@ -1,0 +1,63 @@
+# Deploy docs/site/ to GitHub Pages.
+#
+# OPERATOR ACTION REQUIRED before this workflow can publish:
+#   Go to the repository Settings → Pages → Source and select
+#   "GitHub Actions" as the deployment source. Without this
+#   one-time change in repo settings, the deploy step will fail.
+#
+# Triggers on push to: main, development, 004-phase-4-onboarding-and-docs
+# Path filter: only runs when files under docs/site/ change.
+
+name: Deploy onboarding site to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - development
+      - 004-phase-4-onboarding-and-docs
+    paths:
+      - "docs/site/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment; cancel in-progress runs.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs/site
+          destination: ./_site
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./_site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

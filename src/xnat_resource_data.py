@@ -17,6 +17,79 @@ import difflib
 from src.utilities import UIDandMetaInfo, ConfigTables, USCentralDateTime, XNATLogin, USCentralDateTime
 
 
+# ---------------------------------------------------------------------------
+# T015 (FR-011) — surgeon pseudonymization helpers
+# ---------------------------------------------------------------------------
+
+def pseudonymize_surgeon_ids(
+    surgical_info: dict,
+    salt: bytes,
+    crosswalk=None,
+) -> dict:
+    """
+    Replace raw HawkID values in *surgical_info* with keyed-HMAC pseudonyms.
+
+    Operates on the ``SURGICAL_PROCEDURE_INFO`` sub-dict of the intake form's
+    ``_running_text_file``.  Returns a **new** dict; the caller's original is not
+    modified.
+
+    Fields pseudonymized
+    --------------------
+    - ``SUPERVISING_SURGEON_UID``
+    - ``PERFORMING_SURGEON_UID``
+    - Keys of ``PERFORMANCE_ENUMERATED_TASK_PER_PERFORMER`` (dict mapping
+      hawkid → task description) — keys are replaced, values kept.
+
+    Crosswalk recording
+    -------------------
+    If *crosswalk* is supplied (a ``CrosswalkStore`` instance), each
+    ``pseudonym → hawkid`` mapping is recorded there.  The raw HawkID is NEVER
+    written to the operational form dict or any log.
+
+    Parameters
+    ----------
+    surgical_info:
+        The SURGICAL_PROCEDURE_INFO dict from the intake form.
+    salt:
+        Librarian-held salt bytes (from ``identity.load_identity_salt()``).
+    crosswalk:
+        Optional ``CrosswalkStore``; if supplied, crosswalk entries are written.
+
+    Returns
+    -------
+    dict
+        A copy of *surgical_info* with surgeon HawkIDs replaced by pseudonyms.
+    """
+    from src.services.identity import surgeon_pseudonym as _pseudonym
+
+    result = dict(surgical_info)
+
+    def _replace(hawkid_str):
+        if not hawkid_str or str(hawkid_str).upper() in ("NONE", "UNKNOWN", ""):
+            return hawkid_str
+        raw = str(hawkid_str).strip()
+        pseudo = _pseudonym(raw.lower(), salt)
+        if crosswalk is not None:
+            try:
+                crosswalk.put(pseudo, raw)
+            except Exception:  # noqa: BLE001 — crosswalk write failure must not crash intake
+                pass
+        return pseudo
+
+    for field in ("SUPERVISING_SURGEON_UID", "PERFORMING_SURGEON_UID"):
+        if field in result:
+            result[field] = _replace(result[field])
+
+    if "PERFORMANCE_ENUMERATED_TASK_PER_PERFORMER" in result:
+        raw_tasks = result["PERFORMANCE_ENUMERATED_TASK_PER_PERFORMER"]
+        if isinstance(raw_tasks, dict):
+            result["PERFORMANCE_ENUMERATED_TASK_PER_PERFORMER"] = {
+                _replace(k): v for k, v in raw_tasks.items()
+            }
+
+    return result
+
+
 ordered_keys_of_intake_text_file = ['FORM_LAST_MODIFIED', 'OPERATION_DATE', 'SUBJECT_UID', 'FILER_HAWKID', 'FORM_AVAILABLE_FOR_PERFORMANCE', 'SCAN_QUALITY',
                                     'SURGICAL_PROCEDURE_INFO', 'SKILLS_ASSESSMENT_INFO', 'STORAGE_DEVICE_INFO', 'INFO_DERIVED_FROM_ORIGINAL_FILE_METADATA']
 
@@ -50,7 +123,21 @@ class ResourceFile( UIDandMetaInfo ):
         Raises:
             AssertionError: If the user is not registered in the system.
         """
-        assert config.is_user_registered( validated_login.validated_username ), f'User with HAWKID {validated_login.validated_username} is not registered in the system!'
+        if not config.is_user_registered( validated_login.validated_username ):
+            from src.services.errors import FriendlyError
+            fe = FriendlyError(
+                title="User not registered in the XNAT system",
+                message=(
+                    "Your HawkID is not registered in the XNAT project. "
+                    "You must be registered before you can upload or access data."
+                ),
+                recourse=[
+                    "Contact the Data Librarian to register your HawkID.",
+                    "Make sure you are using the correct HawkID (all lowercase).",
+                    "Contact the Data Librarian if the problem persists.",
+                ],
+            )
+            raise PermissionError(f"{fe.title}: {fe.message}")
         super().__init__() # Call the __init__ method of the base class to create a uid for this instance
         
 
@@ -315,7 +402,34 @@ class ORDataIntakeForm( ResourceFile ):
         self._running_text_file['STORAGE_DEVICE_INFO']['RELEVANT_FOLDER'] = str( self.relevant_folder )
         self._running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_DATE'] = str( self.radiology_contact_date )
         self._running_text_file['STORAGE_DEVICE_INFO']['RADIOLOGY_CONTACT_TIME'] = str( self.radiology_contact_time )
-        
+
+        # T015 (FR-011): pseudonymize surgeon HawkIDs before the dict is
+        # committed.  Salt is required; absent salt → FriendlyError (do NOT
+        # write cleartext surgeon identity to the form or registry).
+        from src.services.identity import load_identity_salt as _load_salt
+        from src.services.xnat_gateway import GatewayError as _GatewayError
+        from src.services.errors import FriendlyError as _FriendlyError
+        try:
+            _salt = _load_salt()
+        except _GatewayError as _exc:
+            raise _FriendlyError(
+                title="Surgeon pseudonymization requires identity salt",
+                message=(
+                    "The XNAT_IDENTITY_SALT environment variable is not set. "
+                    "Surgeon HawkIDs cannot be pseudonymized without the salt. "
+                    "The intake form has NOT been saved to prevent cleartext "
+                    "surgeon identity from being written to the dataset."
+                ),
+                recourse=[
+                    "Set XNAT_IDENTITY_SALT to the hex salt provided by the Data Librarian.",
+                    "Alternatively, set it to the path of a restricted file containing the hex salt.",
+                    "Contact the Data Librarian if you do not have the salt.",
+                ],
+            ) from _exc
+        self._running_text_file['SURGICAL_PROCEDURE_INFO'] = pseudonymize_surgeon_ids(
+            self._running_text_file['SURGICAL_PROCEDURE_INFO'],
+            _salt,
+        )
 
     def _read_from_file( self, parent_folder: Path, verbose: Opt[bool]=False ) -> None:
         """
@@ -326,7 +440,22 @@ class ORDataIntakeForm( ResourceFile ):
             verbose (Optional[bool], optional): Whether to enable verbose output. Defaults to False.
         """
         ffn = os.path.join( parent_folder, self.filename_str )
-        assert os.path.exists( ffn ), f'File "{ffn}" does not exist; check your provided path and try again.'
+        if not os.path.exists( ffn ):
+            from src.services.errors import FriendlyError
+            fe = FriendlyError(
+                title="Intake form file not found",
+                message=(
+                    f"The intake form file could not be found at: {ffn}. "
+                    "Check that the folder path is correct and that the file has not been moved or deleted."
+                ),
+                recourse=[
+                    "Check that the folder path is correct.",
+                    "Make sure the drive containing your data is connected and mounted.",
+                    "Re-enter the path and retry.",
+                    "Contact the Data Librarian if the file is unexpectedly missing.",
+                ],
+            )
+            raise FileNotFoundError(f"{fe.title}: {fe.message}")
         if verbose:         print( f"\n\t...Initializing Digital OR Intake Form from '{ffn}'..." )
         with open( ffn, 'r', encoding='utf-8' ) as jf:
             self._running_text_file = json.loads( jf.read() ) # might need to read with encoding='cp1252'
@@ -429,7 +558,7 @@ class ORDataIntakeForm( ResourceFile ):
             except KeyboardInterrupt:
                 print( f'\n\n...User cancelled task via Ctrl+C...' )
                 sys.exit( 0 )
-            except:
+            except (ValueError, OverflowError) as e:
                 num_attempts += 1
                 print( "Invalid date format. Please enter the date in YYYY-MM-DD format." )
         if num_attempts == max_num_attempts:
@@ -741,10 +870,15 @@ class ORDataIntakeForm( ResourceFile ):
         shutil.copy( self.saved_ffn, dest_ffn )
 
 
-    def push_to_xnat( self, subj_inst, verbose: Opt[bool] = False ):
+    def push_to_xnat( self, subj_inst=None, verbose: Opt[bool] = False, *, gateway=None, subj_qs: Opt[str] = None ):
         if verbose:     print( f'\t\t...Uploading resource files...' )
         with open( self.saved_ffn, 'r' ) as f:
-            subj_inst.resource( 'INTAKE_FORM' ).file( self.filename_str ).insert( f.read(), content='TEXT', format='JSON', tags='DOC' ) # type: ignore
+            data = f.read()
+        if gateway is not None and subj_qs is not None:
+            from src.services.xnat_conventions import ResourceLabel
+            gateway.insert_file( subj_qs, ResourceLabel.INTAKE_FORM, self.filename_str, data, content='TEXT', format='JSON', tags='DOC' )
+        else:
+            subj_inst.resource( 'INTAKE_FORM' ).file( self.filename_str ).insert( data, content='TEXT', format='JSON', tags='DOC' ) # type: ignore
 
 
     @staticmethod

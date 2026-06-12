@@ -1,10 +1,14 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any, Dict, Hashable, List, Optional as Opt, Tuple
+from typing import Any, Callable, Dict, Hashable, List, Literal, Optional as Opt, Tuple
+import json
 import pandas as pd
 import numpy as np
 import warnings
 import re
 import ast
+from dataclasses import dataclass, field
 from datetime import datetime
 from tabulate import tabulate
 import textwrap
@@ -22,7 +26,182 @@ from src.xnat_experiment_data import *
 
 
 # Define list for allowable imports from this module -- do not want to import _local_variables. As more classes are added you will need to update this list.
-__all__ = ['BatchUploadRepresentation']
+__all__ = ['BatchUploadRepresentation', 'BatchRunResult', 'RowOutcome']
+
+
+# ---------------------------------------------------------------------------
+# Batch-run result types
+# ---------------------------------------------------------------------------
+
+@dataclass
+class RowOutcome:
+    """Per-row result from a continue-on-error batch run."""
+    row_index: int                              # 0-based index into the dataframe
+    status: Literal["succeeded", "skipped", "failed"]
+    reason: str = ""                            # plain-language; empty on success
+    offending_field: str = ""                   # column name when known
+
+
+@dataclass
+class BatchRunResult:
+    """
+    Summary of a completed batch-upload run.
+
+    Fields
+    ------
+    outcomes        : One RowOutcome per attempted row (all rows).
+    source_path     : Path to the original batch .xlsx (used for persist naming).
+    result_path     : Path where the JSON summary was persisted (set after persist()).
+
+    Convenience properties: succeeded_count, skipped_count, failed_count, failures.
+
+    Re-run API
+    ----------
+    Call ``rerun_failed(result, ...)`` (module-level helper) to re-attempt only
+    the failed rows, or use the ``only_rows`` parameter on ``upload_sessions``.
+    """
+    outcomes: List[RowOutcome] = field(default_factory=list)
+    source_path: Opt[Path] = None
+    result_path: Opt[Path] = None
+
+    # ------------------------------------------------------------------
+    # Convenience views
+    # ------------------------------------------------------------------
+
+    @property
+    def succeeded_count(self) -> int:
+        return sum(1 for o in self.outcomes if o.status == "succeeded")
+
+    @property
+    def skipped_count(self) -> int:
+        return sum(1 for o in self.outcomes if o.status == "skipped")
+
+    @property
+    def failed_count(self) -> int:
+        return sum(1 for o in self.outcomes if o.status == "failed")
+
+    @property
+    def failures(self) -> List[RowOutcome]:
+        return [o for o in self.outcomes if o.status == "failed"]
+
+    @property
+    def failed_row_indices(self) -> List[int]:
+        return [o.row_index for o in self.failures]
+
+    # ------------------------------------------------------------------
+    # Summary string
+    # ------------------------------------------------------------------
+
+    def summary(self) -> str:
+        lines = [
+            "BatchRunResult",
+            f"  succeeded : {self.succeeded_count}",
+            f"  skipped   : {self.skipped_count}",
+            f"  failed    : {self.failed_count}",
+        ]
+        if self.failures:
+            lines.append("  Failures:")
+            for f in self.failures:
+                field_hint = f" [{f.offending_field}]" if f.offending_field else ""
+                lines.append(f"    row {f.row_index}{field_hint}: {f.reason}")
+        if self.result_path:
+            lines.append(f"  Persisted to: {self.result_path}")
+        return "\n".join(lines)
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def persist(self, path: Opt[Path] = None) -> Path:
+        """
+        Write a JSON summary next to the source spreadsheet (or to *path*).
+
+        File is safe to read back as plain JSON. Returns the written path.
+        """
+        if path is None:
+            if self.source_path is None:
+                import tempfile
+                fd_path = Path(tempfile.mktemp(suffix="-batch-result.json"))
+            else:
+                src = Path(self.source_path)
+                fd_path = src.with_name(src.stem + "-batch-result.json")
+        else:
+            fd_path = Path(path)
+
+        payload = {
+            "source_path": str(self.source_path) if self.source_path else None,
+            "timestamp": datetime.now().isoformat(),
+            "succeeded": self.succeeded_count,
+            "skipped": self.skipped_count,
+            "failed": self.failed_count,
+            "outcomes": [
+                {
+                    "row_index": o.row_index,
+                    "status": o.status,
+                    "reason": o.reason,
+                    "offending_field": o.offending_field,
+                }
+                for o in self.outcomes
+            ],
+        }
+        fd_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        self.result_path = fd_path
+        return fd_path
+
+    # ------------------------------------------------------------------
+    # Load back from disk
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def load(cls, path: Path) -> "BatchRunResult":
+        """Reconstitute a BatchRunResult from a persisted JSON file."""
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        outcomes = [
+            RowOutcome(
+                row_index=o["row_index"],
+                status=o["status"],
+                reason=o.get("reason", ""),
+                offending_field=o.get("offending_field", ""),
+            )
+            for o in data.get("outcomes", [])
+        ]
+        src = data.get("source_path")
+        return cls(outcomes=outcomes, source_path=Path(src) if src else None, result_path=Path(path))
+
+# ---------------------------------------------------------------------------
+# Module-level re-run helper
+# ---------------------------------------------------------------------------
+
+def rerun_failed(
+    previous_result: "BatchRunResult",
+    batch_repr: "BatchUploadRepresentation",
+    **upload_kwargs: Any,
+) -> "BatchRunResult":
+    """
+    Re-attempt only the rows that failed in *previous_result*.
+
+    Parameters
+    ----------
+    previous_result
+        A :class:`BatchRunResult` from a previous ``upload_sessions`` call.
+    batch_repr
+        The same :class:`BatchUploadRepresentation` instance (or a fresh one
+        from the same spreadsheet).
+    **upload_kwargs
+        Forwarded verbatim to ``batch_repr.upload_sessions()``.  You MUST
+        supply ``config``, ``validated_login``, and ``xnat_connection``.
+
+    Returns
+    -------
+    BatchRunResult
+        Fresh result covering only the previously-failed rows.
+    """
+    failed_indices = previous_result.failed_row_indices
+    if not failed_indices:
+        # Nothing to retry — return an empty result
+        return BatchRunResult(source_path=previous_result.source_path)
+    return batch_repr.upload_sessions(only_rows=failed_indices, **upload_kwargs)
+
 
 #--------------------------------------------------------------------------------------------------------------------------
 # Class for representing an imported batch upload spreadsheet.
@@ -188,7 +367,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
                 performer_hawk_id_task = ast.literal_eval( formatted_str )
                 performer_hawk_id_task = {k.lower(): v for k, v in performer_hawk_id_task.items()}
                 assert isinstance( performer_hawk_id_task, dict ), "The input string was not in a valid format, e.g., {k1: v1; ...; kn: vn}."
-            except:
+            except (ValueError, SyntaxError, KeyError, AssertionError) as e:
                 self._log_issue(
                     idx=idx,
                     column='Performer HawkID-Task',
@@ -272,7 +451,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
                 self._log_issue( idx=idx, column='Radiology Contact Date', message="'Radiology Contact Date' is blank but 'Was Radiology Contacted' is specified; if you have the date, please input it.", issue_type='warning' )
             else:   # ensure that the text provided corresponds to a date                                                                
                 try:    datetime.strptime( row['Radiology Contact Date'], '%Y-%m-%d' )
-                except: self._log_issue( idx=idx, column='Radiology Contact Date', message=f"'Radiology Contact Date' ('{row['Radiology Contact Date']}') is not a valid date format.", issue_type='error' )    
+                except ValueError: self._log_issue( idx=idx, column='Radiology Contact Date', message=f"'Radiology Contact Date' ('{row['Radiology Contact Date']}') is not a valid date format.", issue_type='error' )
          
     def _check_optional_columns( self, idx: Hashable, row: pd.Series ) -> None:
         surgeon_hawkids = self.config.list_of_all_items_in_table( table_name='Surgeons' )
@@ -520,30 +699,169 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         return num_errors == 0, output, self.print_rows(), self.print_errors_list(), self.print_warnings_list()
     
 
-    def upload_sessions( self, config:ConfigTables, validated_login: XNATLogin, xnat_connection: XNATConnection, write_to_file: Opt[bool]=False, verbose: bool = True ) -> None:
-        """ Upload the sessions to XNAT. """
-        # Verify an open and valid XNAT connection is provided.
-        assert xnat_connection.is_verified, "XNAT connection must be open and valid.\n\t--\tPlease check your connection and try again."
+    def upload_sessions(
+        self,
+        config: ConfigTables,
+        validated_login: "XNATLogin",
+        xnat_connection: XNATConnection,
+        write_to_file: Opt[bool] = False,
+        verbose: bool = True,
+        only_rows: Opt[List[int]] = None,
+        _publish_fn: Opt[Callable[..., None]] = None,
+    ) -> "BatchRunResult":
+        """
+        Upload the sessions to XNAT with continue-on-error semantics.
 
-        # Verify the data is contains only valid rows that are ready for upload.
-        permitted_to_upload, _, _, _, _ = self.generate_summary( write_to_file=True )
-        assert permitted_to_upload, "Cannot upload sessions if there are any errors with the imported data\n\t--\tRemove or fix the problematic rows from the spreadsheet; see generate_summary()\n{'---'*10}\nSummary of imported spreadsheet is:\n{out_str}"
-        
-        # Change the column names of the dataframe such that spaces are replaced with \n
+        Parameters
+        ----------
+        config, validated_login, xnat_connection
+            Standard XNAT upload context (same as before).
+        write_to_file
+            Passed through to ``generate_summary``.
+        verbose
+            Passed through to per-row publish calls.
+        only_rows
+            Optional list of 0-based dataframe row indices to attempt.
+            All other rows are recorded as ``skipped``.  Used by
+            ``rerun_failed()`` to retry exactly the failed subset.
+        _publish_fn
+            Optional injection point for tests.  When provided, the entire
+            per-row XNAT object construction and publish is replaced by this
+            callable.  Signature::
+
+                _publish_fn(row: pd.Series, row_index: int) -> None
+
+            If it raises, the row is recorded as failed; otherwise succeeded.
+            This allows tests to exercise continue-on-error logic without
+            constructing real XNAT objects or hitting the network.
+
+        Returns
+        -------
+        BatchRunResult
+            Per-row outcomes + summary.  Also persisted to a JSON file next to
+            the source spreadsheet (or a temp file when no path is available).
+        """
+        from src.services.errors import FriendlyError, render
+
+        # ------------------------------------------------------------------
+        # 1. Verify connection (still a hard stop — no server = can't upload any row)
+        # ------------------------------------------------------------------
+        if not xnat_connection.is_verified:
+            fe = FriendlyError(
+                title="XNAT connection is not verified",
+                message=(
+                    "The XNAT connection must be open and verified before uploading. "
+                    "Check that you are on the UIowa VPN and that your credentials are correct."
+                ),
+                recourse=[
+                    "Make sure you are connected to the UIowa VPN.",
+                    "Re-open the XNAT connection and retry.",
+                    "Contact the Data Librarian if the problem persists.",
+                ],
+            )
+            raise ConnectionError(render(fe))
+
+        # ------------------------------------------------------------------
+        # 2. Build a per-row error map from generate_summary (no abort on errors)
+        # ------------------------------------------------------------------
+        _, _, _, _, _ = self.generate_summary(write_to_file=write_to_file)
+
+        # rows_with_errors: set of dataframe indices (0-based) that have ≥1 error
+        rows_with_errors: set = set()
+        for idx, row in self._errors.iterrows():
+            for col in self._errors.columns:
+                if row[col]:  # non-empty cell means there is an error
+                    rows_with_errors.add(idx)
+                    break
+
+        # ------------------------------------------------------------------
+        # 3. Prepare df_copy with \n-separated column names (existing convention)
+        # ------------------------------------------------------------------
         df_copy = self.df.copy()
-        df_copy.columns = [ col.replace( ' ', '\n' ) for col in df_copy.columns ]
+        df_copy.columns = [col.replace(" ", "\n") for col in df_copy.columns]
 
-        # Walk through each row, check what type of data it is, instantiate appropriately (eg rfSession, esvSession, etc), then write and publish.
+        result = BatchRunResult(source_path=self._ffn)
+
+        # ------------------------------------------------------------------
+        # 4. Iterate every row — catch failures, never abort the batch
+        # ------------------------------------------------------------------
         for idx, row in df_copy.iterrows():
-            # Create the digital form for uploading.
-            procedure_name = row['Procedure\nName']
-            if 'ARTHROSCOPY' in procedure_name.upper(): # Get the procedure name, if it contains 'Arthroscopy' then use ESVSession, otherwise use RFSession.
-                intake_form = ORDataIntakeForm( validated_login=validated_login, config=config, input_data=row, verbose=verbose )
-                session = SourceESVSession( intake_form=intake_form, config=config  )
-                session.write_publish_catalog_subroutine( config=config, xnat_connection=xnat_connection, validated_login=validated_login, verbose=True )
-            else:
-                print( f'!!!! Assuming that {procedure_name} is a trauma case -- attempting to upload as a SourceRFsession\n\t--\tIf this is incorrect, consult the Data Librarian with this note.' )
-                raise NotImplementedError( f"This part of the function is not yet implemented\n\t-- If you have a trauma case you need to upload, contact the data librarian to get this implemented." )
-                # session = SourceRFSession( xnat_connection=xnat_connection, config=config, row=row, verbose=True )
+            # (a) skip rows not in the requested subset
+            if only_rows is not None and idx not in only_rows:
+                result.outcomes.append(RowOutcome(
+                    row_index=int(idx),
+                    status="skipped",
+                    reason="not in only_rows filter",
+                ))
+                continue
+
+            # (b) skip rows that already have validation errors
+            if idx in rows_with_errors:
+                # Collect the first error message for the reason field
+                first_col, first_msg = "", ""
+                for col in self._errors.columns:
+                    cell = self._errors.at[idx, col]
+                    if cell:
+                        first_col = col
+                        first_msg = cell[0] if isinstance(cell, list) else str(cell)
+                        break
+                result.outcomes.append(RowOutcome(
+                    row_index=int(idx),
+                    status="failed",
+                    reason=f"Spreadsheet validation error: {first_msg}",
+                    offending_field=first_col,
+                ))
+                if verbose:
+                    print(f"[batch] Row {idx}: SKIPPED (validation error in '{first_col}')")
+                continue
+
+            # (c) attempt upload — catch any exception, record, and continue
+            try:
+                if _publish_fn is not None:
+                    # Injection point for tests: called with (row, row_index) so
+                    # no real XNAT objects are constructed.  Raise to simulate
+                    # failure; return normally to indicate success.
+                    _publish_fn(row, int(idx))
+                else:
+                    procedure_name = row["Procedure\nName"]
+                    if "ARTHROSCOPY" in procedure_name.upper():
+                        intake_form = ORDataIntakeForm(
+                            validated_login=validated_login, config=config,
+                            input_data=row, verbose=verbose,
+                        )
+                        session = SourceESVSession(intake_form=intake_form, config=config)
+                        session.write_publish_catalog_subroutine(
+                            config=config,
+                            xnat_connection=xnat_connection,
+                            validated_login=validated_login,
+                            verbose=verbose,
+                        )
+                    else:
+                        raise NotImplementedError(
+                            f"Trauma upload ('{procedure_name}') not yet implemented. "
+                            "Contact the Data Librarian."
+                        )
+                result.outcomes.append(RowOutcome(row_index=int(idx), status="succeeded"))
+                if verbose:
+                    print(f"[batch] Row {idx}: succeeded")
+
+            except Exception as exc:  # noqa: BLE001
+                reason = str(exc) or type(exc).__name__
+                result.outcomes.append(RowOutcome(
+                    row_index=int(idx),
+                    status="failed",
+                    reason=reason,
+                ))
+                if verbose:
+                    print(f"[batch] Row {idx}: FAILED — {reason}")
+
+        # ------------------------------------------------------------------
+        # 5. Persist summary and print it
+        # ------------------------------------------------------------------
+        result.persist()
+        if verbose:
+            print(result.summary())
+
+        return result
 
     def __str__( self ) -> str:                             return self.print_rows( rows='all' )

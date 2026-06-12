@@ -1,8 +1,14 @@
 """
 app/main.py — Streamlit entrypoint for XNAT-Interact.
 
-Launch:
-    streamlit run app/main.py
+SUPPORTED LAUNCH:
+    streamlit run streamlit_app.py  (from repo root — recommended)
+
+LEGACY (NOT RECOMMENDED):
+    streamlit run app/main.py  (collides with Streamlit's page auto-discovery)
+
+This file contains the page router. The repo-root launcher (streamlit_app.py)
+ensures sys.path includes the repo root so relative imports work correctly.
 
 Responsibilities
 ----------------
@@ -12,6 +18,15 @@ Responsibilities
 4. Import st.* here; never in app/logic/*.py (offline-testability rule).
 """
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+# Belt-and-suspenders: if run directly, ensure repo root is on sys.path
+_MAIN_DIR = Path(__file__).resolve().parent
+_ROOT = _MAIN_DIR.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import streamlit as st
 
@@ -119,4 +134,9 @@ def main() -> None:
         browse.render()
 
 
-main()
+# Auto-run only when this module IS the Streamlit entrypoint (legacy
+# `streamlit run app/main.py`). When imported by the root launcher
+# (streamlit_app.py), __name__ == "app.main" → the launcher calls main()
+# exactly once, avoiding a double render (StreamlitDuplicateElementKey).
+if __name__ == "__main__":
+    main()

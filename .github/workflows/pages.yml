@@ -16,6 +16,7 @@ on:
       - main
       - development
       - 004-phase-4-onboarding-and-docs
+      - xnat-fable
     paths:
       - "docs/site/**"
   workflow_dispatch:

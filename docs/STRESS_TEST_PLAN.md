@@ -48,3 +48,16 @@ Append-only; one line per lane run: `<date> <phase> <result> <evidence-path>`.
 2026-06-12 NOTE esvSessionData absent from core XNAT schema (Iowa RPACS must carry custom plugin) — arthro publishes untestable locally as esv
 2026-06-12 NOTE ConfigTables in-memory staleness across sequential publishes in one process (driver needed pull_from_xnat per surgery) — batch-mode dedup risk
 2026-06-12 NOTE XNAT banner '318 sessions open from one IP' during stress — JSESSION leak (REST curls + per-worker pyxnat connects without disconnect)
+2026-06-12 BUG-HIGH publish_to_xnat creates subject/exp/scan BEFORE upload; put_zip failure leaves empty shells (live, VERIFY_E2E) — #32 Q3 invariant violated; needs cleanup-on-failure or upload-first design
+2026-06-12 FIX xsiType: create(experiments=...)/create(scans=...) verified live -> xnat:rfSessionData + xnat:rfScanData stored
+2026-06-12 GAP-003 stock XNAT 1.9.3: file PUT via NUMERIC resource id 404s under rf-typed sessions (mr ok); label-addressed + extract=true works -> pyxnat put_zip broken for rf; gateway REST rewrite in flight
+2026-06-12 P5 GAP-001 CLOSED live: assessor insert/list/get_copy/delete via accession-ID rewrite all green (SMOKE_DRV)
+2026-06-12 P3-volume 10 surgeries x 20 frames: 10/10 ok, mean 1.71s, no empty shells, all rfSessionData PASS
+2026-06-12 P4-roundtrip browse+download live: 206 files retrieved; raw PixelData sha256 20/20 IDENTICAL upload vs download; PatientName/ID redacted PASS
+2026-06-12 P3-concurrent 4 workers: phase1 project-create race -> HTTP 500 (harness); phase2 config push 2/4 raw DatabaseError/AssertionError, 0 LostUpdateError -> H4 guard misses live contention CONFIRMED
+2026-06-12 P3-malformed: truncated/not_a_dicom/three_channel CRASH w/ raw asserts (client-side, no server pollution); no_instance_number/dup_private_tag/1005-frame ACCEPTED (fixes hold live)
+2026-06-12 P6-dedup DEAD-WIRED: all overlap cases (exact/subset/superset/partial) ACCEPTED, DedupReviewRequired never fired — write_publish_catalog_subroutine:685 omits dedup_registry/incoming_content_hashes
+2026-06-12 P4-enum BUG real pyxnat lacks list_files(); resources().get() yields numeric ids w/ silent-empty reads — download enumeration fixed via files().label() + label-iteration
+2026-06-12 P3-malformed RERUN post-fix: truncated/not_a_dicom/three_channel -> FRIENDLY (named offender, no crash); others ACCEPTED — lane fully green behavior
+2026-06-12 P6-dedup WIRED+GREEN live: exact/subset/superset/partial -> DedupReviewRequired (reject), disjoint -> accept; root cause of historic dead gate = unwired kwargs + lowercase/uppercase hash mismatch (config.add_new_item uppercases; ImageHash lowercase) -> intersection always empty
+2026-06-12 FINAL suite 1276 passed / 0 failed / 7 xfailed; campaign phases P0-P8 complete

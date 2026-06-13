@@ -19,6 +19,28 @@ done
 
 export XNAT_DEMO_MODE=1
 
+# --- Python environment sanity: a venv whose interpreter was deleted
+# (e.g. Homebrew/Xcode Python upgrade) fails later with the cryptic
+# "bad interpreter: .../python3.9: No such file or directory".
+# Detect it up front and say what to do.
+if ! python3 -c "import sys" >/dev/null 2>&1; then
+  echo "[run_demo.sh] ERROR: your Python environment is broken (interpreter missing)."
+  echo "  This usually means the virtualenv points at a Python that was removed."
+  echo "  Fix:"
+  echo "    deactivate 2>/dev/null; rm -rf .venv"
+  echo "    python3 -m venv .venv && source .venv/bin/activate"
+  echo "    pip install -r requirements.txt"
+  exit 1
+fi
+if ! python3 -c "import streamlit" >/dev/null 2>&1; then
+  echo "[run_demo.sh] ERROR: streamlit is not importable in this environment."
+  echo "  Activate your venv and install dependencies first:"
+  echo "    source .venv/bin/activate && pip install -r requirements.txt"
+  echo "  (If activation itself errors with 'bad interpreter', rebuild the venv:"
+  echo "   rm -rf .venv && python3 -m venv .venv && source .venv/bin/activate)"
+  exit 1
+fi
+
 if [ "$FAKE_MODE" -eq 1 ]; then
   echo "[run_demo.sh] --fake flag set → using local FakeXNAT archive (no Docker needed)"
   echo "[run_demo.sh] Starting guided app..."
@@ -68,7 +90,7 @@ export XNAT_SERVER_URL=http://localhost:8080
 export XNAT_PROJECT_NAME=DEMO_UI
 export XNAT_USERNAME=admin
 export XNAT_PASSWORD=admin
-export XNAT_IDENTITY_SALT=64656d6f6f6e6c79646f6e6f747275737474686973696e70726f64756374696f
+export XNAT_IDENTITY_SALT=64656d6f6f6e6c79646f6e6f747275737474686973696e70726f64756374696f6e
 
 echo "[run_demo.sh] Starting guided app with real XNAT at $XNAT_SERVER_URL..."
 cd "$REPO_ROOT"

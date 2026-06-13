@@ -81,7 +81,7 @@ def _render_authenticated() -> None:
     # Header with resolved project name
     try:
         if demo.is_demo_mode():
-            project_display = "DEMO_PROJECT"
+            project_display = demo.active_project_name()
         else:
             from src.services.config import AppConfig
             project_display = AppConfig.load().project_name
@@ -92,7 +92,12 @@ def _render_authenticated() -> None:
 
     # Persistent demo mode banner
     if demo.is_demo_mode():
-        st.warning("🧪 DEMO MODE — synthetic data, no real XNAT server. Nothing here is real.")
+        _server = state.get_server()
+        if hasattr(_server, "_url"):
+            _xnat_url = _server._url
+            st.info(f"🟢 DEMO MODE — live XNAT at {_xnat_url}")
+        else:
+            st.warning("🧪 DEMO MODE — local fake archive. Nothing here is real.")
 
     # Logout button
     if st.button("🚪 Log Out", key="btn_logout"):
@@ -130,7 +135,7 @@ def _render_authenticated() -> None:
         # Resolve project name for download/browse
         try:
             if demo.is_demo_mode():
-                project_name = "DEMO_PROJECT"
+                project_name = demo.active_project_name()
             else:
                 from src.services.config import AppConfig
                 project_name = AppConfig.load().project_name

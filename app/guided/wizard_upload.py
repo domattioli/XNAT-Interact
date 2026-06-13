@@ -8,11 +8,14 @@ Returns plain-language reasons why a step cannot advance.
 """
 from __future__ import annotations
 
+import os
+import tempfile
 from typing import Any, Dict, List, Optional, Tuple
 
 import streamlit as st
 
 from app.guided import components, wizard_state
+from app.guided.publish_impl import make_publish_fn
 from app.logic.upload import (
     UploadOutcome,
     dropdown_options,
@@ -86,8 +89,10 @@ def step_blockers(
 
     # Step 2: Images
     elif step_index == 2:
-        if not form_values.get("image_dir", "").strip():
-            blockers.append("Image Folder path is required.")
+        has_dir = bool(form_values.get("image_dir", "").strip())
+        has_uploads = int(form_values.get("image_count", 0)) > 0
+        if not has_dir and not has_uploads:
+            blockers.append("Image files are required: upload files or provide a folder path.")
 
     # Step 3: Privacy check
     elif step_index == 3:
@@ -222,31 +227,72 @@ def _render_details_step(config: Any) -> None:
 
 
 def _render_images_step(config: Any) -> None:
-    """Step 2: Images — image_dir input, image count note."""
+    """Step 2: Images — file uploader (primary) + folder path fallback."""
     st.subheader("Where are your images?")
 
     form = wizard_state.get_form()
 
-    image_dir = st.text_input(
-        "Image Folder Path *",
-        value=form.get("image_dir", ""),
-        placeholder="e.g., /path/to/images",
-        help="Local path to the folder containing DICOM/image files.",
-        key="input_image_dir",
+    # Primary: browser file uploader
+    uploaded_files = st.file_uploader(
+        "Select your case's image files",
+        accept_multiple_files=True,
+        type=["dcm", "dicom", "png", "jpg", "jpeg"],
+        key="file_uploader_images",
+        help="Select all DICOM/image files for this case.",
     )
 
-    image_count = st.number_input(
-        "Number of images (for display)",
-        min_value=0,
-        value=form.get("image_count", 0),
-        help="Approximate count; used for the preview summary.",
-        key="input_image_count",
-    )
+    image_dir = form.get("image_dir", "")
+    image_count = 0
 
-    wizard_state.update_form({
-        "image_dir": image_dir.strip(),
-        "image_count": int(image_count),
-    })
+    if uploaded_files:
+        # Write uploaded files to a temp directory and persist the path
+        existing_tmpdir = form.get("_upload_tmpdir", "")
+        if not existing_tmpdir or not os.path.isdir(existing_tmpdir):
+            existing_tmpdir = tempfile.mkdtemp(prefix="guided_upload_")
+        # Write each file
+        for uf in uploaded_files:
+            dest = os.path.join(existing_tmpdir, uf.name)
+            with open(dest, "wb") as fh:
+                fh.write(uf.read())
+        image_dir = existing_tmpdir
+        image_count = len(uploaded_files)
+        wizard_state.update_form({
+            "image_dir": image_dir,
+            "image_count": image_count,
+            "_upload_tmpdir": existing_tmpdir,
+        })
+        st.success(f"✅ {image_count} file(s) ready for upload.")
+    elif image_dir and image_dir == form.get("_upload_tmpdir", ""):
+        # Persist previously uploaded files across re-runs
+        existing_files = [f for f in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, f))] if os.path.isdir(image_dir) else []
+        image_count = len(existing_files)
+        wizard_state.update_form({"image_count": image_count})
+        if image_count > 0:
+            st.success(f"✅ {image_count} file(s) ready for upload (from previous selection).")
+
+    # Fallback: folder path on this computer
+    with st.expander("Advanced: use a folder path on this computer", expanded=False):
+        folder_path = st.text_input(
+            "Image Folder Path",
+            value=form.get("_manual_folder_path", ""),
+            placeholder="e.g., /path/to/images",
+            help="Local path to the folder containing DICOM/image files.",
+            key="input_image_dir_manual",
+        )
+        if folder_path.strip():
+            if os.path.isdir(folder_path.strip()):
+                files_in_dir = [f for f in os.listdir(folder_path.strip()) if os.path.isfile(os.path.join(folder_path.strip(), f))]
+                cnt = len(files_in_dir)
+                wizard_state.update_form({
+                    "image_dir": folder_path.strip(),
+                    "image_count": cnt,
+                    "_manual_folder_path": folder_path.strip(),
+                })
+                image_dir = folder_path.strip()
+                image_count = cnt
+                st.caption(f"Found {cnt} file(s) in folder.")
+            else:
+                st.warning("Path does not exist or is not a folder.")
 
     st.caption(
         "Files will be processed locally. No patient identifiers will leave your machine."
@@ -255,8 +301,8 @@ def _render_images_step(config: Any) -> None:
     # Technical detail
     with st.expander("🔧 Show technical detail", expanded=False):
         st.json({
-            "image_dir": image_dir.strip(),
-            "image_count": int(image_count),
+            "image_dir": image_dir,
+            "image_count": image_count,
         })
 
 
@@ -435,14 +481,15 @@ def _execute_upload(server: Any) -> None:
             server_connection=server,
             review_decision=review_decision,
             redaction_boxes=None,
-            publish_fn=None,  # Will be wired by integration layer
+            publish_fn=make_publish_fn(server),
         )
 
     if outcome.ok:
         st.success(
             f"✅ **Surgery uploaded successfully!**  \n"
             f"Procedure: {form.get('procedure_name')}  \n"
-            f"Institution: {form.get('institution_name')}",
+            f"Institution: {form.get('institution_name')}  \n\n"
+            f"To view it, go to **Find & view past cases**.",
             icon=None,
         )
         wizard_state.set_uploaded(True)

@@ -1,3 +1,6 @@
+# Harness-injected self-referential workspace symlink (cloud routine sessions)
+/XNAT-Interact
+
 # Ignore everything
 /.venv
 /.my_venv

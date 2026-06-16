@@ -494,3 +494,69 @@ class TestZipAssemblyScope:
         assert len(names) == 5, (
             f"Expected 5 files in zip, got {len(names)}: {names}"
         )
+
+
+# ---------------------------------------------------------------------------
+# #33 C1: resource label is parameterized (not hardcoded "SRC")
+# ---------------------------------------------------------------------------
+
+def test_c1_derived_resource_label_downloads_real_files(tmp_path: Path) -> None:
+    """#33 C1: a DERIVED-labeled scan resource must download its real files,
+    not fall through to the legacy synthesized SRC filename."""
+    server = SeededFullSeriesFakeXNAT(
+        project_name=PROJECT,
+        subjects={
+            SUBJECT: {
+                EXPERIMENT: {
+                    "date": "2026-01-01",
+                    "scans": {SCAN: {"scan_type": SCAN, "num_files": 3}},
+                },
+            },
+        },
+    )
+    files = _make_fake_files(3, prefix="derived")
+    res = server.get_scan_resource(SUBJECT, EXPERIMENT, SCAN, "DERIVED")
+    server.seed_resource_files(res, files)
+
+    row = {
+        "subject": SUBJECT,
+        "experiment": EXPERIMENT,
+        "scan_type": SCAN,
+        "num_files": 3,
+    }
+    outcome = download_selection(
+        server, PROJECT, [row], tmp_path, resource_label="DERIVED"
+    )
+    assert outcome.ok, outcome.friendly
+    assert len(outcome.files_written) == 3
+    written_names = sorted(p.name for p in outcome.files_written)
+    assert written_names == sorted(fn for fn, _ in files)
+
+
+def test_c1_per_row_resource_label_override(tmp_path: Path) -> None:
+    """#33 C1: a per-row `resource_label` key overrides the default SRC."""
+    server = SeededFullSeriesFakeXNAT(
+        project_name=PROJECT,
+        subjects={
+            SUBJECT: {
+                EXPERIMENT: {
+                    "date": "2026-01-01",
+                    "scans": {SCAN: {"scan_type": SCAN, "num_files": 2}},
+                },
+            },
+        },
+    )
+    files = _make_fake_files(2, prefix="rowlabel")
+    res = server.get_scan_resource(SUBJECT, EXPERIMENT, SCAN, "DERIVED")
+    server.seed_resource_files(res, files)
+
+    row = {
+        "subject": SUBJECT,
+        "experiment": EXPERIMENT,
+        "scan_type": SCAN,
+        "num_files": 2,
+        "resource_label": "DERIVED",
+    }
+    outcome = download_selection(server, PROJECT, [row], tmp_path)
+    assert outcome.ok, outcome.friendly
+    assert len(outcome.files_written) == 2

@@ -122,24 +122,29 @@ def download_selection(
     project_name: str,
     selection: List[dict],
     dest_dir: Union[str, Path],
+    resource_label: str = "SRC",
 ) -> DownloadOutcome:
     """
     Download resource files for the chosen rows into *dest_dir*.
 
     Each row in *selection* must have at minimum ``subject`` and ``experiment``
     keys (same shape as list_downloadable rows).  If ``scan_type`` is present it
-    is used as the resource label; otherwise "SRC" is the default.
+    is used as the scan label.  The XNAT resource label defaults to the
+    ``resource_label`` argument ("SRC"), and may be overridden per-row via a
+    ``resource_label`` key on the row dict (e.g. "DERIVED").
 
     Cross-platform path construction: pathlib.Path / os.path.join only.
     No backslashes hardcoded anywhere.
 
     Parameters
     ----------
-    server       : pyxnat.Interface or FakeXNAT — must support
-                   server.select(qs).resource(label).file(fn).get_copy(dest).
-    project_name : XNAT project name string.
-    selection    : List of row dicts from list_downloadable.
-    dest_dir     : Destination folder (created if missing).
+    server           : pyxnat.Interface or FakeXNAT — must support
+                       server.select(qs).resource(label).file(fn).get_copy(dest).
+    project_name     : XNAT project name string.
+    selection        : List of row dicts from list_downloadable.
+    dest_dir         : Destination folder (created if missing).
+    resource_label   : XNAT resource label ("SRC" by default; may be "DERIVED" etc.
+                       May be overridden per-row via row dict key "resource_label".
 
     Returns
     -------
@@ -188,6 +193,7 @@ def download_selection(
         subject = str(row.get("subject", ""))
         experiment = str(row.get("experiment", ""))
         scan = str(row.get("scan_type", "")) or "SRC"
+        label = str(row.get("resource_label", "")).strip() or resource_label
 
         if not subject or not experiment:
             # Malformed row — skip gracefully
@@ -217,11 +223,11 @@ def download_selection(
         # Build XNAT query string for this subject/experiment/scan
         qs = (
             f"/projects/{project_name}/subjects/{subject}"
-            f"/experiments/{experiment}/scans/{scan}/resources/SRC"
+            f"/experiments/{experiment}/scans/{scan}/resources/{label}"
         )
 
         try:
-            resource = server.select(qs).resource("SRC")
+            resource = server.select(qs).resource(label)
         except Exception as exc:
             from src.services.errors import handle as _handle
             fe = _handle(

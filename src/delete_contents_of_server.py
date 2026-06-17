@@ -35,6 +35,14 @@ from src.services.xnat_conventions import project_qs as _project_qs, subject_qs 
 _cfg = AppConfig.load()
 project_name: str = _cfg.project_name
 
+# Canonical config-catalog resource + file names. Source of truth:
+# src/utilities.py UIDandMetaInfo._set_local_variables (xnat_config_folder_name,
+# config_fn). The catalog lives at resource 'config' / file 'database_config.json'
+# — NOT 'MetaTables'/'MetaTables.json', which no resource ever used, so the old
+# hardcoded names made deletion silently no-op (issue #33 finding M9).
+_CONFIG_RESOURCE = "config"
+_CONFIG_FILE = "database_config.json"
+
 
 # ---------------------------------------------------------------------------
 # Core deletion helpers
@@ -97,7 +105,7 @@ def delete_subjects(server: XnatGateway, *, dry_run: bool = False) -> None:
 
 
 def delete_metatables(server: XnatGateway, *, dry_run: bool = False) -> None:
-    """Delete the MetaTables.json resource from the project.
+    """Delete the config catalog (database_config.json) resource from the project.
 
     Parameters
     ----------
@@ -108,7 +116,7 @@ def delete_metatables(server: XnatGateway, *, dry_run: bool = False) -> None:
     ------
     RuntimeError  : If the deletion fails.
     """
-    target = f"project '{project_name}' / resource 'MetaTables' / file 'MetaTables.json'"
+    target = f"project '{project_name}' / resource '{_CONFIG_RESOURCE}' / file '{_CONFIG_FILE}'"
 
     if dry_run:
         print(f"\n[DRY-RUN] Would delete: {target}")
@@ -116,13 +124,13 @@ def delete_metatables(server: XnatGateway, *, dry_run: bool = False) -> None:
         return
 
     try:
-        server.delete_file(_project_qs(project_name), "MetaTables", "MetaTables.json")
+        server.delete_file(_project_qs(project_name), _CONFIG_RESOURCE, _CONFIG_FILE)
     except Exception as exc:
         fe = handle(
             exc,
-            title="Failed to delete MetaTables.json",
+            title=f"Failed to delete {_CONFIG_FILE}",
             message=(
-                f"Deletion of MetaTables.json from project '{project_name}' "
+                f"Deletion of {_CONFIG_FILE} from project '{project_name}' "
                 f"raised {type(exc).__name__}: {exc}"
             ),
             recourse=[
@@ -134,7 +142,7 @@ def delete_metatables(server: XnatGateway, *, dry_run: bool = False) -> None:
         )
         print(render(fe), file=sys.stderr)
         raise RuntimeError(
-            f"delete_metatables: MetaTables.json could not be deleted — {type(exc).__name__}: {exc}"
+            f"delete_metatables: {_CONFIG_FILE} could not be deleted — {type(exc).__name__}: {exc}"
         ) from exc
 
 

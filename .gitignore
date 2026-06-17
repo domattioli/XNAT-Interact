@@ -39,3 +39,6 @@ registry.db
 registry.db-shm
 registry.db-wal
 *.archived-*.json
+
+# Harness-injected self-referential symlink (cloud session artifact); never commit
+/XNAT-Interact

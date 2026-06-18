@@ -39,3 +39,7 @@ registry.db
 registry.db-shm
 registry.db-wal
 *.archived-*.json
+
+# Harness env-artifact: a nested clone of this repo appears at the repo root
+# in some cloud sessions (own .git). Never part of the project; do not commit.
+/XNAT-Interact

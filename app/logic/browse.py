@@ -136,9 +136,12 @@ def _scan_attrs(server: Any, project_name: str, subject: str, experiment: str, s
 def _file_count(server: Any, project_name: str, subject: str, experiment: str, scan: str) -> int:
     """Return file count for a scan resource (best-effort; -1 on failure)."""
     try:
+        # L6 (#33): list files across ALL of the scan's resources, not just SRC.
+        # A scan whose files live under a non-SRC resource (e.g. DERIVED) was
+        # previously undercounted because the query pinned /resources/SRC.
         qs = (
             f"/projects/{project_name}/subjects/{subject}"
-            f"/experiments/{experiment}/scans/{scan}/resources/SRC/files"
+            f"/experiments/{experiment}/scans/{scan}/files"
         )
         sel = server.select(qs)
         if hasattr(sel, "get") and callable(sel.get):

@@ -39,3 +39,7 @@ registry.db
 registry.db-shm
 registry.db-wal
 *.archived-*.json
+
+# Container-created self-referential symlink (repo-root -> /workspace/<repo>);
+# an ephemeral environment artifact, never part of the project tree.
+/XNAT-Interact

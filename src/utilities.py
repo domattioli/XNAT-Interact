@@ -745,6 +745,7 @@ class ConfigTables( UIDandMetaInfo ):
         self._metadata = {  'CREATED': now_datetime,
                             'LAST_MODIFIED': now_datetime,
                             'CREATED_BY': self.accessor_uid,
+                            'LAST_MODIFIED_BY': self.accessor_uid,
                             'TABLE_EXTRA_COLUMNS': {} }
             
     def _initialize_tables( self ) -> None:
@@ -863,7 +864,8 @@ class ConfigTables( UIDandMetaInfo ):
     
 
     def _update_metadata( self, new_table_extra_columns: Opt[dict] = None ) -> None:
-        self.metadata.update( {'LAST_MODIFIED': self.now_datetime, 'CREATED_BY': self.accessor_uid} )
+        self.metadata.update( {'LAST_MODIFIED': self.now_datetime, 'LAST_MODIFIED_BY': self.accessor_uid} )
+        self.metadata.setdefault( 'CREATED_BY', self.accessor_uid )  # #33 L2: preserve original creator; never overwrite on update
         if new_table_extra_columns is not None:
             for k, v in new_table_extra_columns.items():
                 assert isinstance( v, list ), f'Extra column names for Table "{k}" must be a list of strings.'

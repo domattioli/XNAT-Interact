@@ -39,3 +39,6 @@ registry.db
 registry.db-shm
 registry.db-wal
 *.archived-*.json
+
+# environment-provisioned self-referencing symlink (container setup, not repo content)
+/XNAT-Interact

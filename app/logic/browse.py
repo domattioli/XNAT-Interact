@@ -9,7 +9,7 @@ Public API
 ----------
 fetch_data_table(server, project_name) -> list[dict] | FriendlyError
     Query project for subjects/experiments/scans; return rows with columns:
-    subject, experiment, date, scan_type, num_files.
+    subject, experiment, date, scan_type, num_files, scan_id.
 
 filter_rows(rows, query) -> list[dict]
     Case-insensitive substring match across all column values.
@@ -22,8 +22,9 @@ and the XNAT data model in src/xnat_experiment_data.py):
     subject       — subject/case label (UID or name on XNAT)
     experiment    — experiment label (SOURCE_DATA-<uid>)
     date          — acquisition date from experiment attrs (may be "" if unset)
-    scan_type     — scan type label (e.g., DICOM, DICOM_MP4, DERIVED)
+    scan_type     — scan type label (e.g., DICOM, DICOM_MP4, DERIVED; display-only)
     num_files     — count of files in the scan resource (int; -1 if unavailable)
+    scan_id       — real scan label/ID for download resolution (e.g., '0', '1'; #25 fix)
 """
 from __future__ import annotations
 
@@ -36,7 +37,7 @@ from src.services.errors import FriendlyError
 # Column names (single source of truth — referenced by pages/browse.py too)
 # ---------------------------------------------------------------------------
 
-COLUMNS = ["subject", "experiment", "date", "scan_type", "num_files"]
+COLUMNS = ["subject", "experiment", "date", "scan_type", "num_files", "scan_id"]
 
 
 # ---------------------------------------------------------------------------
@@ -49,6 +50,38 @@ def _safe_int(value: Any, default: int = -1) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _rest_json(server: Any, uri: str) -> Union[dict, None]:
+    """
+    Fetch JSON from a REST URI using the server's underlying gateway.
+
+    For real pyxnat.Interface, calls .get(uri) which returns a response object
+    with .json() method. Returns parsed dict or None on any failure.
+
+    Best-effort; never raises. Gracefully handles:
+    - Missing/non-callable .get()
+    - Response objects without .json() method
+    - JSON parse errors
+    - Network failures
+    """
+    try:
+        if hasattr(server, "get") and callable(server.get):
+            response = server.get(uri)
+            # Try .json() method first (pyxnat response objects)
+            if hasattr(response, "json") and callable(response.json):
+                return response.json()
+            # Try .text and manual parse
+            if hasattr(response, "text"):
+                import json as json_module
+                return json_module.loads(response.text)
+            # Try reading as if it's a file-like object
+            if hasattr(response, "read"):
+                import json as json_module
+                return json_module.loads(response.read())
+    except Exception:
+        pass
+    return None
 
 
 def _subject_names(server: Any, project_name: str) -> List[str]:
@@ -92,18 +125,62 @@ def _subject_names(server: Any, project_name: str) -> List[str]:
     if hasattr(server, "label_for_subject") and callable(server.label_for_subject):
         return [server.label_for_subject(iid) for iid in raw_ids]
 
+    # Fallback: fetch labels via REST API when label_for_subject is unavailable
+    uri = f"/data/projects/{project_name}/subjects?format=json"
+    data = _rest_json(server, uri)
+    if data and isinstance(data, dict):
+        results = data.get("ResultSet", {}).get("Result", [])
+        # Build ID → label map from REST response
+        id_to_label = {}
+        for row in results:
+            if isinstance(row, dict):
+                subj_id = row.get("ID", "")
+                subj_label = row.get("label", "")
+                if subj_id and subj_label:
+                    id_to_label[subj_id] = subj_label
+        # Resolve raw_ids using the map; fall back to raw id if no label found
+        return [id_to_label.get(iid, iid) for iid in raw_ids]
+
     return raw_ids
 
 
 def _experiment_labels(server: Any, project_name: str, subject: str) -> List[str]:
-    """Return experiment labels for a subject."""
+    """
+    Return experiment labels for a subject.
+
+    Tries primary paths first (select().get(), list_experiments()).
+    If both return empty, falls back to REST API query filtered by subject.
+    """
     qs = f"/projects/{project_name}/subjects/{subject}/experiments/*"
     selected = server.select(qs)
     if hasattr(selected, "get") and callable(selected.get):
         raw = selected.get()
-        return list(raw) if raw else []
+        if raw:
+            return list(raw)
+
     if hasattr(server, "list_experiments") and callable(server.list_experiments):
-        return list(server.list_experiments(project_name, subject))
+        exps = server.list_experiments(project_name, subject)
+        if exps:
+            return list(exps)
+
+    # Fallback: query REST API and filter by subject
+    uri = f"/data/experiments?project={project_name}&columns=ID,label,xsiType,subject_ID,subject_label&format=json"
+    data = _rest_json(server, uri)
+    if data and isinstance(data, dict):
+        results = data.get("ResultSet", {}).get("Result", [])
+        # Filter rows to the subject (match subject_label OR subject_ID == the passed subject)
+        matching_labels = []
+        for row in results:
+            if isinstance(row, dict):
+                row_subject_label = row.get("subject_label", "")
+                row_subject_id = row.get("subject_ID", "")
+                if row_subject_label == subject or row_subject_id == subject:
+                    label = row.get("label")
+                    if label:
+                        matching_labels.append(label)
+        if matching_labels:
+            return matching_labels
+
     return []
 
 
@@ -207,6 +284,7 @@ def fetch_data_table(
                     "date": "",
                     "scan_type": "",
                     "num_files": -1,
+                    "scan_id": "",
                 })
                 continue
             for exp in experiments:
@@ -219,6 +297,7 @@ def fetch_data_table(
                         "date": date,
                         "scan_type": "",
                         "num_files": -1,
+                        "scan_id": "",
                     })
                     continue
                 for scan in scans:
@@ -234,6 +313,7 @@ def fetch_data_table(
                         "date": date,
                         "scan_type": scan_type,
                         "num_files": n_files,
+                        "scan_id": scan,
                     })
     except Exception as exc:
         from src.services.errors import handle  # local import, keep module importable

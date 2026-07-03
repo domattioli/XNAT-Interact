@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-06-12T07:20:50.088549",
+  "surgeries": 2,
+  "frames": 3,
+  "project": "SMOKE_DRV",
+  "publishes": [
+    {
+      "uid": "STRESS_V_0001",
+      "ok": false,
+      "error": "AttributeError: 'NoneType' object has no attribute 'validated_username'\nTraceback (most recent call last):\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 354, in publish_surgery\n    form = ORDataIntakeForm(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/user/XNAT-Interact/src/xnat_resource_data.py\", line 217, in __init__\n    super().__init__( config=config, validated_login=validated_login ) # Call the __init__ method of the base class -- bug:? goes all the way to our utility class and generates a uid.\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/user/XNAT-Interact/src/xnat_resource_data.py\", line 126, in __init__\n    if not config.is_user_registered( validated_login.validated_username ):\n                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'NoneType' object has no attribute 'validated_username'\n",
+      "seconds": 0.0013606548309326172,
+      "n_files": 3
+    },
+    {
+      "uid": "STRESS_V_0002",
+      "ok": false,
+      "error": "AttributeError: 'NoneType' object has no attribute 'validated_username'\nTraceback (most recent call last):\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 354, in publish_surgery\n    form = ORDataIntakeForm(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/user/XNAT-Interact/src/xnat_resource_data.py\", line 217, in __init__\n    super().__init__( config=config, validated_login=validated_login ) # Call the __init__ method of the base class -- bug:? goes all the way to our utility class and generates a uid.\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/user/XNAT-Interact/src/xnat_resource_data.py\", line 126, in __init__\n    if not config.is_user_registered( validated_login.validated_username ):\n                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'NoneType' object has no attribute 'validated_username'\n",
+      "seconds": 0.0007412433624267578,
+      "n_files": 3
+    }
+  ],
+  "empty_shells": [],
+  "inventory": {
+    "subjects_count": 0,
+    "experiments_count": 0,
+    "per_subject_file_counts": {}
+  }
+}

@@ -23,6 +23,10 @@ pyparsing
 python-dateutil
 pytz
 pyxnat
+# nibabel: NOT used directly, but pyxnat's derivatives module imports it unguarded at
+# Interface() construction (pyxnat/core/derivatives/bamos.py) -- without it main.py dies
+# with ModuleNotFoundError even though update_and_test.py reports success (issue #10).
+nibabel
 requests
 setuptools
 six
@@ -40,10 +44,8 @@ cryptography
 cffi  # cryptography's CFFI backend; pin explicitly — some envs ship it missing → Rust bindings panic.
 # psycopg[binary]  # only when XNAT_REGISTRY_PG_DSN set — install manually for Postgres path.
 
-# --- 010 pixel de-id (burned-in PHI). CPU-only. Imported lazily in src/services/pixel_deid/* ---
-# Requires the Tesseract 5 system binary on PATH (apt: tesseract-ocr / brew: tesseract) and the
-# spaCy model: `python -m spacy download en_core_web_lg`. See docs install notes.
-presidio-image-redactor
-presidio-analyzer
-pytesseract
-onnxruntime
+# --- 010 pixel de-id (burned-in PHI) deps moved to requirements-pixeldeid.txt ---
+# Those packages (presidio-image-redactor → python-gdcm) need a CMake toolchain and fail to
+# build on stock macOS/Python 3.9, which would abort this whole install. They are lazy-imported
+# (src/services/pixel_deid/* only) and not needed to run the app, the CLI, or the test suite.
+# Install them separately ONLY for the pixel-deid lane:  pip install -r requirements-pixeldeid.txt

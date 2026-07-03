@@ -246,6 +246,12 @@ class FakeSelectable(_CallLog):
             self.attrs._datatype = kwargs['xsiType']
         self._record(self._root, "selectable.create", (), {"_qs": self._qs, **kwargs})
 
+    def delete(self) -> None:
+        """Delete this selectable (mark as non-existent)."""
+        self._maybe_raise(self._root)
+        self._exists = False
+        self._record(self._root, "selectable.delete", (), {"_qs": self._qs})
+
     def resource(self, label: str) -> FakeResource:
         # Registry lookup: if this resource was pre-seeded via seed_resource_files(),
         # return the same FakeResource instance so the seeded files are accessible.

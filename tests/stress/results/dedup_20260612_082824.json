@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-06-12T08:28:04.912620",
+  "project": "STRESS_DEDUP",
+  "test_cases": [
+    {
+      "case": "exact",
+      "uid": "DEDUP_EXACT",
+      "expected": "reject",
+      "observed": "accept",
+      "dedup_review_required": false,
+      "error": null,
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    },
+    {
+      "case": "subset",
+      "uid": "DEDUP_SUBSET",
+      "expected": "reject",
+      "observed": "accept",
+      "dedup_review_required": false,
+      "error": null,
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    },
+    {
+      "case": "superset",
+      "uid": "DEDUP_SUPERSET",
+      "expected": "reject",
+      "observed": "accept",
+      "dedup_review_required": false,
+      "error": null,
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    },
+    {
+      "case": "partial",
+      "uid": "DEDUP_PARTIAL",
+      "expected": "reject",
+      "observed": "accept",
+      "dedup_review_required": false,
+      "error": null,
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    },
+    {
+      "case": "disjoint",
+      "uid": "DEDUP_DISJOINT",
+      "expected": "accept",
+      "observed": "accept",
+      "dedup_review_required": false,
+      "error": null,
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    }
+  ]
+}

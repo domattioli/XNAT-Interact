@@ -1,0 +1,46 @@
+{
+  "timestamp": "2026-06-12T10:23:26.286446+00:00",
+  "project": "ANNOT_LANE",
+  "steps": {
+    "1_publish_surgery": {
+      "ok": true,
+      "experiment_id": "/projects/ANNOT_LANE/subjects/Xnat4Tests_S00104/experiments/Xnat4Tests_E00108",
+      "error": null
+    },
+    "2_build_annotationset": {
+      "ok": true,
+      "error": null
+    },
+    "3_upload_v1": {
+      "ok": true,
+      "files_written": [
+        "ann__worker_A1__binary_segmentation__v1.rle",
+        "ann__worker_B2__binary_segmentation__v1.rle",
+        "manifest.json"
+      ],
+      "error": null
+    },
+    "4_download_compare": {
+      "ok": true,
+      "error": null
+    },
+    "5_upload_v2": {
+      "ok": true,
+      "files_written": [
+        "ann__worker_A1__binary_segmentation__v2.rle",
+        "ann__worker_B2__binary_segmentation__v2.rle",
+        "manifest.json"
+      ],
+      "error": null
+    }
+  },
+  "m6_observation": {
+    "v1_in_manifest": 0,
+    "v2_in_manifest": 2,
+    "total_annotations": 2,
+    "finding": "Manifest contains 0 v1 and 2 v2 annotations. If v2 orphans v1 (v1_count=0), M6 claim verified."
+  },
+  "overall_ok": true,
+  "errors": [],
+  "elapsed_seconds": 3.0124964714050293
+}

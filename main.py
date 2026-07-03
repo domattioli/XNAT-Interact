@@ -3,11 +3,13 @@ import sys
 import os
 from pathlib import Path
 import pwinput
-import argparse 
+import argparse
 import pandas as pd
 from tabulate import tabulate
 import datetime
 import xml.etree.ElementTree as ET
+import requests
+from requests.auth import HTTPBasicAuth
 from pyxnat import Interface
 from pyxnat.core.jsonutil import JsonTable
 
@@ -17,6 +19,7 @@ from src.xnat_scan_data import *
 from src.xnat_resource_data import ORDataIntakeForm
 from src.batch_upload import BatchUploadRepresentation
 from src.services.config import AppConfig as _AppConfig
+from src.services.errors import FriendlyError
 
 _app_config = _AppConfig.load()
 
@@ -242,6 +245,120 @@ def print_preview_of_xnat_data( pd_table: pd.DataFrame) -> None:
     print( f'{"---"*50}\n' )
 
 
+def query_experiments_rest(validated_login: XNATLogin, project_name: str) -> pd.DataFrame:
+    """
+    Query experiments from XNAT via REST API instead of pyxnat search.
+
+    Args:
+        validated_login (XNATLogin): Validated login object containing credentials.
+        project_name (str): Name of the XNAT project to query.
+
+    Returns:
+        pd.DataFrame: DataFrame with columns: expt_id, experiment, xsiType, subject_id,
+                     subject_label, operation_date, insert_date.
+
+    Raises:
+        ValueError: If the HTTP request fails or returns an error. The message
+                    carries the FriendlyError title + message (FriendlyError is
+                    a plain dataclass and cannot be raised directly).
+    """
+    # Build the REST API endpoint URL
+    server_url = _app_config.server_url.rstrip('/')
+    endpoint = (
+        f"{server_url}/data/experiments?"
+        f"project={project_name}&"
+        f"columns=ID,label,xsiType,subject_ID,subject_label,date,insert_date&"
+        f"format=json"
+    )
+
+    # Create basic auth from login credentials
+    auth = HTTPBasicAuth(validated_login.validated_username, validated_login.validated_password)
+
+    try:
+        response = requests.get(endpoint, auth=auth, verify=True, timeout=30)
+        response.raise_for_status()  # Raise exception for HTTP errors
+    except requests.exceptions.HTTPError as e:
+        status_code = e.response.status_code if e.response is not None else 'unknown'
+        fe = FriendlyError(
+            title="REST API query failed",
+            message=f"Failed to query experiments from XNAT for project '{project_name}'. HTTP error: {status_code}",
+            recourse=[
+                "Verify that the project name is correct.",
+                "Check that your XNAT credentials are valid.",
+                "Ensure you have permission to access this project.",
+                "Contact the Data Librarian if the problem persists.",
+            ],
+        )
+        raise ValueError(f"{fe.title}: {fe.message}")
+    except requests.exceptions.RequestException as e:
+        fe = FriendlyError(
+            title="Network error during REST API query",
+            message=f"Failed to connect to XNAT server at {server_url}: {str(e)}",
+            recourse=[
+                "Verify that you are on the UIowa network (VPN or in-person).",
+                "Check that the server URL is correct.",
+                "Try again after a moment.",
+                "Contact the Data Librarian if the problem persists.",
+            ],
+        )
+        raise ValueError(f"{fe.title}: {fe.message}")
+
+    # Parse the JSON response
+    try:
+        data = response.json()
+    except ValueError as e:
+        fe = FriendlyError(
+            title="Invalid JSON response from XNAT",
+            message=f"The XNAT server response could not be parsed as JSON.",
+            recourse=[
+                "Try the query again.",
+                "Contact the Data Librarian if the problem persists.",
+            ],
+        )
+        raise ValueError(f"{fe.title}: {fe.message}")
+
+    # Extract the result set (XNAT wraps results in a 'ResultSet' object)
+    if isinstance(data, dict) and 'ResultSet' in data:
+        result = data['ResultSet'].get('Result', [])
+    elif isinstance(data, list):
+        result = data
+    else:
+        result = []
+
+    # If no results, return empty DataFrame with correct columns
+    if not result:
+        return pd.DataFrame(columns=['expt_id', 'experiment', 'xsiType', 'subject_id', 'subject_label', 'operation_date', 'insert_date'])
+
+    # Convert to DataFrame
+    df = pd.DataFrame(result)
+
+    # Rename columns to match expected output names
+    rename_map = {
+        'ID': 'expt_id',
+        'label': 'experiment',
+        'xsiType': 'xsiType',
+        'subject_ID': 'subject_id',
+        'subject_label': 'subject_label',
+        'date': 'operation_date',
+        'insert_date': 'insert_date'
+    }
+
+    # Only rename columns that exist in the returned data
+    rename_map = {k: v for k, v in rename_map.items() if k in df.columns}
+    df = df.rename(columns=rename_map)
+
+    # Ensure all required columns exist (may be empty if not returned)
+    required_cols = ['expt_id', 'experiment', 'xsiType', 'subject_id', 'subject_label', 'operation_date', 'insert_date']
+    for col in required_cols:
+        if col not in df.columns:
+            df[col] = None
+
+    # Select and reorder columns to match expected output
+    df = df[required_cols]
+
+    return df
+
+
 def download_queried_data( validated_login: XNATLogin, xnat_connection: XNATConnection, config: ConfigTables, verbose: Opt[bool]=False ) -> None:
     # for the given project, prompt the user which subjects they want to query, then of those subjects, which of their data they want to download, then download it.
     print( f'\n-----Beginning data download process-----\n' )
@@ -263,35 +380,12 @@ def download_queried_data( validated_login: XNATLogin, xnat_connection: XNATConn
         print( f'\n\tWould you like to preview all data currently in the database, or perform a specific query?\t--\tPlease enter "1" for Yes or "2" for No.' )
         preview_data = ORDataIntakeForm.prompt_until_valid_answer_given( 'Preview Data?', acceptable_options=['1', '2'] )
         if preview_data == '1':
-            constraints =  [('xnat:esvSessionData/PROJECT', '=', _app_config.project_name),
-                            'OR',
-                            ('xnat:rfSessionData/PROJECT' , '=', _app_config.project_name)
-                            ]
-            # Perform query that retrieves all experiments.
-            all_data_pd = format_as_table( xnat.select('xnat:esvSessionData').where( constraints ) ) # type: ignore
-            cols_to_remove = ['age', 'project']
-            all_data_pd.drop( columns=cols_to_remove, inplace=True )
-            all_data_pd.rename( columns={'date': 'operation_date'}, inplace=True )
+            # Query experiments using REST API instead of pyxnat search
+            all_data_pd = query_experiments_rest(validated_login, _app_config.project_name)
 
-            # Perform query that retrieves the subject names, given the subject ids from the prior query.
-            new_constraints =  [('xnat:subjectData/PROJECT', '=', _app_config.project_name), 'AND']
-            sub_constraints = []
-            subject_ids = all_data_pd['subject_id'].unique()
-            for i, subject_id in enumerate(subject_ids):
-                if i > 0:
-                    sub_constraints.append('OR')
-                sub_constraints.append( ('xnat:subjectData/SUBJECT_ID', '=', subject_id) )
-            new_constraints.append( sub_constraints )
-            subj_pd = format_as_table( xnat.select('xnat:subjectData').where(new_constraints) )  # type: ignore
-            cols_to_remove = ['gender_text', 'handedness_text', 'dob', 'educ', 'add_ids', 'race', 'ethnicity', 'invest_csv', 'ses', 'projects']
-            subj_pd.drop( columns=cols_to_remove, inplace=True )
-
-            # Merge the two tables together
             all_data_pd = all_data_pd.reset_index(drop=True)
-            subj_pd = subj_pd.reset_index(drop=True)
-            all_data_pd['procedure'] = subj_pd['sub_group']
-            all_data_pd['subject_id'] = subj_pd['xnat_col_subjectdatalabel']
-            # all_data_pd.drop( columns=['subject_id', 'expt_id'], inplace=True )
+            all_data_pd['procedure'] = all_data_pd['xsiType']
+            all_data_pd['subject_id'] = all_data_pd['subject_label']
             all_data_pd['insert_date'] = pd.to_datetime(all_data_pd['insert_date']) # Split insert_date into two columns
             all_data_pd['upload_date'] = all_data_pd['insert_date'].dt.date
             all_data_pd['upload_time'] = all_data_pd['insert_date'].dt.time

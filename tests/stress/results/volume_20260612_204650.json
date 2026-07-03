@@ -1,0 +1,44 @@
+{
+  "timestamp": "2026-06-12T20:46:46.849696",
+  "surgeries": 4,
+  "frames": 6,
+  "project": "DEMO_UI",
+  "publishes": [
+    {
+      "uid": "STRESS_V_0001",
+      "ok": true,
+      "error": null,
+      "seconds": 2.433135747909546,
+      "n_files": 6
+    },
+    {
+      "uid": "STRESS_V_0002",
+      "ok": false,
+      "error": "DedupReviewRequired: Dedup review required — overlap detected with existing case '2_25_252419656394894141830784434910180413008' (CaseRelation.EXACT, ratio=1.000). No data was uploaded. A human must review the evidence package and decide: import both / combine / other.\nTraceback (most recent call last):\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 413, in publish_surgery\n    raise _DedupRR(_evidence)\nsrc.xnat_experiment_data.DedupReviewRequired: Dedup review required — overlap detected with existing case '2_25_252419656394894141830784434910180413008' (CaseRelation.EXACT, ratio=1.000). No data was uploaded. A human must review the evidence package and decide: import both / combine / other.\n",
+      "seconds": 0.24550127983093262,
+      "n_files": 6
+    },
+    {
+      "uid": "STRESS_V_0003",
+      "ok": false,
+      "error": "DedupReviewRequired: Dedup review required — overlap detected with existing case '2_25_252419656394894141830784434910180413008' (CaseRelation.EXACT, ratio=1.000). No data was uploaded. A human must review the evidence package and decide: import both / combine / other.\nTraceback (most recent call last):\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 413, in publish_surgery\n    raise _DedupRR(_evidence)\nsrc.xnat_experiment_data.DedupReviewRequired: Dedup review required — overlap detected with existing case '2_25_252419656394894141830784434910180413008' (CaseRelation.EXACT, ratio=1.000). No data was uploaded. A human must review the evidence package and decide: import both / combine / other.\n",
+      "seconds": 0.23209333419799805,
+      "n_files": 6
+    },
+    {
+      "uid": "STRESS_V_0004",
+      "ok": false,
+      "error": "DedupReviewRequired: Dedup review required — overlap detected with existing case '2_25_252419656394894141830784434910180413008' (CaseRelation.EXACT, ratio=1.000). No data was uploaded. A human must review the evidence package and decide: import both / combine / other.\nTraceback (most recent call last):\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 413, in publish_surgery\n    raise _DedupRR(_evidence)\nsrc.xnat_experiment_data.DedupReviewRequired: Dedup review required — overlap detected with existing case '2_25_252419656394894141830784434910180413008' (CaseRelation.EXACT, ratio=1.000). No data was uploaded. A human must review the evidence package and decide: import both / combine / other.\n",
+      "seconds": 0.22831058502197266,
+      "n_files": 6
+    }
+  ],
+  "empty_shells": [],
+  "inventory": {
+    "subjects_count": 1,
+    "experiments_count": 1,
+    "per_subject_file_counts": {
+      "Xnat4Tests_S00106": 6
+    }
+  }
+}

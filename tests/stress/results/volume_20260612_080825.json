@@ -1,0 +1,39 @@
+{
+  "timestamp": "2026-06-12T08:08:21.816751",
+  "surgeries": 3,
+  "frames": 5,
+  "project": "FINAL_E2E",
+  "publishes": [
+    {
+      "uid": "STRESS_V_0001",
+      "ok": true,
+      "error": null,
+      "seconds": 0.7284116744995117,
+      "n_files": 5
+    },
+    {
+      "uid": "STRESS_V_0002",
+      "ok": true,
+      "error": null,
+      "seconds": 0.7227110862731934,
+      "n_files": 5
+    },
+    {
+      "uid": "STRESS_V_0003",
+      "ok": true,
+      "error": null,
+      "seconds": 0.7822842597961426,
+      "n_files": 5
+    }
+  ],
+  "empty_shells": [],
+  "inventory": {
+    "subjects_count": 3,
+    "experiments_count": 3,
+    "per_subject_file_counts": {
+      "Xnat4Tests_S00051": 5,
+      "Xnat4Tests_S00052": 5,
+      "Xnat4Tests_S00053": 5
+    }
+  }
+}

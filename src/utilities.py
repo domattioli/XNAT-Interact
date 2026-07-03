@@ -915,7 +915,7 @@ class ConfigTables( UIDandMetaInfo ):
         def serialize( obj, depth=0 ):
             if isinstance( obj, dict ):
                 items = [f'\n{" " * (depth + indent)}"{k}": {serialize(v, depth + indent)}' for k, v in obj.items()]
-                return f'{{{",".join(items)}\n{" " * depth}}}'
+                return '{' + ",".join(items) + '\n' + " " * depth + '}'
             elif isinstance( obj, list ):
                 items = [serialize(v, depth) for v in obj]  # Keep depth unchanged for arrays
                 return f'[{", ".join(items)}]'

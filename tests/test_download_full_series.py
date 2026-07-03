@@ -156,6 +156,25 @@ class _ScanSelectable:
         return self._res
 
 
+class _SeededSelectableForScan:
+    """Selectable for scan-level QS that looks up resource by subject/exp/scan/label."""
+    def __init__(self, owner: "SeededFullSeriesFakeXNAT", subject: str, experiment: str, scan: str) -> None:
+        self._owner = owner
+        self._subject = subject
+        self._experiment = experiment
+        self._scan = scan
+
+    def exists(self) -> bool:
+        return True
+
+    def resource(self, label: str) -> FakeResource:
+        # Look up the seeded resource for this scan/label, or create a new one
+        key = (self._subject, self._experiment, self._scan, label)
+        if key not in self._owner._scan_resources:
+            self._owner._scan_resources[key] = FakeResource(root=self._owner, label=label)
+        return self._owner._scan_resources[key]
+
+
 class SeededFullSeriesFakeXNAT(FullSeriesFakeXNAT):
     """
     Variant where server.select(qs) returns a _ScanSelectable backed by the
@@ -167,12 +186,43 @@ class SeededFullSeriesFakeXNAT(FullSeriesFakeXNAT):
         def __init__(self, owner: "SeededFullSeriesFakeXNAT") -> None:
             self._owner = owner
 
+        def _parse_scan_level_qs(self, qs: str) -> Optional[tuple]:
+            """
+            Parse a scan-level querystring like:
+                /projects/P/subjects/S/experiments/E/scans/SCAN
+            and return (subject, experiment, scan) or None.
+            """
+            parts = [p for p in qs.split("/") if p]
+            try:
+                idx_sub = parts.index("subjects")
+                idx_exp = parts.index("experiments")
+                idx_scan = parts.index("scans")
+                # Ensure /resources/ is NOT in the QS (we want scan-level, not resource-level)
+                if "resources" in parts:
+                    return None
+                return (
+                    parts[idx_sub + 1],
+                    parts[idx_exp + 1],
+                    parts[idx_scan + 1],
+                )
+            except (ValueError, IndexError):
+                return None
+
         def __call__(self, qs: str) -> Any:
+            # Try scan-level parsing first (new fixed pattern)
+            scan_parsed = self._parse_scan_level_qs(qs)
+            if scan_parsed is not None:
+                subj, exp, scan = scan_parsed
+                # Return a _SeededSelectableForScan that will call .resource()
+                return _SeededSelectableForScan(self._owner, subj, exp, scan)
+
+            # Fall back to the old resource-level parsing (backward compat)
             parsed = self._owner._parse_scan_qs(qs)
             if parsed is not None:
                 res = self._owner._scan_resources.get(parsed)
                 if res is not None:
                     return _ScanSelectable(resource=res)
+
             # Fall back to the base FakeSelector (creates FakeSelectable)
             from tests.fakes.fake_xnat import FakeSelectable
             if qs not in self._owner._selectables:

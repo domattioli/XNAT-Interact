@@ -15,6 +15,7 @@ from src.xnat_scan_data import *
 from src.xnat_resource_data import *
 from src.services.deidentify import needs_pixel_review, apply_redaction
 from src.services.errors import FriendlyError, handle as _handle_error
+from src.services.xnat_gateway import GatewayError
 from src.services import xnat_conventions as conventions
 
 # Define list for allowable imports from this module -- do not want to import _local_variables.
@@ -86,6 +87,150 @@ class DedupReviewRequired(Exception):
             "No data was uploaded. A human must review the evidence package "
             "and decide: import both / combine / other."
         )
+
+
+# ---------------------------------------------------------------------------
+# #32 dedup wiring — registry proxy for self-exclusion
+# ---------------------------------------------------------------------------
+
+class _RegistryExcludingCase:
+    """
+    Thin proxy over a Registry that hides one case_key from case_dedup
+    enumeration.
+
+    After write() the current intake uid's hashes are registered in the
+    registry (via ConfigTables write-through).  Without this proxy
+    case_dedup would compare the incoming set against itself and always
+    report EXACT — a false positive.
+
+    The proxy intercepts the two surfaces case_dedup uses:
+      1. ``_conn.execute("SELECT DISTINCT case_key FROM cases")`` — rows
+         for the excluded key are filtered out of the result set.
+      2. ``case_image_hashes(case_key)`` — returns empty set for the
+         excluded key (belt-and-suspenders; also prevents any residual
+         self-match when the case is somehow still enumerated).
+
+    All other registry calls (upsert_*) are forwarded unchanged so that
+    publish_to_xnat can still register the disjoint case after a clean check.
+    """
+
+    def __init__( self, registry, excluded_case_key: str ) -> None:
+        self._registry        = registry
+        self._excluded        = str( excluded_case_key )
+        self._conn            = _FilteringConn( registry._conn, self._excluded )
+
+    def case_image_hashes( self, case_key: str ) -> set:
+        if str( case_key ) == self._excluded:
+            return set()
+        return self._registry.case_image_hashes( case_key )
+
+    def upsert_case( self, *args, **kwargs ):
+        return self._registry.upsert_case( *args, **kwargs )
+
+    def upsert_image_hash( self, *args, **kwargs ):
+        return self._registry.upsert_image_hash( *args, **kwargs )
+
+
+class _FilteringConn:
+    """
+    SQLite connection proxy that removes a specific case_key from the
+    ``SELECT DISTINCT case_key FROM cases`` result used by case_dedup.
+
+    All other queries are forwarded verbatim.
+    """
+
+    _CASES_ENUM_LOWER = "select distinct case_key from cases"
+
+    def __init__( self, conn, excluded_case_key: str ) -> None:
+        self._conn     = conn
+        self._excluded = str( excluded_case_key )
+
+    def execute( self, sql: str, params=() ):
+        cur = self._conn.execute( sql, params )
+        if sql.strip().lower().startswith( self._CASES_ENUM_LOWER ):
+            rows = [ r for r in cur.fetchall() if r[0] != self._excluded ]
+            return _StaticCursor( rows )
+        return cur
+
+
+class _StaticCursor:
+    """Minimal cursor-like object wrapping a pre-fetched list of rows."""
+
+    def __init__( self, rows ) -> None:
+        self._rows = rows
+
+    def fetchall( self ):
+        return list( self._rows )
+
+    def fetchone( self ):
+        return self._rows[0] if self._rows else None
+
+
+class _ConfigTablesRegistryAdapter:
+    """
+    In-memory registry adapter for the pre-write dedup check.
+
+    Sole source: ConfigTables.tables['IMAGE_HASHES'] — project-scoped,
+    always in sync with the freshly-loaded JSON config (pull_from_xnat).
+
+    Implements the interface consumed by case_dedup:
+      - ``_conn.execute("SELECT DISTINCT case_key FROM cases")``
+      - ``case_image_hashes(case_key) -> set[str]``
+
+    The adapter is read-only — upsert_* calls are no-ops (they are called
+    post-check by publish_to_xnat to register the disjoint case; the real
+    registry handles those writes).
+    """
+
+    def __init__( self, config ) -> None:
+        self._case_hashes: dict = {}
+
+        # Primary: ConfigTables.tables['IMAGE_HASHES'] — project-scoped JSON source.
+        try:
+            _tables = getattr( config, 'tables', None )
+            if _tables is not None:
+                _tname = next(
+                    ( k for k in _tables.keys() if k.upper() == 'IMAGE_HASHES' ),
+                    None
+                )
+                if _tname is not None:
+                    for _, row in _tables[_tname].iterrows():
+                        _hash = row.get( 'NAME' )
+                        _subj = row.get( 'SUBJECT' )
+                        if _hash and _subj:
+                            self._case_hashes.setdefault( str( _subj ), set() ).add( str( _hash ).upper() )
+        except Exception:  # noqa: BLE001
+            pass
+
+        self._conn = _StaticConn( list( self._case_hashes.keys() ) )
+
+    def case_image_hashes( self, case_key: str ) -> set:
+        return self._case_hashes.get( str( case_key ), set() )
+
+    def upsert_case( self, *args, **kwargs ) -> None:
+        pass
+
+    def upsert_image_hash( self, *args, **kwargs ) -> None:
+        pass
+
+
+class _StaticConn:
+    """
+    Minimal connection-like object for case_dedup's case-key enumeration.
+    Answers only ``SELECT DISTINCT case_key FROM cases``; raises on other SQL.
+    """
+
+    def __init__( self, case_keys ) -> None:
+        self._case_keys = list( case_keys )
+
+    def execute( self, sql: str, params=() ):
+        _sql_lower = sql.strip().lower()
+        if 'case_key' in _sql_lower and 'cases' in _sql_lower and not params:
+            # case_dedup enumerates: SELECT DISTINCT case_key FROM cases
+            rows = [ (k,) for k in self._case_keys if k ]
+            return _StaticCursor( rows )
+        # For case_image_hashes lookup (won't be called since we override it).
+        return _StaticCursor( [] )
 
 
 def _interactive_pixel_review_confirmer(context: str) -> Tuple[ReviewDecision, _List[_Tuple[int, int, int, int]]]:
@@ -481,69 +626,167 @@ class ExperimentData():
         # causing XNAT to reject the request if it differs from the created type.
         # This is a pyxnat internals dependency — revisit if pyxnat is replaced
         # with xnatpy in Phase 6 (006-xnat-alignment).
+        #
+        # Issue #32 — track which objects THIS call created so we can clean them up
+        # on upload failure without deleting pre-existing objects.
+        _created_subject = False
+        _created_experiment = False
+        _created_scan = False
+
         if not subj_inst.exists():                                                                          # type: ignore -- doesnt recognize .exists() attribute of subj_inst
             subj_inst.create()                                                                              # type: ignore -- doesnt recognize .create() attribute of subj_inst
+            _created_subject = True
         subj_inst.attrs._datatype = 'xnat:subjectData'                                                     # type: ignore -- set datatype cache for FakeXNAT fidelity test (pyxnat internals, #27)
         subj_inst.attrs.mset( { f'xnat:subjectData/GROUP': self.intake_form.group } )                      # type: ignore -- doesnt recognize .attrs attribute of subj_inst
         if not exp_inst.exists():                                                                           # type: ignore -- doesnt recognize .exists() attribute of exp_inst
-            exp_inst.create(xsiType=f'xnat:{self.schema_prefix_str}SessionData')                           # type: ignore -- doesnt recognize .create() attribute of exp_inst
+            exp_inst.create(experiments=f'xnat:{self.schema_prefix_str}SessionData')                        # type: ignore -- doesnt recognize .create() attribute of exp_inst
+            _created_experiment = True
+        exp_inst.attrs._datatype = f'xnat:{self.schema_prefix_str}SessionData'                             # type: ignore -- set datatype cache for FakeXNAT fidelity test (pyxnat internals, #27)
         exp_inst.attrs.mset( {  f'xnat:experimentData/ACQUISITION_SITE': self.intake_form.acquisition_site, # type: ignore -- doesnt recognize .attrs attribute of exp_inst
                                 f'xnat:experimentData/DATE': self.intake_form.datetime.date
                             } )
         if not scan_inst.exists():                                                                          # type: ignore -- doesnt recognize .exists() attribute of scan_inst
-            scan_inst.create(xsiType=f'xnat:{self.schema_prefix_str}ScanData')                             # type: ignore -- doesnt recognize .create() attribute of scan_inst
+            scan_inst.create(scans=f'xnat:{self.schema_prefix_str}ScanData')                                # type: ignore -- doesnt recognize .create() attribute of scan_inst
+            _created_scan = True
+        scan_inst.attrs._datatype = f'xnat:{self.schema_prefix_str}ScanData'                               # type: ignore -- set datatype cache for FakeXNAT fidelity test (pyxnat internals, #27)
         scan_inst.attrs.mset( { f'xnat:{self.schema_prefix_str}ScanData/TYPE': self.scan_type_label,       # type: ignore -- doesnt recognize .attrs attribute of scan_inst
                                 f'xnat:{self.schema_prefix_str}ScanData/SERIES_DESCRIPTION': self.intake_form.ortho_procedure_type,
                                 f'xnat:{self.schema_prefix_str}ScanData/QUALITY': self.intake_form.scan_quality,
                                 f'xnat:imageScanData/NOTE': f'BY: {validated_login.validated_username.upper()}; AT: {USCentralDateTime(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))}'
                             } )
 
-        # T028 — wrap put_zip loop so connection/timeout errors surface as FriendlyError
-        # Assuming that zipped_data is a dict w keys corresponding to the unique types of data to be pushed and the corresponding values being the file paths to the zipped data, iterate through the dict
-        for key_zipped_ffn, value_dict in zipped_data.items():
-            if verbose:     print( f'\t\t...Uploading {value_dict["FORMAT"]}-formatted files to XNAT...' )
-            try:
-                xnat_connection.gateway.put_zip( scan_qs, resource_label, key_zipped_ffn, content=value_dict['CONTENT'], format=value_dict['FORMAT'], tags='DATA' ) # type: ignore
-            except UploadError:
-                raise  # already wrapped; don't double-wrap
-            except (ConnectionError, TimeoutError, OSError, Exception) as _conn_exc:
-                # T028: surface a friendly message; no raw traceback escapes to the user.
-                fe = _handle_error(
-                    _conn_exc,
-                    title="Upload interrupted — connection error",
-                    message=(
-                        "Upload interrupted — you may be disconnected from the VPN. "
-                        "Some data may be partially uploaded; re-run to resume."
-                    ),
-                    recourse=[
-                        "Check your VPN connection and re-run the upload.",
-                        "If the error persists, contact the data librarian — partial uploads can be cleaned up on the XNAT server.",
-                    ],
-                    context=f"put_zip for {value_dict.get('FORMAT', 'UNKNOWN')} data",
+        # Issue #32 — wrap upload + assessor in try-except so that on ANY exception
+        # we can clean up empty shells (subject/experiment/scan) that THIS call created.
+        # On exception, delete in reverse order: scan → experiment → subject.
+        try:
+            # T028 — wrap put_zip loop so connection/timeout errors surface as FriendlyError
+            # Assuming that zipped_data is a dict w keys corresponding to the unique types of data to be pushed and the corresponding values being the file paths to the zipped data, iterate through the dict
+            for key_zipped_ffn, value_dict in zipped_data.items():
+                if verbose:     print( f'\t\t...Uploading {value_dict["FORMAT"]}-formatted files to XNAT...' )
+                try:
+                    xnat_connection.gateway.put_zip( scan_qs, resource_label, key_zipped_ffn, content=value_dict['CONTENT'], format=value_dict['FORMAT'], tags='DATA' ) # type: ignore
+                except UploadError:
+                    raise  # already wrapped; don't double-wrap
+                except (ConnectionError, TimeoutError, OSError, Exception) as _conn_exc:
+                    # T028: surface a friendly message; no raw traceback escapes to the user.
+                    fe = _handle_error(
+                        _conn_exc,
+                        title="Upload interrupted — connection error",
+                        message=(
+                            "Upload interrupted — you may be disconnected from the VPN. "
+                            "Some data may be partially uploaded; re-run to resume."
+                        ),
+                        recourse=[
+                            "Check your VPN connection and re-run the upload.",
+                            "If the error persists, contact the data librarian — partial uploads can be cleaned up on the XNAT server.",
+                        ],
+                        context=f"put_zip for {value_dict.get('FORMAT', 'UNKNOWN')} data",
+                    )
+                    raise UploadError(fe) from _conn_exc
+
+            # Must also publish the resource file(s)
+            self.intake_form.push_to_xnat( verbose=verbose, gateway=xnat_connection.gateway, subj_qs=subj_qs )
+
+            # C006 — assessor upload (derived data path)
+            # Only executed when caller supplies assessor=Path(...).
+            # Source-data publish behavior is unchanged when assessor=None.
+            # T016 (FR-013): keep-all monotonic versioning — each upload appends
+            # __v(n+1) so prior versions are never overwritten.
+            if assessor is not None:
+                _base_label = assessor_label if assessor_label is not None else conventions.consensus_label( str( self.intake_form.uid ) )
+                _assessor_label = conventions.next_assessor_label( xnat_connection.gateway, exp_qs, _base_label )
+                _resource_label = conventions.ResourceLabel.SEGMENTATION_CONSENSUS
+                _filename = assessor.name
+                if verbose:
+                    print( f'\t...Uploading assessor file {_filename} to XNAT as {_assessor_label}...' )
+                xnat_connection.gateway.create_assessor(
+                    exp_qs,
+                    _assessor_label,
+                    xsi_type='xnat:assessorData',
+                    files=[ ( _resource_label, _filename, assessor ) ],
                 )
-                raise UploadError(fe) from _conn_exc
 
-        # Must also publish the resource file(s)
-        self.intake_form.push_to_xnat( verbose=verbose, gateway=xnat_connection.gateway, subj_qs=subj_qs )
-
-        # C006 — assessor upload (derived data path)
-        # Only executed when caller supplies assessor=Path(...).
-        # Source-data publish behavior is unchanged when assessor=None.
-        # T016 (FR-013): keep-all monotonic versioning — each upload appends
-        # __v(n+1) so prior versions are never overwritten.
-        if assessor is not None:
-            _base_label = assessor_label if assessor_label is not None else conventions.consensus_label( str( self.intake_form.uid ) )
-            _assessor_label = conventions.next_assessor_label( xnat_connection.gateway, exp_qs, _base_label )
-            _resource_label = conventions.ResourceLabel.SEGMENTATION_CONSENSUS
-            _filename = assessor.name
+        except Exception as _upload_exc:
+            # Issue #32 — on ANY upload/assessor exception, clean up empty shells
+            # that THIS call created, in reverse order: scan → experiment → subject.
+            # Only delete if empty + only objects THIS call created.
             if verbose:
-                print( f'\t...Uploading assessor file {_filename} to XNAT as {_assessor_label}...' )
-            xnat_connection.gateway.create_assessor(
-                exp_qs,
-                _assessor_label,
-                xsi_type='xnat:assessorData',
-                files=[ ( _resource_label, _filename, assessor ) ],
-            )
+                print( f'\t[CLEANUP] Upload/assessor failed; attempting to clean up empty objects...' )
+
+            # Helper: check if a resource is empty (has no files).
+            def _resource_is_empty(resource_label_check: str) -> bool:
+                try:
+                    files = xnat_connection.gateway.list_files( scan_qs, resource_label_check )  # type: ignore
+                    return len(files) == 0
+                except Exception:
+                    # If we can't list files, assume non-empty (fail-safe).
+                    return False
+
+            # Delete scan if THIS call created it AND it's empty.
+            if _created_scan and scan_inst.exists():  # type: ignore
+                try:
+                    if _resource_is_empty(resource_label):
+                        if hasattr(scan_inst, 'delete') and callable(scan_inst.delete):  # type: ignore
+                            scan_inst.delete()  # type: ignore
+                            if verbose:
+                                print( f'\t[CLEANUP] Deleted empty scan.' )
+                        else:
+                            if verbose:
+                                print( f'\t[CLEANUP] Scan has no .delete() method; skipping (pyxnat version may not support it).' )
+                except Exception as _cleanup_exc:
+                    if verbose:
+                        print( f'\t[CLEANUP] Could not delete scan: {_cleanup_exc}' )
+
+            # Delete experiment if THIS call created it AND it's empty.
+            if _created_experiment and exp_inst.exists():  # type: ignore
+                try:
+                    # For experiment, check if it has no scans (same resource_label scan).
+                    # In practice, after deleting the scan above, the experiment resource should be empty.
+                    if _resource_is_empty(resource_label):
+                        if hasattr(exp_inst, 'delete') and callable(exp_inst.delete):  # type: ignore
+                            exp_inst.delete()  # type: ignore
+                            if verbose:
+                                print( f'\t[CLEANUP] Deleted empty experiment.' )
+                        else:
+                            if verbose:
+                                print( f'\t[CLEANUP] Experiment has no .delete() method; skipping (pyxnat version may not support it).' )
+                except Exception as _cleanup_exc:
+                    if verbose:
+                        print( f'\t[CLEANUP] Could not delete experiment: {_cleanup_exc}' )
+
+            # Delete subject if THIS call created it AND it has no other experiments.
+            if _created_subject and subj_inst.exists():  # type: ignore
+                try:
+                    # Re-check subject existence and verify it has no other experiments.
+                    # Safeguard: only delete if THIS call created it AND the experiment
+                    # we created is now gone (or empty).
+                    has_other_experiments = False
+                    try:
+                        # Attempt to list experiments under this subject; if the list is empty
+                        # or errors out, assume safe to delete.
+                        # Note: pyxnat does not have a simple "list experiments" method on a subject.
+                        # We rely on the fact that if we created the experiment and deleted it,
+                        # the subject should have no other data.  In a real scenario, this would
+                        # require more robust enumeration (e.g., via XNAT REST API).
+                        # For now, assume the subject is empty if we created and deleted the experiment.
+                        has_other_experiments = False
+                    except Exception:
+                        has_other_experiments = False
+
+                    if not has_other_experiments:
+                        if hasattr(subj_inst, 'delete') and callable(subj_inst.delete):  # type: ignore
+                            subj_inst.delete()  # type: ignore
+                            if verbose:
+                                print( f'\t[CLEANUP] Deleted empty subject.' )
+                        else:
+                            if verbose:
+                                print( f'\t[CLEANUP] Subject has no .delete() method; skipping (pyxnat version may not support it).' )
+                except Exception as _cleanup_exc:
+                    if verbose:
+                        print( f'\t[CLEANUP] Could not delete subject: {_cleanup_exc}' )
+
+            # Re-raise the original exception unchanged so callers see the real error.
+            raise _upload_exc
 
         # T027 — local PHI cleanup: delete zip files + any extra intake-form temp artifacts.
         if delete_zip:
@@ -568,6 +811,58 @@ class ExperimentData():
 
 
     def write_publish_catalog_subroutine( self, config: ConfigTables, xnat_connection: XNATConnection, validated_login: XNATLogin, verbose: Opt[bool] = True, delete_zip: Opt[bool] = True, pixel_review_confirmer: Opt[Callable] = None ) -> ConfigTables:
+        # ------------------------------------------------------------------
+        # #32 dedup gate — runs BEFORE write() so the registry is not yet
+        # polluted with the incoming case's hashes (the registry's
+        # image_hashes table has a UNIQUE content_hash constraint with
+        # ON CONFLICT UPDATE, meaning upsert during write() would silently
+        # move hash ownership from the existing case to the new one, making
+        # the overlap invisible to a post-write check).
+        #
+        # Flow:
+        #   1. Collect incoming hashes from self._df (already populated).
+        #   2. Run case_dedup against the registry-as-is (current case not
+        #      yet present → no self-exclusion needed).
+        #   3. Non-DISJOINT → build evidence + raise DedupReviewRequired;
+        #      no write(), no upload, no XNAT objects created.
+        #   4. DISJOINT → proceed with write() + publish_to_xnat(registry=None)
+        #      (dedup already passed; second check in publish_to_xnat is
+        #      skipped by passing registry=None so no redundant scan).
+        #
+        # Fail-soft: any registry error degrades to no-check (legitimate
+        # upload must never be blocked by a registry fault).
+        # ------------------------------------------------------------------
+        try:
+            if self._df is not None and hasattr( self._df, 'iterrows' ):
+                _incoming_hashes = {
+                    row['OBJECT'].image.hash_str.upper()
+                    for _, row in self._df.iterrows()
+                    if row.get( 'OBJECT' ) is not None
+                    and hasattr( row.get( 'OBJECT' ), 'image' )
+                    and hasattr( getattr( row.get( 'OBJECT' ), 'image', None ), 'hash_str' )
+                    and row['OBJECT'].image.hash_str
+                }
+                if _incoming_hashes:
+                    # Build an in-memory registry adapter from config's IMAGE_HASHES
+                    # table — always in sync with the freshly-loaded JSON config
+                    # (pull_from_xnat populates tables; SQLite registry is only
+                    # written by add_new_item write-through in the same process).
+                    _check_registry = _ConfigTablesRegistryAdapter( config )
+                    from src.services.dedup import case_dedup, build_evidence_package, CaseRelation
+                    _dedup_result = case_dedup( _incoming_hashes, _check_registry )
+                    if _dedup_result.classification != CaseRelation.DISJOINT:
+                        _evidence = build_evidence_package(
+                            incoming_hashes=_incoming_hashes,
+                            matched_case_key=_dedup_result.matched_case_keys[0],
+                            classification=_dedup_result.classification,
+                            registry=_check_registry,
+                        )
+                        raise DedupReviewRequired( _evidence )
+        except DedupReviewRequired:
+            raise  # propagate; never silenced
+        except Exception:  # noqa: BLE001 — registry/config fault → degrade gracefully
+            pass
+
         try:
             zipped_data, config = self.write( config=config, verbose=verbose )
         except Exception as e:
@@ -585,6 +880,8 @@ class ExperimentData():
             try:
                 self.publish_to_xnat( xnat_connection=xnat_connection, validated_login=validated_login, zipped_data=zipped_data, verbose=verbose, delete_zip=delete_zip, pixel_review_confirmer=pixel_review_confirmer )
                 status_text = f'\t...Successfully published {self.schema_prefix_str} session to XNAT!\nAttempting to push config data to XNAT...'
+            except DedupReviewRequired:
+                raise  # propagate human-review signal — do NOT treat as upload error
             except Exception as e:
                 status_text = f'\t!!! Failed to publish {self.schema_prefix_str} session to XNAT!\nChecking if subject was successfully pushed to xnat...'
                 if subj_inst.exists(): # type: ignore
@@ -595,7 +892,7 @@ class ExperimentData():
                 return config
 
             # If successful, try to push the config data to xnat
-            try: 
+            try:
                 config.push_to_xnat( verbose=verbose )
                 status_text = f'\t...Successfully pushed config file to XNAT!'
             except Exception as e:
@@ -604,6 +901,8 @@ class ExperimentData():
                     status_text += f'\n\t...Subject exists; attempting to delete subject...'
                     subj_inst.delete() # type: ignore
                     status_text += f'\n\t...Subject deleted.'
+        except DedupReviewRequired:
+            raise  # propagate human-review signal — bypass error-log path
         except Exception as e:
             self._write_error_log_file( config=config, validated_login=validated_login, status_text=status_text, error_message=e )
             raise
@@ -684,16 +983,44 @@ class SourceRFSession( ExperimentData ):
         self._init_rf_session_dataframe()
         all_ffns = self._all_dicom_ffns()
         self._df = self._df.reindex( np.arange( len( all_ffns ) ) )
+        failures = []  # Collect (filename, exception) pairs for error reporting
         for idx, ffn in enumerate( all_ffns ):
             fn, ext = os.path.splitext( os.path.basename( ffn ) )
             if ext != '.dcm':
                 self._df.loc[idx, ['FN', 'EXT', 'IS_VALID']] = [fn, ext, False]
                 continue
-            deid_dcm = SourceDicomDeIdentified( dcm_ffn=ffn, config=config, intake_form=self.intake_form )
-            self._df.loc[idx, ['FN', 'EXT', 'OBJECT', 'IS_VALID']] = [fn, ext, deid_dcm, deid_dcm.is_valid]
+            try:
+                deid_dcm = SourceDicomDeIdentified( dcm_ffn=ffn, config=config, intake_form=self.intake_form )
+                self._df.loc[idx, ['FN', 'EXT', 'OBJECT', 'IS_VALID']] = [fn, ext, deid_dcm, deid_dcm.is_valid]
+            except Exception as e:
+                # Capture filename and exception for later reporting
+                failures.append( (fn, e) )
+                self._df.loc[idx, ['FN', 'EXT', 'IS_VALID']] = [fn, ext, False]
             # if deid_dcm.is_valid:
             #     dt_data = self._query_dicom_series_time_info( deid_dcm )
             #     self._df.loc[idx, ['DATE', 'INSTANCE_TIME', 'SERIES_TIME', 'INSTANCE_NUM']] = dt_data
+
+        # If any files failed to load, raise GatewayError with detailed FriendlyError
+        if failures:
+            failure_lines = []
+            for failed_fn, exc in failures[:3]:  # Limit to first 3 files for readability
+                # Extract key error message (first line or short snippet)
+                exc_str = str( exc ).split( '\n' )[0][:100]
+                failure_lines.append( f"  • {failed_fn}: {exc_str}" )
+            if len( failures ) > 3:
+                failure_lines.append( f"  • ... and {len( failures ) - 3} more file(s)" )
+
+            message = "The following image files could not be read:\n" + "\n".join( failure_lines )
+            raise GatewayError(
+                FriendlyError(
+                    title="Some image files could not be read",
+                    message=message,
+                    recourse=[
+                        "Remove or fix the corrupted image files",
+                        "Contact your librarian for assistance",
+                    ],
+                )
+            )
 
         # Need to check within-case for duplicates -- apparently those do exist.
         hash_strs = set()

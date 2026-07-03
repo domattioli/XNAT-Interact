@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-06-12T08:53:03.146640",
+  "project": "DEDUP_WIRED3",
+  "test_cases": [
+    {
+      "case": "exact",
+      "uid": "DEDUP_EXACT",
+      "expected": "reject",
+      "observed": "error",
+      "dedup_review_required": false,
+      "error": "SourceRFSession is_valid=False",
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    },
+    {
+      "case": "subset",
+      "uid": "DEDUP_SUBSET",
+      "expected": "reject",
+      "observed": "error",
+      "dedup_review_required": false,
+      "error": "SourceRFSession is_valid=False",
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    },
+    {
+      "case": "superset",
+      "uid": "DEDUP_SUPERSET",
+      "expected": "reject",
+      "observed": "error",
+      "dedup_review_required": false,
+      "error": "AssertionError: Session contains invalid images; check the following problematic rows:\n           FN   EXT NEW_FN  ... INSTANCE_NUM ContentTime InstanceNumber\n0  frame_0006  .dcm    NaN  ...          NaN         NaN            NaN\n1  frame_0002  .dcm    NaN  ...          NaN         NaN            N",
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    },
+    {
+      "case": "partial",
+      "uid": "DEDUP_PARTIAL",
+      "expected": "reject",
+      "observed": "error",
+      "dedup_review_required": false,
+      "error": "AssertionError: Session contains invalid images; check the following problematic rows:\n           FN   EXT NEW_FN  ... INSTANCE_NUM ContentTime InstanceNumber\n0  frame_0002  .dcm    NaN  ...          NaN         NaN            NaN\n4  frame_0001  .dcm    NaN  ...          NaN         NaN            N",
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    },
+    {
+      "case": "disjoint",
+      "uid": "DEDUP_DISJOINT",
+      "expected": "accept",
+      "observed": "accept",
+      "dedup_review_required": false,
+      "error": null,
+      "empty_shells_before": [],
+      "empty_shells_after": []
+    }
+  ]
+}

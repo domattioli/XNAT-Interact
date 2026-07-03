@@ -933,25 +933,14 @@ class ConfigTables( UIDandMetaInfo ):
         write_fn = write_fn.split( '.' )
         write_fn = write_fn[0] + datetime.today().strftime( '%Y_%m_%d_%H_%M_%S' ) + '.' + write_fn[1]
 
-        # Read in current config file
-        with open( self.config_ffn, 'r' ) as f:     data = json.load( f )
-
-        # Write data to a temporary directory and file
-        temp_dir = tempfile.mkdtemp()
-        try:
-            temp_ffn = str(Path(temp_dir) / write_fn)
-            with open( temp_ffn, 'w' ) as f:            json.dump( data, f, indent=2, separators=( ',', ':' ) )
-
-            # Push that to xnat (filename is what goes on server, temp_ffn is local source)
-            self.xnat_connection.gateway.put_file( _conventions.project_qs( self.xnat_connection.xnat_project_name ), self.xnat_backups_folder_name, write_fn, temp_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
-            if write_pn is not None:
-                shutil.copy( self.config_ffn, write_pn )
-                if verbose:             print( f'\tSUCCESS! -- Created backup of config file at:\t{write_pn}\n' )
-                return write_pn, write_fn
-            else:
-                return None, write_fn
-        finally:
-            shutil.rmtree( temp_dir, ignore_errors=True )
+        # Push that to xnat.
+        self.xnat_connection.gateway.put_file( _conventions.project_qs( self.xnat_connection.xnat_project_name ), self.xnat_backups_folder_name, write_fn, self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )
+        if write_pn is not None:
+            shutil.copy( self.config_ffn, write_pn )
+            if verbose:             print( f'\tSUCCESS! -- Created backup of config file at:\t{write_pn}\n' )
+            return write_pn, write_fn
+        else:
+            return None, write_fn
     
     def _fingerprint_file( self, ffn ) -> str:
         """Return hex-encoded sha256 of the bytes at *ffn* (str or Path)."""

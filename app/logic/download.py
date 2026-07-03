@@ -156,6 +156,10 @@ def download_selection(
         ok=False → FriendlyError with recourse; no traceback escapes.
     """
     dest_path = Path(dest_dir)
+    # #33 C1: preserve the caller-supplied default resource label — the enumeration
+    # loop below reuses the `resource_label` name per-resource, so capture the
+    # original default separately before it gets shadowed per-scan.
+    _default_resource_label = resource_label
 
     # --- Empty selection fast-path ---
     if not selection:
@@ -295,9 +299,13 @@ def download_selection(
             except Exception:
                 resources_to_process = []
 
-            # Default to SRC if no resources enumerated
+            # #33 C1: when enumeration finds nothing (e.g. a test double that only
+            # supports direct label addressing, not enumeration), fall back to the
+            # per-row `resource_label` override, else the caller-supplied default
+            # (not a hardcoded "SRC") — preserves the parameterized-label contract.
             if not resources_to_process:
-                resources_to_process = ["SRC"]
+                _row_label = str(row.get("resource_label", "")).strip()
+                resources_to_process = [_row_label or _default_resource_label]
 
             # Download files from each resource
             for resource_label in resources_to_process:

@@ -745,6 +745,7 @@ class ConfigTables( UIDandMetaInfo ):
         self._metadata = {  'CREATED': now_datetime,
                             'LAST_MODIFIED': now_datetime,
                             'CREATED_BY': self.accessor_uid,
+                            'LAST_MODIFIED_BY': self.accessor_uid,
                             'TABLE_EXTRA_COLUMNS': {} }
             
     def _initialize_tables( self ) -> None:
@@ -863,7 +864,8 @@ class ConfigTables( UIDandMetaInfo ):
     
 
     def _update_metadata( self, new_table_extra_columns: Opt[dict] = None ) -> None:
-        self.metadata.update( {'LAST_MODIFIED': self.now_datetime, 'CREATED_BY': self.accessor_uid} )
+        self.metadata.update( {'LAST_MODIFIED': self.now_datetime, 'LAST_MODIFIED_BY': self.accessor_uid} )
+        self.metadata.setdefault( 'CREATED_BY', self.accessor_uid )  # #33 L2: preserve original creator; never overwrite on update
         if new_table_extra_columns is not None:
             for k, v in new_table_extra_columns.items():
                 assert isinstance( v, list ), f'Extra column names for Table "{k}" must be a list of strings.'
@@ -1140,6 +1142,13 @@ class ConfigTables( UIDandMetaInfo ):
         return False
 
 
+    def uid_exists( self, table_name: str, item_uid: str ) -> bool:  # #33 L3: UID-column membership (item_exists checks NAME, wrong guard for UID lookups)
+        table = self.tables[table_name.upper()]
+        if 'UID' in table.columns:
+            return not table.empty and item_uid.upper() in table['UID'].str.upper().values
+        return False
+
+
     def add_new_table( self, table_name: str, extra_column_names: Opt[typehintList[str]] = None, verbose: Opt[bool] = True ) -> None:
         assert self.is_user_registered(), f"User '{self.accessor_username}' must first be registed before adding new items."
         table_name = table_name.upper()
@@ -1244,7 +1253,7 @@ class ConfigTables( UIDandMetaInfo ):
 
     def get_name( self, table_name: str, item_uid: str ) -> str:
         table_name, item_uid = table_name.upper(), item_uid.upper()
-        assert self.item_exists( table_name, item_uid ), f"Item '{item_uid}' does not exist in table '{table_name}'"
+        assert self.uid_exists( table_name, item_uid ), f"UID '{item_uid}' does not exist in table '{table_name}'"  # #33 L3: guard on UID column, not NAME
         return str( self.tables[table_name].loc[self.tables[table_name]['UID'] == item_uid, 'NAME'].values[0] )
 
 

@@ -1105,7 +1105,12 @@ class SourceRFSession( ExperimentData ):
             self._df.at[idx, 'NEW_FN'] = dicom_obj.generate_source_image_file_name( _inst_str, self.intake_form.uid )
 
         # self._derive_acquisition_site_info() # to-do: should warn the user that any mined info is inconsistent with their input
-        self._df = self.df.sort_values( by='NEW_FN', inplace=False )
+        # #33 M3: reset to a contiguous RangeIndex after sorting.  The downstream
+        # write() loop iterates `for idx in range(len(self.df))` and indexes with
+        # label-based `.loc[idx]`; without this reset a sorted (or row-filtered)
+        # index is a non-contiguous permutation, so .loc[idx] either reads the
+        # wrong row or raises KeyError on a gapped index.
+        self._df = self.df.sort_values( by='NEW_FN', inplace=False ).reset_index( drop=True )
 
     # ---------------------------------_populate_df Helper Methods---------------------------------
     def _all_dicom_ffns( self ) -> list:

@@ -122,6 +122,7 @@ def download_selection(
     project_name: str,
     selection: List[dict],
     dest_dir: Union[str, Path],
+    resource_label: str = "SRC",
 ) -> DownloadOutcome:
     """
     Download resource files for the chosen rows into *dest_dir*.
@@ -140,11 +141,13 @@ def download_selection(
 
     Parameters
     ----------
-    server       : pyxnat.Interface or FakeXNAT — must support
-                   server.select(qs).resource(label).file(fn).get_copy(dest).
-    project_name : XNAT project name string.
-    selection    : List of row dicts from list_downloadable.
-    dest_dir     : Destination folder (created if missing).
+    server           : pyxnat.Interface or FakeXNAT — must support
+                       server.select(qs).resource(label).file(fn).get_copy(dest).
+    project_name     : XNAT project name string.
+    selection        : List of row dicts from list_downloadable.
+    dest_dir         : Destination folder (created if missing).
+    resource_label   : XNAT resource label ("SRC" by default; may be "DERIVED" etc.
+                       May be overridden per-row via row dict key "resource_label".
 
     Returns
     -------

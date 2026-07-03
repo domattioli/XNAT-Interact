@@ -326,7 +326,10 @@ class PyxnatGateway(XnatGateway):
         self.server = pyxnat.Interface(server=self._url, user=self._user, password=self._password)
 
     def disconnect(self) -> None:
+        if self.server is None:
+            return
         self.server.disconnect()
+        self.server = None
 
     def liveness(self) -> None:
         self.server.get('/')

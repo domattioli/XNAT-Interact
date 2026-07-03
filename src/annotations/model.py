@@ -208,7 +208,9 @@ class AnnotationSet:
             )
             if blob is not None and ann.codec is not None:
                 ann.decode()
-            aset.annotations.append(ann)
+            # S3 (#33): route through add() so annotator_id is validated on load,
+            # not just on the in-memory add() path (rejects PHI / malformed ids).
+            aset.add(ann)
         return aset
 
 

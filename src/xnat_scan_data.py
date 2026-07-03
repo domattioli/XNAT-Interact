@@ -354,4 +354,3 @@ class MTurkSemanticSegmentation:
         """
         return cls(row)
 
-

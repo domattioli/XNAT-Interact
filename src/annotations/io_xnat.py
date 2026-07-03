@@ -278,10 +278,38 @@ def upload_annotation_set(
             })
 
         # --- Build and upload manifest ---
+        # M6 (#33): merge prior manifest so earlier-version blobs stay indexed.
+        # Attempt to fetch any existing manifest from the server; on ANY error
+        # (file absent = first upload, network blip, corrupt JSON) treat
+        # existing entries as [] and proceed — never fail the upload for this.
+        existing_entries: List[dict] = []
+        try:
+            existing_manifest_path = tmp / "existing_manifest.json"
+            server.get_file_copy(qs, resource_label, MANIFEST_FILENAME, existing_manifest_path)
+            existing_doc = json.loads(existing_manifest_path.read_bytes().decode("utf-8"))
+            existing_entries = existing_doc.get("annotations", [])
+        except Exception:
+            # First-ever upload or any retrieval/parse failure — safe to treat as empty.
+            existing_entries = []
+
+        # Dedup: collect blob_filenames already in the existing manifest.
+        existing_blob_fns = {e["blob_filename"] for e in existing_entries}
+
+        # Merge: existing entries first, then genuinely-new ones (not already indexed).
+        # A re-uploaded identical blob_filename is idempotent (content unchanged).
+        merged_entries = list(existing_entries)
+        for new_entry in manifest_entries:
+            if new_entry["blob_filename"] not in existing_blob_fns:
+                merged_entries.append(new_entry)
+
+        # Re-assign index sequentially so download's blobs[idx] keying stays unique.
+        for seq_idx, entry in enumerate(merged_entries):
+            entry["index"] = seq_idx
+
         base_manifest = annotation_set.to_manifest()
         full_manifest = {
             "image_ref": base_manifest["image_ref"],
-            "annotations": manifest_entries,
+            "annotations": merged_entries,
         }
 
         manifest_local = tmp / MANIFEST_FILENAME

@@ -183,6 +183,21 @@ class TestDryRun:
         _dcs.delete_subjects(server=fake, dry_run=True)  # type: ignore[arg-type]
         assert fake.delete_op_count() == 0
 
+    def test_metatables_targets_config_resource_and_file(self) -> None:
+        """Regression (#33 M9): delete_metatables must target resource 'config' /
+        file 'database_config.json', not the legacy 'MetaTables'/'MetaTables.json'
+        (which no resource used, making the deletion a silent no-op)."""
+        assert _dcs._CONFIG_RESOURCE == "config"
+        assert _dcs._CONFIG_FILE == "database_config.json"
+        # Use the base FakeXNAT here: it carries the full FakeSelector resource
+        # chain. (DeleteFakeXNAT swaps in a minimal selector for subjects/* and
+        # has no _parse_resource_qs, so it can't exercise the file-delete path.)
+        fake = FakeXNAT()
+        _dcs.delete_metatables(server=fake, dry_run=False)  # type: ignore[arg-type]
+        deletes = [c for c in fake.calls if c["op"] == "file.delete"]
+        assert len(deletes) == 1, f"expected exactly one file.delete, got {deletes}"
+        assert deletes[0]["kwargs"]["_filename"] == "database_config.json"
+
 
 # ---------------------------------------------------------------------------
 # 3. Deletion failure → raised / surfaced, NOT swallowed

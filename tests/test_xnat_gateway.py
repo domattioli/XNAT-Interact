@@ -362,3 +362,15 @@ class TestCreateAssessorH6Guards:
             self.fake.create_assessor(self.exp_qs, label)
         creates = [c for c in self.fake.calls if c["op"] == "assessor.create"]
         assert len(creates) == len(valid_labels)
+
+
+# ---------------------------------------------------------------------------
+# (d) disconnect() is a safe no-op on an unconnected gateway (#33 L4)
+# ---------------------------------------------------------------------------
+
+def test_disconnect_before_connect_is_noop():
+    """PyxnatGateway.disconnect() must not raise when connect() never ran (#33 L4)."""
+    gw = PyxnatGateway(url="http://example.invalid", user="u", password="p")
+    assert gw.server is None
+    gw.disconnect()  # must NOT raise AttributeError
+    assert gw.server is None

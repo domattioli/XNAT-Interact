@@ -10,7 +10,8 @@ name: tests
 
 on:
   push:
-    branches: [main, development]
+    # push:development removed (#265) — open rolling PR already covers dev pushes via synchronize
+    branches: [main]
   pull_request:
     branches: [main]
 

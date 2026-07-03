@@ -15,6 +15,7 @@ as evidence of cleanliness (SC-001, analyze.md F5).
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import tempfile
@@ -68,6 +69,14 @@ def _phi_is_zeroed(original: np.ndarray, masked: np.ndarray, phi_y_range: tuple[
     )
 
 
+def _requires_presidio():
+    """Skip marker: skip the test if presidio-analyzer is unavailable (optional dep, see requirements-pixeldeid.txt)."""
+    return pytest.mark.skipif(
+        importlib.util.find_spec("presidio_analyzer") is None,
+        reason="presidio-analyzer not installed (optional dep, see requirements-pixeldeid.txt)",
+    )
+
+
 # ---------------------------------------------------------------------------
 # T012 — classify_text
 # ---------------------------------------------------------------------------
@@ -81,11 +90,13 @@ class TestClassifyText:
         assert is_phi is True
         assert len(cats) > 0
 
+    @_requires_presidio()
     def test_phi_name_alone(self) -> None:
         """A person name (common format) should be PHI."""
         is_phi, cats = classify_text("John Smith")
         assert is_phi is True
 
+    @_requires_presidio()
     def test_phi_date(self) -> None:
         """A date string should be PHI."""
         is_phi, cats = classify_text("01/01/1980")

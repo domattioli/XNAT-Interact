@@ -5,7 +5,7 @@
 #   "GitHub Actions" as the deployment source. Without this
 #   one-time change in repo settings, the deploy step will fail.
 #
-# Triggers on push to: main, development, 004-phase-4-onboarding-and-docs
+# Triggers on push to: main, development
 # Path filter: only runs when files under docs/site/ change.
 
 name: Deploy onboarding site to GitHub Pages
@@ -15,7 +15,6 @@ on:
     branches:
       - main
       - development
-      - 004-phase-4-onboarding-and-docs
     paths:
       - "docs/site/**"
   workflow_dispatch:

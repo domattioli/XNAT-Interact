@@ -9,11 +9,11 @@ name: tests
 # python=3.8 conflicted with the runner's base env.
 
 on:
-  push:
-    # push:development removed (#265) — open rolling PR already covers dev pushes via synchronize
-    branches: [main]
+  # MINIMAL CI (#265, 2026-07-03): PR-to-main + dispatch only. Dev pushes hit
+  # the open rolling PR's synchronize event; no separate push trigger needed.
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 # Cancel superseded runs on the same ref to avoid burning Actions minutes.
 concurrency:
@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.11"]
 
     steps:
       - uses: actions/checkout@v4

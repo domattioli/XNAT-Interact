@@ -932,12 +932,6 @@ class ConfigTables( UIDandMetaInfo ):
         write_fn = self.backup_fn   # Modify file name to go from fn.ext to fn-backup-todays_date_in_YYYY_MM_DD_Format.ext
         write_fn = write_fn.split( '.' )
         write_fn = write_fn[0] + datetime.today().strftime( '%Y_%m_%d_%H_%M_%S' ) + '.' + write_fn[1]
-        
-        # Read in current config file
-        with open( self.config_ffn, 'r' ) as f:     data = json.load( f )
-
-        # Write data to a temporary filename
-        with open( write_fn, 'w' ) as f:            json.dump( data, f, indent=2, separators=( ',', ':' ) )
 
         # Push that to xnat.
         self.xnat_connection.gateway.put_file( _conventions.project_qs( self.xnat_connection.xnat_project_name ), self.xnat_backups_folder_name, write_fn, self.config_ffn, content='META_DATA', format='JSON', tags='DOC', overwrite=True )

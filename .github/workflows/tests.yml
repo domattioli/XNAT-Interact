@@ -6,8 +6,15 @@ name: tests
 # and python=3.8 conflicted with the runner's base env.
 
 on:
+  # Push only on main (post-merge); feature-branch coverage comes via the PR.
   push:
+    branches: [main]
   pull_request:
+
+# Cancel superseded runs when a branch/PR is pushed again.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:

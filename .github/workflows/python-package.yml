@@ -1,10 +1,15 @@
-name: Python Package
+# DEPRECATED (spec-019 T057 mark-stage): superseded by ci-lite.yml.
+# False comment "no pytest suite" below is obsolete — 65 test files exist.
+# Removal after 1-cycle grace (workflows/ci-lite.yml is canonical).
+# Contact operator before removing; other workflows may reference this name.
+#
+# TODO: Delete this file after promoting ci-lite.yml to canonical + updating any references.
+
+name: Python Package [DEPRECATED]
 
 on:
-  # MINIMAL CI (#265, 2026-07-03): PR-to-main + dispatch only. Dev pushes hit
-  # the open rolling PR's synchronize event; no separate push trigger needed.
-  pull_request:
-    branches: [main]
+  # MINIMAL CI — dispatch only (manual trigger for troubleshooting).
+  # This workflow is superseded; use ci-lite.yml instead.
   workflow_dispatch:
 
 concurrency:

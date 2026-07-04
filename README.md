@@ -10,7 +10,7 @@ You need three things:
 
 1. **An XNAT account** — contact the Data Librarian (your lab's designated person) to be added to the project. Register with your HawkID.
 2. **UIowa VPN** — you must be connected to the [UIowa Cisco VPN](https://its.uiowa.edu/support/article/1876) whenever you run this tool off-campus.
-3. **Python 3.8+** — a 64-bit Python 3 installation.
+3. **Python 3.9+** — a 64-bit Python 3 installation (see requirements below).
 
 > **SSL certificate note:** The XNAT server certificate requires annual renewal. If you see an SSL error, contact the Data Librarian — you cannot connect until it is renewed.
 

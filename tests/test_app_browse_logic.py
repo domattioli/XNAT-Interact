@@ -301,3 +301,77 @@ def test_sort_rows_by_date(sample_rows):
 def test_sort_rows_unknown_key_does_not_raise(sample_rows):
     result = sort_rows(sample_rows, "nonexistent_column")
     assert len(result) == len(sample_rows)
+
+
+# ---------------------------------------------------------------------------
+# Test 8: Display frame mapping — all COLUMNS, scan_id excluded from display
+# ---------------------------------------------------------------------------
+
+def test_display_frame_maps_all_columns_correctly():
+    """
+    Verify that _display_frame correctly handles all 6 COLUMNS keys
+    and produces exactly 5 display columns without scan_id.
+
+    Mirrors the live ValueError bug: DataFrame with 6 COLUMNS keys,
+    display shows exactly 5 renamed headers, scan_id is absent.
+    """
+    # Import here to avoid top-level streamlit import in test file
+    from app.pages.browse import _display_frame, DISPLAY_MAP
+
+    # Sample row with all 6 COLUMNS keys
+    filtered = [
+        {
+            "subject": "SUBJ001",
+            "experiment": "EXP_KNEE_2025",
+            "date": "2025-01-15",
+            "scan_type": "DICOM",
+            "num_files": 42,
+            "scan_id": "SCAN_DICOM",
+        },
+        {
+            "subject": "SUBJ002",
+            "experiment": "EXP_HIP_2024",
+            "date": "2024-06-30",
+            "scan_type": "DICOM_MP4",
+            "num_files": 18,
+            "scan_id": "SCAN_MP4",
+        },
+    ]
+
+    # Call _display_frame
+    df = _display_frame(filtered)
+
+    # Verify 2 rows
+    assert len(df) == 2, f"Expected 2 rows, got {len(df)}"
+
+    # Verify exactly 5 display columns
+    assert len(df.columns) == 5, (
+        f"Expected 5 display columns, got {len(df.columns)}: {list(df.columns)}"
+    )
+
+    # Verify column names match DISPLAY_MAP values
+    expected_columns = [
+        "Subject",
+        "Experiment",
+        "Date",
+        "Scan Type",
+        "# Files",
+    ]
+    assert list(df.columns) == expected_columns, (
+        f"Expected columns {expected_columns}, got {list(df.columns)}"
+    )
+
+    # Verify scan_id is NOT in the DataFrame
+    assert "scan_id" not in df.columns, "scan_id should not appear in display columns"
+
+    # Verify values are correct
+    assert df.iloc[0]["Subject"] == "SUBJ001"
+    assert df.iloc[0]["Experiment"] == "EXP_KNEE_2025"
+    assert df.iloc[0]["Date"] == "2025-01-15"
+    assert df.iloc[0]["Scan Type"] == "DICOM"
+    assert df.iloc[0]["# Files"] == 42
+
+    assert df.iloc[1]["Subject"] == "SUBJ002"
+    assert df.iloc[1]["Date"] == "2024-06-30"
+    assert df.iloc[1]["Scan Type"] == "DICOM_MP4"
+    assert df.iloc[1]["# Files"] == 18

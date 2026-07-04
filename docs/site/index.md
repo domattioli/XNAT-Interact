@@ -83,5 +83,19 @@ for software bugs or general questions.
 
 ---
 
+## See the application
+
+Eight screens of the desktop app, captured from the live application running
+against a real XNAT server: [The XNAT-Interact UI, screen by screen](ui-demo.html).
+
+## How we know it works
+
+The upload/download pipeline is validated against a **live XNAT server** with
+synthetic surgical fluoroscopy data — measured round-trips, stress lanes, and
+duplicate-detection characterization, with every claim carrying its number.
+Read the evidence: [Validated against a live XNAT server](validation.html).
+
+---
+
 *XNAT-Interact is a University of Iowa research tool. This site is hosted on
 GitHub Pages and collects no user data.*

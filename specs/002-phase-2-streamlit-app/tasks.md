@@ -106,7 +106,7 @@ burned-in-PHI review step. Tests REQUIRED (Constitution IV).
 - [ ] T028 [P] Surface the Phase 1 config lost-update guard when a registration
   via the form would clobber concurrent `MetaTables.json` edits.
 - [ ] T029 Add a short "how to launch the app" section to `README.md`
-  (`streamlit run app/main.py`); keep it terminal-light, pending Phase 3 packaging.
+  (`streamlit run streamlit_app.py`); keep it terminal-light, pending Phase 3 packaging.
 - [ ] T030 Run full suite; ensure SC-001…SC-007 met — no traceback reaches the
   browser, all screen logic covered offline against `FakeXNAT`, PHI gate enforced.
 

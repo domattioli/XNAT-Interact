@@ -1,0 +1,66 @@
+{
+  "timestamp": "2026-06-12T08:25:05.686379",
+  "workers": 4,
+  "frames": 10,
+  "project": "STRESS_CONC",
+  "phase1_publishes": [
+    {
+      "worker_id": 0,
+      "uid": "STRESS_C_0001",
+      "ok": true,
+      "error": null,
+      "seconds": 4.6436238288879395,
+      "n_files": 10
+    },
+    {
+      "worker_id": 1,
+      "uid": "STRESS_C_0002",
+      "ok": false,
+      "error": "RuntimeError: Failed to ensure project STRESS_CONC exists: HTTP 500\nTraceback (most recent call last):\n  File \"/home/user/XNAT-Interact/tests/stress/lane_concurrent.py\", line 66, in _worker_publish\n    conn, cfg, login = connect(url, project, user, pwd, verbose=False)\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 56, in connect\n    raise RuntimeError(\nRuntimeError: Failed to ensure project STRESS_CONC exists: HTTP 500\n",
+      "seconds": 1.7602221965789795,
+      "n_files": 0
+    },
+    {
+      "worker_id": 2,
+      "uid": "STRESS_C_0003",
+      "ok": true,
+      "error": null,
+      "seconds": 4.500688076019287,
+      "n_files": 10
+    },
+    {
+      "worker_id": 3,
+      "uid": "STRESS_C_0004",
+      "ok": false,
+      "error": "RuntimeError: Failed to ensure project STRESS_CONC exists: HTTP 500\nTraceback (most recent call last):\n  File \"/home/user/XNAT-Interact/tests/stress/lane_concurrent.py\", line 66, in _worker_publish\n    conn, cfg, login = connect(url, project, user, pwd, verbose=False)\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/user/XNAT-Interact/tests/stress/driver.py\", line 56, in connect\n    raise RuntimeError(\nRuntimeError: Failed to ensure project STRESS_CONC exists: HTTP 500\n",
+      "seconds": 1.767956256866455,
+      "n_files": 0
+    }
+  ],
+  "phase2_config_races": [
+    {
+      "worker_id": 0,
+      "ok": true,
+      "error": null,
+      "exception_type": null
+    },
+    {
+      "worker_id": 1,
+      "ok": false,
+      "error": "pyxnat._exec failure:\n                    URI: http://localhost:8080/data/projects/STRESS_CONC/resources/backups/files/database_config-backup-2026_06_12_08_25_13.json?inbody=true&content=META_DATA&format=JSON&tags=DOC&overwrite=true\n                    status code: 500\n                    headers: {'Set-Cookie': 'SESSION_EXPIRATION_TIME=\"1781252713341,3600000\"; Version=1; Path=/', 'Date': 'Fri, 12 Jun 2026 08:25:13 GMT', 'Accept-Ranges': 'bytes', 'Server': 'Noelios-Restlet-Engine/1.1.10', 'X-Content-Type-Options': 'nosniff', 'X-XSS-Protection': '1; mode=block', 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': \"frame-ancestors 'self'\", 'Content-Type': 'text/html;charset=ISO-8859-1', 'Content-Length': '418', 'Connection': 'close'}\n                    content: b'<html>\\n<head>\\n   <title>Status page</title>\\n</head>\\n<body>\\n<h3>ERROR: duplicate key value violates unique constraint \"xnat_abstractresource_tag_meta_data_pkey\"\\n  Detail: Key (meta_data_id)=(90) already exists.</h3><p>You can get technical details <a href=\"http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.5.1\">here</a>.<br>\\nPlease continue your visit at our <a href=\"/\">home page</a>.\\n</p>\\n</body>\\n</html>\\n'\n                ",
+      "exception_type": "DatabaseError"
+    },
+    {
+      "worker_id": 2,
+      "ok": true,
+      "error": null,
+      "exception_type": null
+    },
+    {
+      "worker_id": 3,
+      "ok": false,
+      "error": "Item 'ADMIN' does not exist in table 'REGISTERED_USERS'",
+      "exception_type": "AssertionError"
+    }
+  ]
+}

@@ -67,7 +67,7 @@ specs/002-phase-2-streamlit-app/
 └── tasks.md
 
 app/                          # NEW: thin Streamlit front-end over src/services/
-├── main.py                   # entrypoint: `streamlit run app/main.py`; page router
+├── main.py                   # page router (launched from repo-root streamlit_app.py)
 ├── session.py                # AppSession state, auth handle, screen routing helpers
 ├── components/
 │   ├── error_panel.py        # renders a Phase 1 FriendlyError as a friendly panel

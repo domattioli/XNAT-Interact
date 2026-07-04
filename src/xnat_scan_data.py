@@ -106,10 +106,11 @@ class ScanFile( UIDandMetaInfo ):
 
     @staticmethod
     def generate_source_image_file_name( inst_str: str, patient_uid: str ) -> str:
-        assert len( inst_str ) < 4, f'This function is intended for use with creating dicom file names from their metadata instance number. It is assumed that there may be no more than 999 instances possible. You entered "{inst_str}", which exceeds that threshold.'
-        if inst_str.isdigit() and int( inst_str ) < 1000:
-            # Append the appropriate number of leading zeros
-            inst_str = inst_str.zfill(4)
+        # Support up to 4-digit instance numbers (0-9999); reject non-digits or >9999.
+        assert len( inst_str ) <= 4 and inst_str.isdigit(), f'Instance number must be digits-only and at most 4 digits long (0-9999). You entered "{inst_str}".'
+        assert int( inst_str ) <= 9999, f'Instance number must not exceed 9999. You entered {int( inst_str )}.'
+        # Append the appropriate number of leading zeros
+        inst_str = inst_str.zfill(4)
         return f"{inst_str}-{patient_uid}"
 
 
@@ -352,5 +353,4 @@ class MTurkSemanticSegmentation:
         MTurkSemanticSegmentation instance (use .annotation to get the Annotation).
         """
         return cls(row)
-
 

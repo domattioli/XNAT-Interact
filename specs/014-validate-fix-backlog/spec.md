@@ -5,6 +5,14 @@
 **Status**: Draft
 **Input**: User description: "Consolidate, test, debug, and validate the backlog of correctness fixes that have been proposed but never verified in XNAT-Interact. Roughly ten draft PRs and two design issues describe changes across the DICOM-identity, download/zip, concurrency, and dedup code paths, but none have been merged or CI-verified because CI has been red repo-wide (#44). Treat every one of these fixes as hypothetical until proven — the goal of this spec is to turn the pile of unvalidated branches into a single, tested, mergeable body of work with a green regression net."
 
+## Clarifications
+
+### Session 2026-07-07
+
+- Q: How should the existing draft-PR fixes (#40–#43, #46, #48, #50, #38) be brought onto the consolidated branch? → A: Re-implement fresh — draft PRs are design references only; each fix and its regression test is written fresh on the consolidated branch.
+- Q: Is the #32 dedup + layered-identity redesign fully implemented in this feature, or only characterized/prepared? → A: Full implementation (User Story 5, P3, lands last on the green net).
+- Q: How is the "fails on pre-fix code" proof captured for each regression test? → A: Ledger-recorded run — each new test is run once against the pre-fix baseline commit and the failing output + commit hash are recorded in the disposition ledger.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Restore a trustworthy CI signal (Priority: P1)
@@ -72,9 +80,9 @@ The maintainer sweeps M1–M10 (filename off-by-one at ≥1000 instances, privat
 
 ---
 
-### User Story 5 - Validate the dedup + layered-identity redesign with a characterization envelope (Priority: P3)
+### User Story 5 - Implement and validate the dedup + layered-identity redesign (Priority: P3)
 
-The maintainer implements/validates the #32 redesign: exact-duplicate detection by raw-byte content hash, surgery-set identity by preserved study identifier, perceptual similarity demoted to an advisory flag, and the "reject + report, never create empty shells" upload semantic — all exercised through a seed-set fixture factory of synthetic cases. Before/after characterization tests document the false-positive/false-negative envelope of the old vs. new dedup behavior.
+The maintainer fully implements the #32 redesign: exact-duplicate detection by raw-byte content hash, surgery-set identity by preserved study identifier, perceptual similarity demoted to an advisory flag, and the "reject + report, never create empty shells" upload semantic — all exercised through a seed-set fixture factory of synthetic cases. Before/after characterization tests document the false-positive/false-negative envelope of the old vs. new dedup behavior.
 
 **Why this priority**: It is a behavior redesign, not a bug fix — highest value long-term but largest surface and most dependent on the fixture factory; it should land on top of an already-green net.
 
@@ -101,10 +109,10 @@ The maintainer implements/validates the #32 redesign: exact-duplicate detection 
 
 ### Functional Requirements
 
-- **FR-001**: Every in-scope proposed fix (all #33 findings, the #32 redesign, all #51 branches) MUST be treated as UNVERIFIED until backed by a regression test that fails on pre-fix code and passes post-fix, plus a green run of the consolidated test lane (Constitution VII).
+- **FR-001**: Every in-scope proposed fix (all #33 findings, the #32 redesign, all #51 branches) MUST be treated as UNVERIFIED until backed by a regression test that fails on pre-fix code and passes post-fix, plus a green run of the consolidated test lane (Constitution VII). The pre-fix failure is proven by a ledger-recorded run: the test executed once against the pre-fix baseline commit, with the failing output and commit hash recorded in the disposition ledger.
 - **FR-002**: Exactly one testing CI lane MUST exist after consolidation; the #45 vs #47 conflict MUST be resolved with the decision recorded, before any fix is claimed verified.
 - **FR-003**: Each of the ~30 #33 findings MUST reach exactly one terminal disposition — fixed-with-test, won't-fix, or not-a-bug — recorded in a single disposition ledger with rationale for non-fix outcomes.
-- **FR-004**: All duplicate or overlapping fixes (triplicated M1; overlapping M1/M9; #43's C1) MUST be reconciled so each logical change appears exactly once on the consolidated branch, and every superseded draft PR is closed or annotated with a pointer.
+- **FR-004**: All duplicate or overlapping fixes (triplicated M1; overlapping M1/M9; #43's C1) MUST be reconciled so each logical change appears exactly once on the consolidated branch; fixes are re-implemented fresh using the draft PRs as design references only (no cherry-picking), and every superseded draft PR is closed or annotated with a pointer.
 - **FR-005**: The default test suite MUST run fully offline: synthetic data and a fake/local server stand-in only; no connection to the production server and no real PHI anywhere in fixtures, logs, or recorded output (Constitution I, IV).
 - **FR-006**: Data-integrity and concurrency regression tests MUST additionally be runnable against a real disposable server via an explicit opt-in switch, and stress-class tests MUST be marked so they are excluded from the default gate.
 - **FR-007**: Upload behavior MUST never leave an empty subject/experiment/scan shell on the server after a rejected or failed upload; rejection MUST produce a plain-language report naming the conflicting existing data (Constitution II, VI).

@@ -3,6 +3,18 @@
 Baseline (feature start) commit: `dea6687bf72632afbc7f18d61a7f14789cc4c0d2` (origin/development tip, also this branch's merge-base with development)
 Audit date: 2026-07-07. Reproduce a pre-fix failure: `git worktree add /tmp/prefix <commit-from-row> && cd /tmp/prefix && pytest <test_path> -x`
 
+## Completion summary (Phase 7, 2026-07-07)
+
+- **SC-001**: 29/29 #33/#32 findings have a terminal or explicitly-tracked-open row above. 100%.
+- **SC-002**: All 7 active-scope findings (H8, M4, L1, S4, L5, plus S1→not-a-bug) proven failing at their pre-fix commit and passing after. Re-audited from scratch (H8 + S4 tests, worktree at `fe8230c`): 3/3 expected failures reproduced in 0.48s — well under the 5-minute bound.
+- **SC-003**: Full offline suite green — `1405 passed, 24 skipped, 12 deselected, 7 xfailed, 0 failures` (`pytest -m "not slow and not stress and not pixeldeid and not pg and not requires_server"`). Zero network access to any real server; zero PHI.
+- **SC-004**: All 10 draft PRs (#38, #40–#43, #45–#48, #50) terminal — see fix-candidates table. 9 were already closed before this session (2026-06-19 to 2026-06-26); this session closed #51.
+- **SC-005**: N/A — #32 dedup redesign was already fully implemented + tested on `development` prior to this feature (see #32-identity / #32-empty-shells / #32-fixture-factory rows); no characterization work was in this feature's rescoped active scope.
+- **SC-006**: `grep` sweep of `tests/regression_014/` for production hostnames — clean.
+- **SC-007**: PR #54's description carries the verification-status block (see below); CI (#44) status confirmed still blocking an actual Actions run as of this audit — reported UNVERIFIED-blocked-on-CI, not rounded up.
+
+**Verification status**: UNVERIFIED — blocked on CI (#44). Local: 1405/1405 passing (0 failures) across the full offline suite, including 20 new/backfilled regression tests in `tests/regression_014/`. Flips to VERIFIED only on an actual green `ci-lite.yml` run in GitHub Actions.
+
 ## Findings
 
 | finding | severity | disposition | test | evidence / fix commit | rationale |
@@ -46,20 +58,20 @@ Audit date: 2026-07-07. Reproduce a pre-fix failure: `git worktree add /tmp/pref
 
 | PR/Issue | Findings claimed | Terminal state | Pointer |
 |---|---|---|---|
-| #38 (xnat-fable campaign) | Login, download enumeration, #32 dedup, M1/M5/M9, stress lanes | superseded-by-commit | Merged via `5e3060e Merge pull request #38`; content landed on development |
-| #40 | M1 | superseded-by-commit | M1 actually landed via `59dd0b1`, not #40 — close with pointer (T017) |
-| #41 | M3 | superseded-by-commit | `d18b0dd` |
-| #42 | L4 | superseded-by-commit | `3bb125b` |
-| #43 | C1 | superseded-by-commit | `aff2824` |
-| #45 | CI (delete python-package.yml, fold into tests.yml) | pending decision | T003 will decide vs #47 |
-| #46 | M9 | superseded-by-commit | `082ed2e` |
-| #47 | CI (keep/fix python-package.yml) | pending decision | T003 will decide vs #45 |
-| #48 | L6 | superseded-by-commit | `f457a79` |
-| #50 | L2 | superseded-by-commit | `8338fb4` |
-| #51 (consolidation map) | meta — tracks all of the above | needs-update | Predates this audit; update or close per T018 |
+| #38 (xnat-fable campaign) | Login, download enumeration, #32 dedup, M1/M5/M9, stress lanes | **merged** (`5e3060e`) | Already terminal — no action needed |
+| #40 | M1 | **closed unmerged** — superseded-by-commit | M1 actually landed via `59dd0b1`, not #40 |
+| #41 | M3 | **merged** (`d18b0dd`) | Already terminal |
+| #42 | L4 | **merged** (`3bb125b`) | Already terminal |
+| #43 | C1 | **merged** (`aff2824`) | Already terminal |
+| #45 | CI (delete python-package.yml, fold into tests.yml) | **closed unmerged** | Neither #45 nor #47's literal diff applied — repo converged on a 3rd shape (keep `ci-lite.yml`, delete both `tests.yml` and `python-package.yml`); decision recorded in the CI-duplication row above; comment posted on #51 |
+| #46 | M9 | **merged** (`082ed2e`) | Already terminal |
+| #47 | CI (keep/fix python-package.yml) | **closed unmerged** | Same disposition as #45 above |
+| #48 | L6 | **merged** (`f457a79`) | Already terminal |
+| #50 | L2 | **closed unmerged** — superseded-by-commit | L2 landed via `8338fb4`, not #50 |
+| #51 (consolidation map) | meta — tracks all of the above | **closed** (state_reason=completed) | Closing comment posted 2026-07-07 pointing to this ledger; every recommendation in #51 has landed |
 
 ## Follow-ups filed outside this feature's scope (research D3)
 
-- S2 (DICOM-SEG per-segment `SegmentationType`) — new issue, not in active scope.
-- H5 singleton-construction lock (`XNATConnection._instance` unguarded `__new__`) — new issue, not in active scope.
+- S2 (DICOM-SEG per-segment `SegmentationType`) — filed as **#55**.
+- H5 singleton-construction lock (`XNATConnection._instance` unguarded `__new__`) — filed as **#56**.
 - M2 (private-tag VR) — flagged `unclear`, not actively re-verified this pass; low risk, candidate for a future audit pass rather than blocking this feature.

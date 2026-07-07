@@ -13,6 +13,14 @@ from src.utilities import UIDandMetaInfo, ConfigTables, USCentralDateTime, Image
 from src.xnat_resource_data import ORDataIntakeForm
 from src.services.deidentify import deidentify_dataset
 
+# #33 L1: ImplementationClassUID (DICOM PS3.10 §7.1) identifies the software
+# implementation that created the file -- it MUST be a fixed value per
+# implementation, not derived from per-session data like parent_uid. This is
+# an org-root-derived UID for the XNAT-Interact tool itself (not registered
+# with a DICOM UID authority; synthetic-tooling use only, never a real
+# vendor-assigned root).
+XNAT_INTERACT_IMPLEMENTATION_CLASS_UID = '1.2.826.0.1.3680043.10.1105.1'
+
 
 # Define list for allowable imports from this module -- do not want to import _local_variables.
 __all__ = ['ScanFile', 'SourceDicomDeIdentified', 'MTurkSemanticSegmentation', 'ArthroDiagnosticImage', 'ArthroVideo']
@@ -156,7 +164,8 @@ class ArthroDiagnosticImage( ScanFile ):
         file_meta = pydicomFileMetaDataset()
         file_meta.MediaStorageSOPClassUID = dcmUID( '1.2.840.10008.5.1.4.1.1.77.1.1.1' ) # Video Endoscopic Image IOD
         file_meta.MediaStorageSOPInstanceUID = dcmUID( self.generate_uid().replace( '_', '.' ) ) #to-do: need to create a uid in config for this media storage data type
-        file_meta.ImplementationClassUID = dcmUID( parent_uid.replace( '_', '.' ) )
+        # #33 L1: fixed per-implementation UID, not derived from parent_uid.
+        file_meta.ImplementationClassUID = dcmUID( XNAT_INTERACT_IMPLEMENTATION_CLASS_UID )
         file_meta.TransferSyntaxUID = ImplicitVRLittleEndian # Implicit VR Little Endian
         
         date_now_str, time_now_str = datetime.now().strftime( '%Y%m%d' ),   datetime.now().strftime( '%H%M%S.%f' )[:-3]

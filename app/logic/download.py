@@ -74,10 +74,14 @@ class DownloadOutcome:
     ok           : True → download completed (may be partial but no hard error).
     files_written: Paths of files successfully written (may be empty on failure).
     friendly     : None when ok; FriendlyError when ok is False.
+    warnings     : Non-fatal notices (e.g. a resource enumerated zero files and
+                   was omitted from the zip) — present even when ok=True so
+                   omissions are never silent (#33 H8).
     """
     ok: bool
     files_written: List[Path] = field(default_factory=list)
     friendly: Optional[FriendlyError] = None
+    warnings: List[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -556,6 +560,7 @@ def assemble_zip(
     resource_label = "SRC" if scope in ("source", "all") else "DERIVED"
 
     files_written: List[Path] = []
+    warnings: List[str] = []
 
     with tempfile.TemporaryDirectory() as _tmpdir:
         tmp_path = Path(_tmpdir)
@@ -595,7 +600,16 @@ def assemble_zip(
             else:
                 real_filenames = []
             if not real_filenames:
-                continue  # empty resource — skip
+                # #33 H8: previously a silent skip. Record a warning so the
+                # omission is visible to the caller even though ok=True — a
+                # completed zip missing a resource must never look identical
+                # to one that legitimately had nothing to include.
+                warnings.append(
+                    f"Resource '{resource_label}' for subject '{subject}', "
+                    f"scan '{scan}' enumerated zero files and was omitted "
+                    f"from the zip."
+                )
+                continue
 
             subj_dir = tmp_path / subject / experiment / scan
             subj_dir.mkdir(parents=True, exist_ok=True)
@@ -631,10 +645,29 @@ def assemble_zip(
                     return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
 
         # Pack all downloaded files into the zip.
-        with _zipfile.ZipFile(zip_dest, "w", _zipfile.ZIP_DEFLATED) as zf:
-            for fp in files_written:
-                # Archive name = relative path from tmp_path.
-                arcname = fp.relative_to(tmp_path)
-                zf.write(fp, arcname)
+        # #33 H8: a mid-write error (disk full, permission error, etc.) used to
+        # leave a truncated zip at zip_dest with no cleanup — write to a
+        # temp path in the same directory and atomically rename on success,
+        # so zip_dest either doesn't exist or is a complete, valid zip.
+        tmp_zip_dest = zip_dest.with_name(zip_dest.name + ".partial")
+        try:
+            with _zipfile.ZipFile(tmp_zip_dest, "w", _zipfile.ZIP_DEFLATED) as zf:
+                for fp in files_written:
+                    # Archive name = relative path from tmp_path.
+                    arcname = fp.relative_to(tmp_path)
+                    zf.write(fp, arcname)
+        except Exception as exc:  # noqa: BLE001
+            tmp_zip_dest.unlink(missing_ok=True)
+            from src.services.errors import handle as _handle
+            fe = _handle(
+                exc,
+                title="Zip assembly failed partway through",
+                message="An error occurred while writing the zip file. No partial zip was left behind.",
+                recourse=["Check available disk space and permissions, then re-run."],
+                context=f"assemble_zip, zip_dest={zip_dest}",
+            )
+            return DownloadOutcome(ok=False, files_written=files_written, friendly=fe, warnings=warnings)
 
-    return DownloadOutcome(ok=True, files_written=files_written, friendly=None)
+        tmp_zip_dest.replace(zip_dest)
+
+    return DownloadOutcome(ok=True, files_written=files_written, friendly=None, warnings=warnings)

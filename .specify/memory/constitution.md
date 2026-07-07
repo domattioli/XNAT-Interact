@@ -1,8 +1,25 @@
+<!--
+SYNC IMPACT REPORT
+==================
+Version change: 1.0.0 → 1.1.0 (MINOR — new principle added)
+Modified principles: none renamed or redefined
+Added sections:
+  - Principle VII — A Fix Is Unverified Until Proven
+Removed sections: none
+Templates requiring updates:
+  - .specify/templates/plan-template.md — ✅ no change needed (Constitution Check
+    reads gates dynamically from this file; VII flows in automatically)
+  - .specify/templates/spec-template.md — ✅ no change needed
+  - .specify/templates/tasks-template.md — ✅ no change needed
+Follow-up TODOs: none (Status remains Draft per maintainer choice — ratification
+  is a separate maintainer action)
+-->
+
 # XNAT-Interact Project Constitution
 
-**Version**: 1.0.0
+**Version**: 1.1.0
 **Ratification Date**: 2026-06-04
-**Last Amended**: 2026-06-04
+**Last Amended**: 2026-07-07
 **Status**: Draft (pending maintainer ratification)
 
 ---
@@ -119,6 +136,32 @@ metadata silently corrupts the catalog; unverified uploads erode trust.
 **Gate**: Does this feature read or write shared state, or perform a destructive
 or long-running network operation? Show how concurrency, verification, and
 confirmation are handled.
+
+---
+
+## Principle VII — A Fix Is Unverified Until Proven
+
+A proposed change — a branch, a draft PR, an audit finding marked "fixed", or any
+claim that a bug is resolved — MUST be treated as **UNVERIFIED** until it is backed
+by a regression test that **fails on the pre-fix code and passes on the post-fix
+code**, and the full test suite passes in CI. Bug-fix work MUST land the failing
+test first (or in the same change) so the test demonstrably exercises the defect;
+a fix with no test that reproduces the original failure does not count as done.
+Where the same fix appears on multiple branches, it MUST be reconciled to land
+exactly once. A change MUST NOT be reported as validated on a red or absent CI
+signal; if CI cannot run (e.g. an infrastructure outage), the change stays
+UNVERIFIED and that status MUST be stated explicitly, never rounded up to "passing".
+
+**Rationale**: The repository accumulated a backlog of correctness fixes that were
+plausible but never proven — green-locally, unmerged, and CI-blocked — which is
+indistinguishable from broken until a test says otherwise. A fix without a
+failing-then-passing test is a hypothesis, and hypotheses MUST NOT be trusted as
+guarantees in a tool that moves patient data.
+
+**Gate**: For each fix in this feature, where is the test that fails before the
+change and passes after it, and is CI green? If a finding is declared "not a bug"
+or "won't fix", where is that rationale recorded? Duplicate fixes across branches:
+show that each lands once.
 
 ---
 

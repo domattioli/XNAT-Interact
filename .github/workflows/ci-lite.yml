@@ -1,7 +1,8 @@
 name: ci-lite
 
 # Minimal CI lane for XNAT-Interact (lite-profile DomI consumer per spec-019).
-# Single upstream workflow; python-package.yml is deprecated (marked for removal).
+# The single canonical workflow — tests.yml (duplicate trigger) and
+# python-package.yml (dormant/deprecated) were removed (#33/#44, spec 014).
 # Runs offline test suite (no XNAT server / VPN / real PHI required).
 
 on:
@@ -57,5 +58,8 @@ jobs:
       - name: Run tests
         # Note: Functional tests (update_and_test.py) require a live XNAT server
         # (spec-019: CI suite treats no-tests-collected (exit 5) as pass).
+        # #33/#44 (spec 014): continue-on-error: true previously made this step
+        # (and the job) report success regardless of the actual pytest exit code,
+        # masking real test failures. Removed — only exit 5 (no tests collected)
+        # is tolerated; any other nonzero exit fails the job.
         run: pytest || ([ $? -eq 5 ] && echo "No tests collected — treating as pass")
-        continue-on-error: true

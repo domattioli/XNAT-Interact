@@ -1,57 +1,25 @@
-# Research: Validate the Unverified Fix Backlog (014)
+# Research: Close the Remaining Verified-Fix Gap (014, rescoped)
 
-All Technical Context unknowns resolved. Decisions below; each maps to a spec requirement.
+## D1 — CI consolidation pick
 
-## D1 — CI consolidation direction (#45 vs #47)
+**Decision**: Keep `ci-lite.yml` as canonical (matches CLAUDE.md: "one minimal CI lane"); delete `tests.yml` if it's the redundant one, or vice versa — decided by diffing the two at implementation time and keeping whichever has broader/more current coverage; delete `python-package.yml` unconditionally (confirmed dormant/superseded by its own header comment).
+**Rationale**: CLAUDE.md already names `ci-lite.yml` as "the canonical minimal lane" in prior repo commits' language; audit confirmed both `ci-lite.yml` and `tests.yml` fire on the same trigger today, which is the actual duplication to resolve.
+**Alternatives considered**: merge both into one file — more churn than deleting the redundant one.
 
-**Decision**: Adopt #45's direction — delete `.github/workflows/python-package.yml`, keep `tests.yml` as the single testing lane (PR + dispatch triggers, ubuntu, matrix ≥3.9 floor, `-m "not slow and not stress and not pixeldeid and not pg and not requires_server"` default selection).
-**Rationale**: Repo convention (CLAUDE.md) is one minimal CI lane; two lanes running overlapping pytest invocations is exactly the duplicate-signal problem this feature exists to kill. #47's repair keeps a workflow whose only distinct value (packaging) is moot — the repo has no pip-installable package.
-**Alternatives considered**: #47 (repair python-package.yml) — rejected: preserves a second lane with no unique coverage; merging both — rejected: same duplication with more YAML.
+## D2 — Historical pre-fix commit for backfill tests (M7/M8/M10)
 
-## D2 — Fix sourcing (clarified)
+**Decision**: For each backfill target, locate the specific commit that introduced the fix (already identified: M7/M8 fixes are un-attributed to a single commit message in the audit — locate via `git log -p -- app/logic/download.py src/services/xnat_gateway.py` bisection at implementation time; M9's neighbor M10 sites similarly). Record `<parent of fixing commit>` as the pre-fix baseline per finding in the ledger.
+**Rationale**: Constitution VII requires the failing run be against genuinely pre-fix code; since the fix already happened, the baseline is historical, not the current tip.
+**Alternatives considered**: use the feature's frozen baseline SHA (`dea6687`) for these — wrong, since the fix is already present at that SHA; would falsely show the test passing at "baseline."
 
-**Decision**: Re-implement every fix fresh on the consolidated branch; draft PRs #38/#40–#43/#46/#48/#50 are read as design references only, then closed-with-pointer.
-**Rationale**: Session clarification (2026-07-07). Ten stale branches carry conflict noise and three carry the same M1 fix; fresh implementation makes "lands exactly once" trivially auditable.
-**Alternatives considered**: cherry-pick (conflict churn, imports untested diffs), hybrid (two provenance regimes complicate the ledger).
+## D3 — Scope boundary for S2 and H5-singleton
 
-## D3 — Pre-fix failure proof mechanism (clarified)
+**Decision**: File both as new GitHub issues rather than pulling into this feature's task list.
+**Rationale**: S2 (DICOM-SEG per-segment type) touches an import path none of this feature's other work exercises; H5-singleton-lock is a genuine but separate concurrency hardening item. Neither blocks this feature's success criteria; folding them in would re-inflate scope right after rescoping down.
+**Alternatives considered**: fix opportunistically since we're already in the neighborhood — rejected, keeps scope creep out per the lesson just learned.
 
-**Decision**: Ledger-recorded run: each regression test is executed once against the pre-fix baseline commit (recorded per-finding in `ledger.md`: baseline SHA + verbatim failure line); no permanent bisect harness.
-**Rationale**: Session clarification. Lightweight, auditable, reproducible in <5 min per SC-002 via `git worktree add /tmp/pre-fix <sha> && pytest <test> --no-header -x`.
-**Alternatives considered**: automated bisect harness (infra to maintain, slows CI), commit-order proof alone (history rewrites during consolidation would destroy it; kept as *secondary* convention — test commit precedes fix commit where practical).
+## D4 — Draft PR closure evidence
 
-## D4 — Pre-fix baseline commit
-
-**Decision**: The baseline is the merge-base of the consolidated branch with `development` at feature start (recorded once at the top of `ledger.md`). All "fails pre-fix" runs execute against this single SHA in a throwaway worktree.
-**Rationale**: One frozen baseline makes every proof comparable and immune to mid-feature drift on `development`.
-**Alternatives considered**: per-finding baselines (incomparable proofs), `main` (too far behind the code being fixed).
-
-## D5 — Stress/real-server lane mechanics
-
-**Decision**: Add `stress` marker to `pytest.ini`. Default lane deselects it. Data-integrity tests promoted to the real-server lane are written FakeXNAT-first and parameterized over the connection fixture; setting `RUN_XNAT_DUAL=1` re-runs them against a disposable local XNAT (never UIowa production — hostname allowlist asserted in the connection fixture).
-**Rationale**: FR-006; matches the existing marker taxonomy (`requires_server`, `pg`, `pixeldeid` already model opt-in lanes) and spec 007's dual-run precedent.
-**Alternatives considered**: separate test tree for real-server (duplicates test bodies); env-var-only gating without markers (invisible to `-m` selection).
-
-## D6 — Layered identity design (#32)
-
-**Decision**: Three layers, in decision order: (1) raw-byte sha256 → exact duplicate → REJECT + report naming the existing copy; (2) preserved StudyInstanceUID → surgery-set membership/identity; (3) perceptual hash → advisory `similar_to` flag only, never blocking. Upload is transactional-by-ordering: no subject/experiment/scan is created until the payload is fully validated; rejection leaves server state byte-identical (asserted via FakeXNAT state snapshot diff).
-**Rationale**: FR-007/008; sha256 has no false merges by construction, satisfying SC-005's zero-false-merge bar; perceptual hashing is the only layer with a false-positive envelope, so it must not gate.
-**Alternatives considered**: perceptual-hash-as-blocker (false merges on adjacent fluoro frames — the exact #32 complaint), metadata-only identity (defeated by re-exported byte-identical files with rewritten UIDs — caught by layer 1).
-
-## D7 — No-empty-shells enforcement point
-
-**Decision**: Extend `tests/fakes/fake_xnat.py` with a `snapshot()`/`diff()` state API; an autouse-scoped assertion helper wraps every upload-path test so *any* residual shell fails the test that created it (SC-006). Production code gains a validate-before-create ordering in `push_to_xnat` (H2/H5 fixes share this path).
-**Rationale**: Making the invariant an automatic assertion rather than a per-test discipline is the only way SC-006's "zero occurrences across the suite" is checkable.
-**Alternatives considered**: per-test manual asserts (forgettable), server-side cleanup sweeper (masks the bug instead of proving its absence).
-
-## D8 — Disposition ledger format
-
-**Decision**: `specs/014-validate-fix-backlog/ledger.md` — one table for findings (ID, severity, disposition, test path, baseline-fail evidence, fix commit), one for fix candidates/PRs (#, findings covered, terminal state, pointer). Committed with every disposition change.
-**Rationale**: FR-003/SC-001; markdown in the feature dir is reviewable in the same PR as the work it records; schema in data-model.md.
-**Alternatives considered**: GitHub issue checklist (not versioned with code), JSON (hostile to review).
-
-## D9 — Reporting while #44 blocks CI
-
-**Decision**: PR description carries a status block: `Verification status: UNVERIFIED — blocked on CI (#44). Local: <N>/<M> regression tests passing.` Updated on every push; flips to VERIFIED only on a green Actions run of `tests.yml`.
-**Rationale**: FR-012, Constitution VII's explicit no-rounding-up rule.
-**Alternatives considered**: none viable — silence or "green locally" both violate VII.
+**Decision**: For each of #40–#50/#38, cite the specific commit SHA (already identified during the audit, e.g. `aff2824` for C1/#43, `d18b0dd` for M3/#41, `082ed2e` for M9/#46, `f457a79` for L6/#48, `3bb125b` for L4/#42, `0bdee7d`-family for M5, etc.) in the closing comment.
+**Rationale**: Makes the closure auditable — not just "already fixed," but exactly where.
+**Alternatives considered**: generic "superseded" comment — less useful, fails FR-005's "pointer" requirement.

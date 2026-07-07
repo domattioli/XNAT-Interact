@@ -10,7 +10,7 @@ One audit item from #33.
 | severity | enum | CRITICAL / HIGH / MEDIUM / LOW / SUSPECT |
 | summary | string | one line, from the audit |
 | affected_paths | list | `src/` modules touched |
-| disposition | enum | **UNVERIFIED** (initial) → `fixed-with-test` \| `wont-fix` \| `not-a-bug` |
+| disposition | enum | (rescoped) `fixed-with-test` \| `fixed-no-test` (backfill pending) \| `still-open` (fix pending) \| `not-a-bug` \| `unclear` |
 | rationale | string | required when disposition ∈ {wont-fix, not-a-bug} |
 | test_path | path | required when `fixed-with-test`; `tests/regression_014/test_<id>_*.py` |
 | baseline_evidence | string | verbatim failing assertion line from the pre-fix run |

@@ -1,153 +1,136 @@
-# Feature Specification: Validate the Unverified Fix Backlog
+# Feature Specification: Close the Remaining Verified-Fix Gap
 
 **Feature Branch**: `claude/repo-issues-2r7o02`
 **Created**: 2026-07-07
-**Status**: Draft
-**Input**: User description: "Consolidate, test, debug, and validate the backlog of correctness fixes that have been proposed but never verified in XNAT-Interact. Roughly ten draft PRs and two design issues describe changes across the DICOM-identity, download/zip, concurrency, and dedup code paths, but none have been merged or CI-verified because CI has been red repo-wide (#44). Treat every one of these fixes as hypothetical until proven — the goal of this spec is to turn the pile of unvalidated branches into a single, tested, mergeable body of work with a green regression net."
+**Status**: Draft (rescoped 2026-07-07 after audit — see Clarifications)
+**Input**: User description: "Consolidate, test, debug, and validate the backlog of correctness fixes that have been proposed but never verified in XNAT-Interact." (original ~30-finding framing; superseded in scope by the audit below — see Clarifications)
 
 ## Clarifications
 
-### Session 2026-07-07
+### Session 2026-07-07 (rescope)
 
-- Q: How should the existing draft-PR fixes (#40–#43, #46, #48, #50, #38) be brought onto the consolidated branch? → A: Re-implement fresh — draft PRs are design references only; each fix and its regression test is written fresh on the consolidated branch.
-- Q: Is the #32 dedup + layered-identity redesign fully implemented in this feature, or only characterized/prepared? → A: Full implementation (User Story 5, P3, lands last on the green net).
-- Q: How is the "fails on pre-fix code" proof captured for each regression test? → A: Ledger-recorded run — each new test is run once against the pre-fix baseline commit and the failing output + commit hash are recorded in the disposition ledger.
+- Q: The original spec assumed the #33/#32 backlog (~30 findings, ~10 draft PRs) was entirely unmerged. A pre-implementation audit of `development`'s actual tip (commit `dea6687`) found **20 of ~29 findings already fixed-with-test, 4 fixed-but-untested, and only 7 genuinely still open** (plus a real CI lane duplication). How should the feature proceed? → A: Diff-first, then rescope — this document replaces the original ~30-finding spec with the actual remaining gap: 7 open findings, 4 fixed-but-untested findings, and the CI duplication. Draft PRs #40–#50 and issue #51's consolidation map are themselves stale (dated before this work landed) and are out of scope except for closing them with a pointer.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Restore a trustworthy CI signal (Priority: P1)
+### User Story 1 - Consolidate CI to one lane (Priority: P1)
 
-The maintainer needs a single working CI lane before any fix can be called verified. Today two conflicting proposals exist (#45 deletes the legacy packaging workflow and folds testing into one lane; #47 keeps and repairs it) and the repo-wide Actions outage (#44) has left every PR without a check run. The maintainer resolves the workflow conflict — exactly one testing lane survives — and confirms the lane runs to completion on a trivial change.
+`ci-lite.yml` and `tests.yml` both currently fire on every PR to `main`, running overlapping test coverage. `python-package.yml` is dormant (manual-dispatch only, explicitly commented as superseded) but still present. The maintainer picks one canonical lane and removes the duplication so a single CI signal governs merge-readiness.
 
-**Why this priority**: Constitution Principle VII forbids reporting any fix as validated on a red or absent CI signal. Every other story in this spec is blocked until a green signal is possible; validating fixes against no CI would just re-create the backlog.
+**Why this priority**: Every other story's "verified" claim depends on trusting CI. Two lanes racing each other is itself an unverified-signal problem — the same class of bug this whole effort exists to close.
 
-**Independent Test**: Open a docs-only change against the consolidated branch and observe exactly one required testing lane run and pass. No duplicate/conflicting workflow files remain.
+**Independent Test**: A docs-only PR triggers exactly one test-running workflow.
 
 **Acceptance Scenarios**:
 
-1. **Given** the two conflicting CI proposals (#45 vs #47), **When** the maintainer adopts the consolidation decision, **Then** exactly one testing workflow exists, the other is removed or superseded with the decision recorded, and neither PR's changes are applied twice.
-2. **Given** the Actions outage (#44), **When** CI still cannot execute, **Then** all fixes in this feature remain explicitly labeled UNVERIFIED and no completion claim is made — the blocked status is reported, never rounded up to passing.
-3. **Given** the consolidated lane, **When** the full offline test suite runs, **Then** it completes within the lane's timeout using only synthetic data and no network access to any real server.
+1. **Given** `ci-lite.yml` and `tests.yml` both currently trigger on `pull_request: main`, **When** consolidation completes, **Then** exactly one of them remains the active test-running lane and the other is either removed or repointed to a non-overlapping purpose, with the decision recorded.
+2. **Given** `python-package.yml` is dormant and superseded, **When** consolidation completes, **Then** it is deleted (its content already lives nowhere in the active lane) rather than left as inert clutter.
 
 ---
 
-### User Story 2 - Land the two CRITICAL security/correctness fixes with proof (Priority: P1)
+### User Story 2 - Fix the two genuinely-open download/zip defects (Priority: P1)
 
-A student downloading surgery data must receive the correct files and must not be exposed to archive path-traversal. The maintainer takes the two CRITICAL audit findings — C1 (a wrong hardcoded source-resource label causes downloads to fetch the wrong resource) and C2 (zip-slip: a crafted archive entry can write outside the extraction directory) — writes a regression test for each that fails on the pre-fix code, applies the fix (reconciling with the existing draft-PR version of C1 from #43), and shows both tests passing.
+H8 (`assemble_zip` skips empty resources silently with no count-verify, and leaves a truncated zip on a mid-write error with no cleanup) is unfixed. The maintainer adds the missing count-verify and atomic-write-with-cleanup behavior, each proven by a regression test that fails on today's `development` code and passes after the fix.
 
-**Why this priority**: These are the only findings rated CRITICAL: one silently corrupts what researchers receive; the other is an arbitrary-file-write vector on the student's machine. They are also small and independently landable — the natural MVP slice.
+**Why this priority**: This is the highest-severity item still open — it's a data-completeness bug (a user can silently receive an incomplete zip) with no safety net today.
 
-**Independent Test**: Run the two new regression tests against the pre-fix code (both fail) and against the consolidated branch (both pass), entirely offline against the fake server.
+**Independent Test**: Two new regression tests fail against `development`'s current `assemble_zip` and pass after the fix, fully offline.
 
 **Acceptance Scenarios**:
 
-1. **Given** a download of a surgery's source resource, **When** the fixed code requests the resource, **Then** the correct resource label is used and the test proves the old hardcoded label would have fetched the wrong data.
-2. **Given** a malicious archive containing an entry with a path-escaping name, **When** extraction runs, **Then** no file is written outside the designated extraction directory and the attempt is reported to the user in plain language.
-3. **Given** the pre-existing C1 fix branch (#43), **When** the fix is consolidated, **Then** the change appears exactly once on the consolidated branch and the draft PR is closed or superseded with a pointer.
+1. **Given** a selection where one resource enumerates zero files, **When** the zip is assembled, **Then** the omission is either surfaced to the user (not silently skipped) or the operation fails with a plain-language explanation.
+2. **Given** a write error partway through zip assembly, **When** the error occurs, **Then** no truncated zip file is left on disk — the partial file is cleaned up or the operation is atomic.
 
 ---
 
-### User Story 3 - Verify the HIGH-severity integrity and concurrency fixes (Priority: P2)
+### User Story 3 - Fix the remaining MEDIUM/LOW/SUSPECT defects (Priority: P2)
 
-The maintainer works through the eight HIGH findings per #33's authoritative numbering: H1 (all DICOM UIDs collapse to one value), H2 (duplicate private tag clobbers the UID stash), H3 (push_to_xnat swallows all exceptions), H4 (lost-update TOCTOU + stale fingerprint), H5 (stale is_open singleton state), H6 (create_assessor without parent check or label sanitizing), H7 (whole-surgery downloads missing scans), H8 (no count-verify; partial zip left on error). Each is either (a) fixed with a failing-then-passing regression test, or (b) triaged as won't-fix / not-a-bug with a recorded rationale.
+M4 (NaN silently slips the `IS_VALID` gate), L1 (`ImplementationClassUID` derived from session UID instead of a proper implementation-class UID), S1 (`gray_img.shape` 2-tuple unpack breaks on a 3-channel image), and S4 (`/project` prefix match coincidentally also matches `/projects/`) are each fixed with a regression test. L5 (whether `files_written` paths survive a deleted temp dir after zipping) is resolved one way or the other — either confirmed already safe (and closed as not-a-bug with rationale) or fixed.
 
-**Why this priority**: These findings can silently lose or corrupt research data at scale (Principle VI), but each requires more setup (concurrency harnesses, multi-instance fixtures) than the CRITICAL pair, so they follow rather than lead.
+**Why this priority**: Real bugs, lower severity/blast-radius than US2; independently landable in any order.
 
-**Independent Test**: For each H finding, a named regression test exists whose description references the finding ID; running the suite pre-fix shows the H tests failing, post-fix all pass. Triaged-out findings appear in the disposition ledger with rationale.
+**Independent Test**: Each finding has a named regression test failing on `development`'s current code and passing after its fix.
 
 **Acceptance Scenarios**:
 
-1. **Given** two simultaneous sessions updating shared metadata, **When** both save, **Then** neither update is silently lost, demonstrated by a concurrency regression test that fails against pre-fix behavior.
-2. **Given** an upload where the server rejects an item mid-batch, **When** the failure occurs, **Then** the error surfaces to the user with a next step (no swallowed exception) and no empty subject/experiment/scan shell remains on the server.
-3. **Given** a whole-surgery download, **When** the surgery has multiple scans, **Then** every scan is present in the delivered archive and a test enumerates the completeness.
-4. **Given** any H finding judged not worth fixing, **When** the feature completes, **Then** the disposition ledger records the finding, the decision, and a 1–3 sentence rationale.
+1. **Given** a DataFrame row with a NaN in the validity-gated column, **When** the validity check runs, **Then** the row is not silently treated as valid — it is explicitly flagged or excluded.
+2. **Given** a 3-channel (H,W,3) image passed through the hash/shape path, **When** the code reads `Rows`/`Columns`, **Then** it does not raise, and correctly reports the 2-D spatial dimensions.
+3. **Given** an image reference string starting with `/projects/` (plural), **When** the project-prefix check runs, **Then** it is not treated as a coincidental match of a `/project` (singular) check — the check is exact-segment, not substring.
+4. **Given** L5's post-zip temp-dir question, **When** investigated, **Then** the ledger records either a fix + test, or a not-a-bug disposition with the evidence that resolved the ambiguity.
 
 ---
 
-### User Story 4 - Verify the MEDIUM/LOW backlog and reconcile duplicate fix branches (Priority: P2)
+### User Story 4 - Backfill regression tests for the fixed-but-untested findings (Priority: P2)
 
-The maintainer sweeps M1–M10 per #33's authoritative numbering: M1 (filename off-by-one at ≥1000 instances), M2 (private-tag VR mismatch), M3 (sort without index reset), M4 (NaN slips the validity gate), M5 (backup leaked to CWD), M6 (annotation-manifest orphans), M7 (download_resource returns stale dir contents), M8 (count-verify against stale browse-time count), M9 (delete_metatables table-name mismatch), M10 (silent exception handlers) — plus the L1–L6/S1–S4 items, reconciling the individual fix branches from #51 — #40/#41/#42/#43/#46/#48/#50 and the #38 campaign — so each fix lands exactly once. The triplicated M1 fix and the overlapping M1/M9 fixes are collapsed to a single authoritative change each.
+M7 (stale pre-existing directory contents on resource download), M8 (browse-time count-verify race), M9's sibling M10 (silent excepts at specific call sites), are already fixed in code but have no dedicated regression test proving the fix. The maintainer adds the missing tests against the **already-fixed** code, and — per Constitution VII — separately proves each would have failed against the pre-fix code by running it at the historical pre-fix commit.
 
-**Why this priority**: Individually small, but collectively they are the bulk of the unverified pile and the source of the duplicate-fix hazard; landing them once, tested, closes the backlog.
+**Why this priority**: Constitution VII treats "fixed but unproven" as equivalent to unverified. These are low-effort (code doesn't change, only tests are added) but necessary to close the gap honestly.
 
-**Independent Test**: A diff of the consolidated branch shows each fix applied once; the disposition ledger maps every draft PR to consolidated/superseded/closed; each landed M/L fix has its regression test.
+**Independent Test**: Each new test passes against `development`'s current code; the ledger records a pre-fix commit + failing run for each.
 
 **Acceptance Scenarios**:
 
-1. **Given** three branches all fixing M1, **When** consolidation completes, **Then** the M1 change appears exactly once and the redundant branches/PRs are closed with a pointer to the consolidated work.
-2. **Given** a series of ≥1000 instances, **When** files are named, **Then** no filename collides or is skipped, proven by a boundary regression test at the 999/1000 transition.
-3. **Given** every draft PR referenced in #51, **When** the feature completes, **Then** the ledger accounts for each one (merged-into-consolidation, superseded, or intentionally dropped with rationale).
+1. **Given** the M7 fix (downloads isolated to a subdirectory), **When** a stale unrelated file exists in the destination directory before download, **Then** a test confirms it is not included in the result, and the same test is shown failing against the pre-M7 commit.
+2. **Given** the M8 fix (live per-resource count), **When** a file is added between browse and download, **Then** a test confirms no spurious mismatch is raised, shown failing against the pre-M8 commit.
+3. **Given** the M10 fix sites (`app/logic/download.py` legacy-path except, `src/utilities.py` first-run catch), **When** an exception occurs there, **Then** a test confirms a `FriendlyError` surfaces rather than a swallowed/raw exception, shown failing against the pre-fix commit.
 
 ---
 
-### User Story 5 - Implement and validate the dedup + layered-identity redesign (Priority: P3)
+### User Story 5 - Close out the stale draft-PR backlog (Priority: P3)
 
-The maintainer fully implements the #32 redesign: exact-duplicate detection by raw-byte content hash, surgery-set identity by preserved study identifier, perceptual similarity demoted to an advisory flag, and the "reject + report, never create empty shells" upload semantic — all exercised through a seed-set fixture factory of synthetic cases. Before/after characterization tests document the false-positive/false-negative envelope of the old vs. new dedup behavior.
+Draft PRs #40–#50 (individual fix branches) and #38 (xnat-fable campaign) are superseded — their fixes already landed on `development` through different commits than the PRs themselves. Issue #51's consolidation map is likewise stale. The maintainer closes each superseded PR with a pointer to the commit that actually delivered its fix, and updates or closes #51.
 
-**Why this priority**: It is a behavior redesign, not a bug fix — highest value long-term but largest surface and most dependent on the fixture factory; it should land on top of an already-green net.
+**Why this priority**: Bookkeeping — doesn't change behavior, but leaves the repo's PR/issue state honest and matches Constitution VII's "duplicate fixes land once, and it's shown."
 
-**Independent Test**: The characterization suite runs offline against the seed set, emitting a comparison table (old vs. new: exact dups caught, distinct-but-similar images wrongly merged, true dups missed) demonstrating the new layered identity strictly improves or documents every trade-off.
+**Independent Test**: Every PR referenced in #51 has a terminal GitHub state (closed with pointer, or explicitly identified as still needed) and #51 itself is updated or closed.
 
 **Acceptance Scenarios**:
 
-1. **Given** two byte-identical files with different filenames, **When** uploaded, **Then** the duplicate is rejected with a report identifying the existing copy, and no new subject/experiment/scan shell exists afterward.
-2. **Given** two visually similar but distinct images (e.g., adjacent fluoro frames), **When** uploaded, **Then** both are accepted and the similarity is surfaced only as an advisory flag.
-3. **Given** any rejected upload, **When** the rejection completes, **Then** the server state is unchanged from before the attempt (no empty shells), verified by a state-diff assertion in the test.
+1. **Given** PR #43 claims the C1 fix, **When** this story completes, **Then** #43 is closed with a comment pointing to the commit that actually fixed C1 on `development` (`aff2824`).
+2. **Given** issue #51's consolidation map predates this audit, **When** this story completes, **Then** #51 is updated to reflect the actual current state or closed as superseded by this feature's ledger.
 
 ---
 
 ### Edge Cases
 
-- CI outage (#44) persists through the whole effort: everything stays UNVERIFIED and is reported as such; local green is documented but never presented as validation.
-- A pre-fix regression test cannot be written because the defect needs the real server: the test is placed in the opt-in real-server lane (`RUN_XNAT_DUAL=1`), and the offline suite carries the closest fake-server approximation; the gap is recorded in the ledger.
-- Two draft PRs fix the same line differently (M1/M9 overlap): consolidation picks one resolution, records why, and the losing variant's PR is closed with the rationale.
-- An audit finding turns out to be not-a-bug on inspection: it is triaged out via the ledger, not silently dropped.
-- A fix conflicts with the dedup redesign (e.g., an H fix touching upload paths that #32 rewrites): the fix is validated against the pre-redesign code first, then re-validated after the redesign lands, so neither masks the other.
-- Stress/concurrency tests are flaky by nature: they are marked for the stress lane and excluded from the default gate, so flakiness cannot poison the primary signal.
+- A "still open" finding turns out, on closer inspection during implementation, to already be fixed elsewhere (this audit sampled specific line ranges; a fix could exist under a different mechanism than expected) — disposition becomes `not-a-bug`/already-fixed with the evidence recorded, not force-fixed redundantly.
+- CI outage (#44) may still block an actual green Actions run; per Constitution VII and the original spec's D9, status is reported UNVERIFIED-blocked-on-CI rather than rounded up, even after local tests pass.
+- A fix for one open finding (e.g., H8) touches code that a fixed-but-untested finding's new backfill test also exercises (both live in `assemble_zip`/`download.py`) — the backfill test is added first (US4) so the H8 fix (US2) can't accidentally regress already-fixed behavior unnoticed.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: Every in-scope proposed fix (all #33 findings, the #32 redesign, all #51 branches) MUST be treated as UNVERIFIED until backed by a regression test that fails on pre-fix code and passes post-fix, plus a green run of the consolidated test lane (Constitution VII). The pre-fix failure is proven by a ledger-recorded run: the test executed once against the pre-fix baseline commit, with the failing output and commit hash recorded in the disposition ledger.
-- **FR-002**: Exactly one testing CI lane MUST exist after consolidation; the #45 vs #47 conflict MUST be resolved with the decision recorded, before any fix is claimed verified.
-- **FR-003**: Each of the ~30 #33 findings MUST reach exactly one terminal disposition — fixed-with-test, won't-fix, or not-a-bug — recorded in a single disposition ledger with rationale for non-fix outcomes.
-- **FR-004**: All duplicate or overlapping fixes (triplicated M1; overlapping M1/M9; #43's C1) MUST be reconciled so each logical change appears exactly once on the consolidated branch; fixes are re-implemented fresh using the draft PRs as design references only (no cherry-picking), and every superseded draft PR is closed or annotated with a pointer.
-- **FR-005**: The default test suite MUST run fully offline: synthetic data and a fake/local server stand-in only; no connection to the production server and no real PHI anywhere in fixtures, logs, or recorded output (Constitution I, IV).
-- **FR-006**: Data-integrity and concurrency regression tests MUST additionally be runnable against a real disposable server via an explicit opt-in switch, and stress-class tests MUST be marked so they are excluded from the default gate.
-- **FR-007**: Upload behavior MUST never leave an empty subject/experiment/scan shell on the server after a rejected or failed upload; rejection MUST produce a plain-language report naming the conflicting existing data (Constitution II, VI).
-- **FR-008**: Exact-duplicate detection MUST use raw byte content identity; surgery-set identity MUST use the preserved study identifier; perceptual similarity MUST be advisory-only and MUST NOT block an upload by itself.
-- **FR-009**: The dedup redesign MUST ship with before/after characterization tests over a synthetic seed set that quantify the false-positive and false-negative envelope of old vs. new behavior.
-- **FR-010**: Archive extraction MUST refuse any entry that would resolve outside the designated extraction directory, and downloads MUST fetch the correct resource label rather than a hardcoded wrong one.
-- **FR-011**: A shared synthetic fixture factory MUST generate the seed cases (byte-duplicates, near-duplicates, multi-scan surgeries, ≥1000-instance series, malicious archive entries) used across the regression suites.
-- **FR-012**: Progress reporting MUST distinguish "passing locally" from "verified in CI"; while #44 blocks CI, status MUST be reported as UNVERIFIED-blocked-on-CI.
+- **FR-001**: CI MUST be consolidated to exactly one active test-running lane; `python-package.yml` MUST be deleted (not left dormant) once confirmed superseded.
+- **FR-002**: H8 (assemble_zip count-verify + partial-zip cleanup) MUST be fixed with a regression test that fails against `development`'s current tip and passes after the fix.
+- **FR-003**: M4, L1, S1, S4 MUST each be fixed with a failing-then-passing regression test; L5 MUST reach an explicit disposition (fixed-with-test or not-a-bug-with-rationale).
+- **FR-004**: M7, M8, and the M10 call sites in `app/logic/download.py` and `src/utilities.py` MUST each get a backfilled regression test, with the pre-fix commit identified and the test shown failing at that commit.
+- **FR-005**: Every draft PR in {#38, #40, #41, #42, #43, #45, #46, #47, #48, #50} MUST reach a terminal GitHub state (closed with a pointer to the actual fixing commit, or flagged as still-needed with rationale); issue #51 MUST be updated or closed to match reality.
+- **FR-006**: A disposition ledger MUST record every finding from #33 (all ~29, not just the 8 in this feature's active scope) with its actual current status (fixed-with-test / fixed-no-test-now-backfilled / fixed-no-test-still-pending / still-open-now-fixed / not-a-bug) so the record is complete, not just the delta.
+- **FR-007**: All new/backfilled tests MUST run fully offline (synthetic data, FakeXNAT/local stand-ins); no PHI, no production XNAT host.
+- **FR-008**: Verification status MUST be reported honestly per Constitution VII — local-green is not CI-green; while #44 (Actions outage) persists, status is UNVERIFIED-blocked-on-CI.
 
 ### Key Entities
 
-- **Finding**: One audit item from #33 (ID like C1/H3/M7/L2/S1, severity, affected behavior); lifecycle UNVERIFIED → fixed-with-test | won't-fix | not-a-bug.
-- **Fix candidate**: A proposed change (draft PR or branch from #51/#38) claiming to resolve one or more Findings; may duplicate or overlap other candidates; terminal state consolidated | superseded | dropped.
-- **Regression test**: The proof artifact for a Finding — fails pre-fix, passes post-fix; tagged offline (default) or real-server/stress (opt-in).
-- **Disposition ledger**: The single record mapping every Finding and Fix candidate to its terminal state and rationale; the auditable output of the feature.
-- **Seed set**: Synthetic fixture collection produced by the fixture factory; the only data source for tests.
-- **Consolidated branch**: The single branch where all surviving fixes land exactly once and the green run happens.
+- **Finding**: One #33/#32 audit item; now carries a richer status set reflecting the audit: `fixed-with-test`, `fixed-no-test` (pending backfill), `still-open` (pending fix), `not-a-bug`, `unclear` (pending investigation).
+- **Fix candidate**: A draft PR (#38/#40–#50); terminal state is `superseded-by-commit` (pointing to the actual landing commit) or `still-needed`.
+- **Regression test**: As before — offline by default, tagged to a Finding, with a recorded baseline (pre-fix) failing run.
+- **Disposition ledger**: Now the complete record of all ~29 #33 findings' real status, not just the 8 remaining active ones — this is the artifact that prevents the next session from re-discovering this same gap the hard way.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: 100% of the #33 findings have a terminal disposition in the ledger; zero findings remain unaddressed or ambiguously "fixed somewhere".
-- **SC-002**: Every landed fix has a regression test demonstrated to fail on pre-fix code; reviewers can reproduce the fail→pass flip for any finding in under 5 minutes from the ledger's instructions.
-- **SC-003**: The consolidated test lane completes green with zero network access to the production server and zero PHI in the repository.
-- **SC-004**: The count of open unverified fix PRs drops from ~10 to 0 — each merged-into-consolidation, superseded, or closed-with-rationale.
-- **SC-005**: The dedup characterization report shows the new identity model catches 100% of byte-identical duplicates in the seed set with zero distinct-image false merges, and every remaining trade-off is documented.
-- **SC-006**: No test run of the upload paths ever leaves a residual empty shell — asserted automatically in every upload-path test, with zero occurrences across the suite.
-- **SC-007**: If CI remains blocked (#44), the feature's status page/PR states UNVERIFIED explicitly; zero instances of a fix reported as validated without a green CI run.
+- **SC-001**: The disposition ledger accounts for 100% of #33's findings (all ~29) with an accurate current-state entry, verified against `development`'s actual code (not against stale issue text).
+- **SC-002**: All 7 still-open findings (H8, M4, L1, S1, S2, S4, plus L5 if it resolves to a real bug) are fixed-with-test; each test is shown failing at a specific pre-fix commit/worktree and passing after.
+- **SC-003**: The 4 fixed-no-test findings (M7, M8, plus the two M10 sites) each gain a backfilled regression test, shown failing at the historical pre-fix commit.
+- **SC-004**: Exactly one CI lane triggers on `pull_request: main`; zero duplicate/dormant workflow files remain.
+- **SC-005**: All 10 referenced draft PRs (#38, #40–#50) reach a terminal state; #51 is updated or closed.
+- **SC-006**: Zero instances of a fix reported as CI-validated while #44 blocks Actions; status is explicitly UNVERIFIED-blocked-on-CI until a real green run exists.
 
 ## Assumptions
 
-- The #33 audit's finding list (C1–C2, H1–H8, M1–M10, plus L/S items) is the authoritative in-scope inventory; findings discovered during this work are filed as new issues, not silently absorbed.
-- The consolidated branch is this session's designated working branch; promotion to `development` and the rolling PR to `main` follow the repo's existing branch policy and are out of scope here.
-- Resolving #44 (Actions billing) is an operator/account action outside this feature; the feature prepares everything to go green the moment CI can run, and FR-012 governs reporting in the interim.
-- The fake-server stand-in and synthetic-data generator seams already exist (Constitution IV) and can be extended rather than built from scratch.
-- The CI consolidation decision is made: single-lane shape per #45 direction (research D1). The residual obligation is narrow — during implementation, #47's diff is reviewed once for unique coverage worth folding into `tests.yml`; the ledger records that review and the final disposition of both PRs.
-- "Never touch production" includes read-only access: tests use only localhost/fake or an explicitly opt-in disposable real server; the production hostname appears in no test configuration.
+- The audit performed 2026-07-07 against commit `dea6687` (development tip) is authoritative for scoping; if a finding's status has changed again since, the ledger is corrected on discovery rather than this spec being re-litigated.
+- S2 (SegmentationType read at dataset level, not per-segment) was confirmed still-open by audit but is not in this feature's active scope — flagged in the ledger as still-open-not-actioned, since it concerns a DICOM-SEG import path not exercised by the other stories; a follow-up issue is filed rather than silently dropped.
+- H5's singleton-construction-lock sub-issue (unguarded `XNATConnection._instance.__new__`) was found unresolved/untested during the audit; it is filed as a follow-up rather than folded into this feature, since the attribute-mismatch half of H5 (the originally-described bug) is already fixed-with-test.
+- Promotion of `development` to `main` (the rolling PR pattern) is out of scope here; this feature only closes the verification gap on `development`.

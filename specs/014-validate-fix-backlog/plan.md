@@ -1,83 +1,62 @@
-# Implementation Plan: Validate the Unverified Fix Backlog
+# Implementation Plan: Close the Remaining Verified-Fix Gap
 
-**Branch**: `claude/repo-issues-2r7o02` | **Date**: 2026-07-07 | **Spec**: [spec.md](spec.md)
-**Input**: Feature specification from `/specs/014-validate-fix-backlog/spec.md`
+**Branch**: `claude/repo-issues-2r7o02` | **Date**: 2026-07-07 (rescoped) | **Spec**: [spec.md](spec.md)
 
 ## Summary
 
-Turn ~10 unmerged draft PRs and two design issues (#33 correctness audit: C1–C2/H1–H8/M1–M10/L/S; #32 dedup + layered identity) into one consolidated, regression-tested branch with a single working CI lane. Every fix is re-implemented fresh (draft PRs = design references only), proven by a ledger-recorded failing-then-passing regression test per Constitution VII, and duplicate fixes (triplicated M1, overlapping M1/M9, #43's C1) land exactly once. CI conflict #45-vs-#47 resolves to the single-lane shape; while the #44 Actions outage persists, everything is reported UNVERIFIED-blocked-on-CI.
+A pre-implementation audit against `development`'s actual tip (`dea6687`) found the original ~30-finding backlog is **already 83% resolved**: 20 findings fixed-with-test, 4 fixed-but-untested, 7 genuinely still open, plus a real CI-lane duplication (`ci-lite.yml` + `tests.yml` both fire on PR→main; `python-package.yml` dormant). This plan targets only the real remaining gap: consolidate CI (1 lane), fix H8/M4/L1/S1/S4/L5 with regression tests, backfill tests for M7/M8/M10 against their historical pre-fix commits, close the 10 stale draft PRs with pointers, and produce a complete disposition ledger covering all ~29 #33 findings (not just the 8 active ones) so this gap doesn't get rediscovered blind next time.
 
 ## Technical Context
 
 **Language/Version**: Python ≥3.9 (repo floor; dev env 3.11)
-**Primary Dependencies**: pydicom, requests, pandas, streamlit (untouched by this feature); pytest for all verification
-**Storage**: XNAT server state (faked); `MetaTables.json` shared config "database"; local filesystem for downloads/zips
-**Testing**: pytest, offline-by-default via `tests/fakes/fake_xnat.py` + `tests/synthetic_data.py`; markers in `pytest.ini` (`requires_server`, `known_issue`, `contract`, `slow`, `pg`, `pixeldeid`; this feature adds `stress`)
-**Target Platform**: Cross-platform CLI (student laptops), ubuntu CI runner
-**Project Type**: Single project — standalone-script repo with CLI entrypoint (`main.py`), library code in `src/`
-**Performance Goals**: Test lane completes within the 20-minute ci-lite timeout; stress tests excluded from default gate
-**Constraints**: Fully offline default suite — no UIowa server, no VPN, no PHI; real-server lane opt-in only via `RUN_XNAT_DUAL=1`; no secrets in code
-**Scale/Scope**: ~30 audit findings, ~10 draft PRs to disposition, ≥1000-instance series boundary case, 2-concurrent-writer metadata scenarios
+**Primary Dependencies**: pydicom, requests, pandas; pytest for verification
+**Storage**: XNAT server state (faked); `database_config.json`; local filesystem for downloads/zips
+**Testing**: pytest, offline via `tests/fakes/fake_xnat.py` + `tests/synthetic_data.py`; existing markers in `pytest.ini`
+**Target Platform**: Cross-platform CLI, ubuntu CI runner
+**Project Type**: Single project (existing `src/`, `app/logic/`, `tests/`)
+**Performance Goals**: Consolidated CI lane completes within its timeout
+**Constraints**: Fully offline default suite; historical pre-fix commits are read via throwaway git worktrees, never by editing history
+**Scale/Scope**: 7 open findings + 4 backfill-only findings + 1 CI consolidation + 10 PR closures + 1 complete ledger (~29 rows)
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
-
 | Principle | Gate question | Status |
 |---|---|---|
-| I — PHI Safety | Touches image data / moves data off-machine? | ✅ PASS — all fixtures synthetic (`tests/synthetic_data.py`); no real PHI anywhere; download fixes (C1/C2/H7/H8) reduce exposure of wrong/escaped files. No new off-machine path. |
-| II — Fail Softly | New failure modes with user-visible messaging? | ✅ PASS — H2 (swallowed exceptions), M10/silent excepts, and C2 rejection all specify plain-language message + next step (FR-007, US2-AS2). Fixing bare-except violations is in scope. |
-| III — Skill Floor | Terminal/Git required of students? | ✅ PASS — no user-facing workflow change; validation work only. Dedup rejection report (US5) is plain language. |
-| IV — Testable Offline | Tests run in CI, no network/PHI? | ✅ PASS — this feature *is* the enforcement of IV: FakeXNAT default, `RUN_XNAT_DUAL=1` + `stress` marker for opt-in real-server lane (FR-005/006). |
-| V — Config over Hardcoding | New hardcoded endpoints/creds? | ✅ PASS — C1 removes a wrong hardcoded resource label; no endpoints or credentials introduced. Production hostname banned from test config (Assumptions). |
-| VI — Data Integrity at Scale | Shared state / destructive / long-running ops? | ✅ PASS — H3 (TOCTOU lost-update), H1 (UID clobber), M8 (delete name mismatch), no-empty-shells invariant (FR-007) are the core of the feature; each ships with a concurrency/state-diff regression test. |
-| VII — Fix Unverified Until Proven | Failing-then-passing test + green CI per fix? Duplicates land once? | ✅ PASS by design — ledger-recorded pre-fix failing run per fix (FR-001), disposition ledger for won't-fix rationale (FR-003), fresh re-implementation with single landing (FR-004), UNVERIFIED-blocked-on-CI reporting while #44 persists (FR-012). |
+| I — PHI Safety | Touches image data / off-machine? | ✅ PASS — all fixture data synthetic; no new off-machine path. |
+| II — Fail Softly | New failure modes messaged? | ✅ PASS — H8, M10 backfill both specify FriendlyError/plain-language surfacing. |
+| III — Skill Floor | Terminal/Git required of students? | ✅ PASS — no user-facing workflow change. |
+| IV — Testable Offline | CI, no network/PHI? | ✅ PASS — FakeXNAT/synthetic default; historical-commit proof runs via local worktree, still offline. |
+| V — Config over Hardcoding | New hardcoded endpoints/creds? | ✅ PASS — none introduced. |
+| VI — Data Integrity at Scale | Shared state / destructive ops? | ✅ PASS — H8 fix is exactly a data-integrity gap (incomplete zip delivered silently). |
+| VII — Fix Unverified Until Proven | Failing→passing test + green CI? Duplicates land once? | ✅ PASS by design — this whole feature exists to close exactly this gap; ledger (FR-006) is the single source of truth; FR-008 governs honest CI-outage reporting. |
 
-**Post-Phase-1 re-check**: PASS — design artifacts (ledger schema, fixture-factory contract, marker contract) introduce no new violations.
+**Post-Phase-1 re-check**: PASS — no new violations from design artifacts.
 
 ## Project Structure
 
-### Documentation (this feature)
-
 ```text
 specs/014-validate-fix-backlog/
-├── plan.md              # This file
-├── research.md          # Phase 0 output
-├── data-model.md        # Phase 1 output
-├── quickstart.md        # Phase 1 output
-├── contracts/           # Phase 1 output (test-lane, ledger, fixture-factory contracts)
-├── ledger.md            # Disposition ledger (living artifact, created in implementation)
-└── tasks.md             # Phase 2 output (/speckit-tasks)
-```
+├── plan.md, research.md, data-model.md, quickstart.md, contracts/
+├── ledger.md              # Complete record: all ~29 #33 findings, real current status
+└── tasks.md
 
-### Source Code (repository root)
-
-```text
-app/logic/download.py         # C1 wrong resource label, C2 zip-slip, H7 missing scans, H8 partial zip, M8, M10
-src/
-├── xnat_experiment_data.py   # H1 UID collapse, H2 private-tag clobber, M2–M4, no-empty-shells, #32 semantics
-├── xnat_scan_data.py         # M1 filename off-by-one, L1
-├── utilities.py              # H3 swallowed exceptions, H4 TOCTOU, H5 stale singleton, M5, L2/L3
-├── delete_contents_of_server.py  # M9 table-name mismatch
-├── annotations/io_xnat.py    # M6 manifest orphans, S4
-└── services/xnat_gateway.py  # H6 create_assessor guard, M7, L4 — seams behind which FakeXNAT substitutes
-
-tests/
-├── fakes/fake_xnat.py        # extended: state-diff snapshot API for no-empty-shells assertions
-├── synthetic_data.py         # extended: seed-set fixture factory (FR-011)
-├── regression_014/           # NEW — one test module per finding: test_c1_*.py, test_h3_*.py, ...
-├── characterization/         # NEW — #32 old-vs-new dedup envelope (US5)
-├── stress/                   # existing dir; gains @pytest.mark.stress concurrency/scale tests
-└── contract/                 # existing FakeXNAT-parity tests, untouched
+app/logic/download.py       # H8 fix, M7/M8/M10 backfill tests
+src/xnat_scan_data.py       # L1 fix, S1 fix
+src/xnat_experiment_data.py # M4 fix
+src/annotations/io_xnat.py  # S4 fix
+src/utilities.py            # M10 backfill test (first-run catch site)
 
 .github/workflows/
-├── tests.yml                 # THE single testing lane (consolidated per #45 direction)
-├── ci-lite.yml               # unchanged minimal lane
-└── python-package.yml        # REMOVED (superseded by tests.yml; decision in ledger)
+├── ci-lite.yml or tests.yml   # ONE survives as canonical (decision recorded in ledger)
+└── python-package.yml         # DELETED
+
+tests/
+├── regression_014/            # new tests: H8, M4, L1, S1, S4, L5(if needed), M7/M8/M10 backfills
+└── synthetic_data.py           # extended only if a new fixture shape is needed (unlikely — factory already rich)
 ```
 
-**Structure Decision**: Single-project layout (existing). New test code is additive under `tests/regression_014/` and `tests/characterization/`; production changes are edits-in-place to the four `src/` modules named above. No new packages.
+**Structure Decision**: Same single-project layout as before; scope of change is now small — edits to 5 existing files, one workflow deletion, new tests under `tests/regression_014/`.
 
 ## Complexity Tracking
 
-No constitution violations to justify — table omitted.
+No constitution violations — table omitted.

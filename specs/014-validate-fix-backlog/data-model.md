@@ -16,7 +16,7 @@ One audit item from #33.
 | baseline_evidence | string | verbatim failing assertion line from the pre-fix run |
 | fix_commit | sha | commit on consolidated branch |
 
-**State transitions**: `UNVERIFIED → fixed-with-test` requires test_path + baseline_evidence + fix_commit all present. `UNVERIFIED → wont-fix|not-a-bug` requires rationale. No transition out of a terminal state without a new ledger entry (append-only history).
+**State transitions**: `UNVERIFIED → fixed-with-test` requires test_path + baseline_evidence + fix_commit all present. `UNVERIFIED → wont-fix|not-a-bug` requires rationale. A regression test that **passes** at the pre-fix baseline (finding not reproducible) resolves to `not-a-bug` with the passing baseline run recorded as the evidence. No transition out of a terminal state without a new ledger entry (append-only history).
 
 ## FixCandidate
 

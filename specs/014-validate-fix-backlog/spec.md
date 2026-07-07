@@ -49,7 +49,7 @@ A student downloading surgery data must receive the correct files and must not b
 
 ### User Story 3 - Verify the HIGH-severity integrity and concurrency fixes (Priority: P2)
 
-The maintainer works through the eight HIGH findings (H1–H8): DICOM UID collision/clobber, swallowed exceptions during upload, lost-update TOCTOU on shared metadata, the stale connection singleton, unguarded assessor creation, whole-surgery downloads missing scans, and partial archives left behind on error. Each is either (a) fixed with a failing-then-passing regression test, or (b) triaged as won't-fix / not-a-bug with a recorded rationale.
+The maintainer works through the eight HIGH findings per #33's authoritative numbering: H1 (all DICOM UIDs collapse to one value), H2 (duplicate private tag clobbers the UID stash), H3 (push_to_xnat swallows all exceptions), H4 (lost-update TOCTOU + stale fingerprint), H5 (stale is_open singleton state), H6 (create_assessor without parent check or label sanitizing), H7 (whole-surgery downloads missing scans), H8 (no count-verify; partial zip left on error). Each is either (a) fixed with a failing-then-passing regression test, or (b) triaged as won't-fix / not-a-bug with a recorded rationale.
 
 **Why this priority**: These findings can silently lose or corrupt research data at scale (Principle VI), but each requires more setup (concurrency harnesses, multi-instance fixtures) than the CRITICAL pair, so they follow rather than lead.
 
@@ -66,7 +66,7 @@ The maintainer works through the eight HIGH findings (H1–H8): DICOM UID collis
 
 ### User Story 4 - Verify the MEDIUM/LOW backlog and reconcile duplicate fix branches (Priority: P2)
 
-The maintainer sweeps M1–M10 (filename off-by-one at ≥1000 instances, private-tag encoding mismatch, index-reset bug, invalid-value validity gate, working-directory backup leak, annotation-manifest orphans, stale count verification, table-name mismatch on delete, silent exception handlers) plus the L/S items, reconciling the individual fix branches from #51 — #40/#41/#42/#43/#46/#48/#50 and the #38 campaign — so each fix lands exactly once. The triplicated M1 fix and the overlapping M1/M9 fixes are collapsed to a single authoritative change each.
+The maintainer sweeps M1–M10 per #33's authoritative numbering: M1 (filename off-by-one at ≥1000 instances), M2 (private-tag VR mismatch), M3 (sort without index reset), M4 (NaN slips the validity gate), M5 (backup leaked to CWD), M6 (annotation-manifest orphans), M7 (download_resource returns stale dir contents), M8 (count-verify against stale browse-time count), M9 (delete_metatables table-name mismatch), M10 (silent exception handlers) — plus the L1–L6/S1–S4 items, reconciling the individual fix branches from #51 — #40/#41/#42/#43/#46/#48/#50 and the #38 campaign — so each fix lands exactly once. The triplicated M1 fix and the overlapping M1/M9 fixes are collapsed to a single authoritative change each.
 
 **Why this priority**: Individually small, but collectively they are the bulk of the unverified pile and the source of the duplicate-fix hazard; landing them once, tested, closes the backlog.
 
@@ -149,5 +149,5 @@ The maintainer fully implements the #32 redesign: exact-duplicate detection by r
 - The consolidated branch is this session's designated working branch; promotion to `development` and the rolling PR to `main` follow the repo's existing branch policy and are out of scope here.
 - Resolving #44 (Actions billing) is an operator/account action outside this feature; the feature prepares everything to go green the moment CI can run, and FR-012 governs reporting in the interim.
 - The fake-server stand-in and synthetic-data generator seams already exist (Constitution IV) and can be extended rather than built from scratch.
-- The CI consolidation decision defaults to the single-lane shape (#45 direction) consistent with the repo's documented minimal-CI convention, unless review of #47 surfaces a blocking reason; the ledger records the final choice.
+- The CI consolidation decision is made: single-lane shape per #45 direction (research D1). The residual obligation is narrow — during implementation, #47's diff is reviewed once for unique coverage worth folding into `tests.yml`; the ledger records that review and the final disposition of both PRs.
 - "Never touch production" includes read-only access: tests use only localhost/fake or an explicitly opt-in disposable real server; the production hostname appears in no test configuration.

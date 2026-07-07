@@ -53,12 +53,14 @@ specs/014-validate-fix-backlog/
 ### Source Code (repository root)
 
 ```text
+app/logic/download.py         # C1 wrong resource label, C2 zip-slip, H7 missing scans, H8 partial zip, M8, M10
 src/
-├── xnat_experiment_data.py   # upload/push_to_xnat paths — H1, H2, H5, no-empty-shells, #32 semantics
-├── xnat_scan_data.py         # instance naming (M1 off-by-one), private tags (M2), UID handling
-├── xnat_resource_data.py     # resource labels (C1), download composition (H7)
-├── utilities.py              # MetaTables (H3 TOCTOU, H4 singleton, M8 delete mismatch), zip extraction (C2, H8)
-└── services/                 # seams behind which FakeXNAT substitutes
+├── xnat_experiment_data.py   # H1 UID collapse, H2 private-tag clobber, M2–M4, no-empty-shells, #32 semantics
+├── xnat_scan_data.py         # M1 filename off-by-one, L1
+├── utilities.py              # H3 swallowed exceptions, H4 TOCTOU, H5 stale singleton, M5, L2/L3
+├── delete_contents_of_server.py  # M9 table-name mismatch
+├── annotations/io_xnat.py    # M6 manifest orphans, S4
+└── services/xnat_gateway.py  # H6 create_assessor guard, M7, L4 — seams behind which FakeXNAT substitutes
 
 tests/
 ├── fakes/fake_xnat.py        # extended: state-diff snapshot API for no-empty-shells assertions

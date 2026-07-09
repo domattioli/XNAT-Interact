@@ -55,7 +55,8 @@ A synthetic surgical case generated and uploaded at a scheduled point (spec Key 
 | `scheduled_at` | float (epoch s) | From the pre-generated timeline (D1) |
 | `shape` | object | See shape descriptor below |
 | `gen_hashes` | {filename: sha256} | From `factory.surgery_pixel_hashes` at generation time; integrity baseline |
-| `has_annotations` | bool | ~30% of normal cases run the `lane_annotations` upload pattern |
+| `has_annotations` | bool | Assigned during seeded timeline PRE-GENERATION (part of the shape draw, ~30% of normal cases), NOT decided in the worker — preserves D1's deterministic-given-seed guarantee across the multiprocessing boundary |
+| `experiment_ref` | str \| null | Server-side experiment accession/URI captured at publish completion; REQUIRED for integrity-snapshot re-download and `download_annotation_set` link resolution — a `COMPLETED` case without it cannot be sampled and MUST be treated as a snapshot failure |
 | `status` | enum | State machine below |
 | `attempts` | int | Write attempts incl. retries (D7) |
 | `classification` | `null \| "FRIENDLY" \| "ACCEPTED" \| "CRASH"` | Tri-state, `lane_malformed.py` semantics |
@@ -63,12 +64,24 @@ A synthetic surgical case generated and uploaded at a scheduled point (spec Key 
 | `scratch_dir` | path | Per-case dir under the run scratch root; removed finally-style on completion |
 
 **Shape descriptor** (`shape`): `category` (`normal` | `malformed` | `dedup_probe`);
-`subtype` — for malformed: one of the `tests/stress/malformed.py` generator names
-(`truncated`, `no_instance_number`, `three_channel`, `dup_private_tag`, `huge_surgery`,
-`not_a_dicom`); for dedup probes: one of the `factory.overlap_cases` relations (`exact`,
-`subset`, `superset`, `partial`) against a designated earlier base case; `frames` (int,
-drawn 3–20 for size variety), `rows`/`cols` (64 default), `expected_outcome`
-(`ACCEPT` for normal, `FRIENDLY` for malformed, `DEDUP_REJECT` for probes).
+`subtype` — for malformed: one of the `tests/stress/malformed.py` generator FUNCTIONS
+(`truncated_dicom`, `no_instance_number`, `three_channel`, `dup_private_tag`,
+`huge_surgery`, `not_a_dicom`); for dedup probes: one of the `factory.overlap_cases`
+relations (`exact`, `subset`, `superset`, `partial`) against a designated earlier base
+case; `frames` (int, drawn 3–20 for size variety), `rows`/`cols` (64 default),
+`expected_outcome` (`ACCEPT` for normal, `FRIENDLY` for malformed, `DEDUP_REJECT` for
+probes); `has_annotations` (bool, drawn here per the field note above).
+
+**Dedup-probe ordering guarantee (binding)**: a probe is only meaningful if its base case's
+image hashes are already server-side when the probe runs. Therefore: (1) the schedule
+generator MUST place each probe's `scheduled_at` strictly after its base case's
+`scheduled_at` plus a configurable expected-completion margin; (2) the coordinator MUST
+additionally gate probe dispatch on the base case reaching `COMPLETED` (holding the probe,
+recording the displacement as a lifecycle event); (3) if the base case terminates without
+completing (`REJECTED_FRIENDLY`/`FAILED_TERMINAL`), the probe is RE-DESIGNATED as a normal
+case, logged as `probe_redesignated`, and counted under `normal` — it is NOT scored as an
+unexpected failure. The floor top-up pass may only re-label a normal arrival as a probe if
+an eligible earlier base exists in the timeline.
 
 **State machine**:
 `SCHEDULED → GENERATING → UPLOADING → (RETRY_WAIT → UPLOADING)* →
@@ -93,7 +106,7 @@ The chronological evidence base (spec Key Entity 2); serialization contract in
 | `event_id` | str | `EVT_<seq:05d>` |
 | `kind` | enum | `case_write`, `annotation_write`, `read_inventory`, `read_download`, `read_browse`, `config_update`, `snapshot`, `lifecycle` (start/stop/outage/resume) |
 | `scheduled_at` / `started_at` / `completed_at` | float epoch s | `completed_at` null only for the in-flight-at-kill worst case |
-| `outcome` | `"ok" \| "friendly" \| "terminal" \| "crash" \| "benign_partial_read"` | `benign_partial_read` = US3 scenario 2 |
+| `outcome` | `"ok" \| "friendly" \| "terminal" \| "crash" \| "benign_partial_read" \| "guarded_lost_update"` | `benign_partial_read` = US3 scenario 2; `guarded_lost_update` = a `config_update` event rejected by the lost-update guard — the guard WORKING CORRECTLY, always an EXPECTED outcome, never counted as unexpected. `config_update` events are excluded from `counts.write_attempt_total` entirely (they have their own `by_kind` tally) |
 | `case_ref` | str \| null | `case_id` for case-linked events |
 | `retries` | int | |
 | `error` | str \| null | Type + message + traceback head, truncated ≤ 2000 chars |
@@ -114,13 +127,18 @@ Point-in-time verification (spec Key Entity 3) + FR-006 resource piggyback.
 | `at` | float epoch s | |
 | `sampled` | array | Per case: `{case_id, checksum_ok, links_ok, present_ok, detail}` |
 | `pass` | bool | AND of all sampled checks |
-| `resources` | object | `{scratch_bytes, open_connections, scratch_monotonic_run_len}` |
-| `resource_ok` | bool | scratch < 1 GB AND monotonic run < 3 AND connections ≤ `max_connections` |
+| `resources` | object | `{scratch_bytes, scratch_leak_bytes, open_connections, scratch_monotonic_run_len}` |
+| `resource_ok` | bool | raw scratch < 1 GB AND monotonic-leak run < 3 AND connections ≤ `max_connections` |
 
 **Validation rules**: sampled cases must be `COMPLETED` at sampling time (never in-flight,
-US4 scenario 2); `scratch_monotonic_run_len` counts consecutive snapshots with strictly
-increasing `scratch_bytes` (3 ⇒ resource FAIL, clarified rule); any `pass = false` anywhere
-in the run triggers the zero-tolerance integrity FAIL regardless of later snapshots.
+US4 scenario 2); `scratch_leak_bytes` = run scratch root bytes EXCLUDING in-flight
+(non-terminal) cases' scratch dirs — the leak signal; `scratch_monotonic_run_len` counts
+consecutive snapshots with strictly increasing `scratch_leak_bytes` (3 ⇒ resource FAIL) so
+that concurrent in-flight uploads never register as growth while genuine leaks (bytes
+surviving a case's terminal state) always do; the raw `scratch_bytes` 1 GB ceiling remains
+the gross-runaway backstop; the sampler's own verification connection is included in
+`open_connections`; any `pass = false` anywhere in the run triggers the zero-tolerance
+integrity FAIL regardless of later snapshots.
 
 ---
 
@@ -133,12 +151,17 @@ Top-level sections: `schema_version`, `run` (identity, mode, timestamps, seed, c
 `verdict` (`ratio_check`, `integrity_check`, `resource_check`, `overall`, `reasons[]`,
 `partial`, `stopped_early`), `timeline_ref` (relative JSONL path).
 
-**Verdict computation (binding)**:
-- `ratio_check.pass` ⇔ `unexpected_terminal_count ≤ max(1, ceil(0.02 × write_attempt_total))`
+**Verdict computation (binding — verbatim-identical to contracts/run-report.md §2 and
+tasks.md T013)**:
+- `ratio_check.pass` ⇔ `unexpected_terminal_count ≤ max(1, ceil(0.02 × write_attempt_total))`,
+  where `write_attempt_total` counts case-write EVENTS (retries tallied separately in
+  `retry_total`, never inflating the denominator)
 - `integrity_check.pass` ⇔ no snapshot in the run has `pass = false`
 - `resource_check.pass` ⇔ every snapshot has `resource_ok = true`
-- `overall = "PASS"` ⇔ all three pass; else `"FAIL"`, with one human-readable string per
-  failed check appended to `reasons[]`.
+- `overall = "PASS"` ⇔ all three pass AND `completed_cases ≥ 1`; else `"FAIL"`, with one
+  human-readable string per failed check (reason `no_completed_writes` for the
+  completed-cases precondition) appended to `reasons[]`. `partial`/`stopped_early` are
+  orthogonal informational flags and never enter the formula.
 
 **Validation rules**: report must parse as JSON after any kill point (guaranteed by atomic
 rewrite, D6); `partial = true` whenever `stopped_early` or the configured duration was not

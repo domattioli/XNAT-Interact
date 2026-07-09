@@ -16,7 +16,7 @@
 - [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous — FR-001 through FR-013 each map to an acceptance scenario or success criterion
 - [x] Success criteria are measurable — SC-001 through SC-008 all carry concrete counts/thresholds/durations
-- [x] Success criteria are technology-agnostic
+- [x] Success criteria are technology-agnostic — with a noted, deliberate exception: SC-007/SC-008 embed the repo's domain-specific verification vocabulary (1 GB scratch bound, session-pool size, ACCEPTED/FRIENDLY/CRASH tri-state) because those concrete values ARE the requirement per the clarify session; they are domain-defensible, not incidental tech leakage (analyze-phase LOW finding, accepted)
 - [x] All acceptance scenarios are defined — 4 user stories × 2-3 scenarios each
 - [x] Edge cases are identified — 5 edge cases (interruption, XNAT unresponsiveness, unexpected malformed-case failures, early stop, unbounded duration growth)
 - [x] Scope is clearly bounded — FR-013 explicitly excludes implementation; FR-012 explicitly excludes real STAPLE

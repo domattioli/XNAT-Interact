@@ -124,12 +124,18 @@ and exit-code/report behavior (US1) all call into these two files.
   data-model.md §1
 - [ ] T007 Implement weighted case-variety draw (80% normal / 10% malformed / 10%
   dedup-probe) producing the shape descriptor (`category`, `subtype`, `frames`, `rows`,
-  `cols`, `expected_outcome` per data-model.md §2) in `tests/stress/sim016_schedule.py` —
+  `cols`, `expected_outcome`, and the seeded `has_annotations` draw for ~30% of normal
+  cases — decided HERE at timeline generation, not in the worker, to preserve
+  determinism-given-seed per data-model.md §2) in `tests/stress/sim016_schedule.py` —
   per FR-001 and data-model.md §2 (depends on T006 for the RNG handle)
 - [ ] T008 Implement the deterministic floor top-up pass (re-label the latest normal
   arrivals so a sustained-mode timeline holds ≥3 malformed and ≥3 dedup-probe cases
-  regardless of the weighted draw's outcome; floors waived in smoke mode) in
-  `tests/stress/sim016_schedule.py` — per FR-001 and research.md D1 (depends on T007)
+  regardless of the weighted draw's outcome; floors waived in smoke mode) honoring the
+  dedup-probe ordering guarantee: a probe may only be created where an eligible earlier
+  base case exists, and every probe's `scheduled_at` must land strictly after its base's
+  scheduled time plus the expected-completion margin, in
+  `tests/stress/sim016_schedule.py` — per FR-001, research.md D1, and data-model.md §2
+  ordering guarantee (depends on T007)
 - [ ] T009 Implement full timeline pre-generation: accumulate case-write/read/config-update
   Poisson streams (T006) with per-arrival variety assignment (T007) and floor top-up (T008)
   until `duration_s` is exhausted, plus fixed-cadence (default 720s, ≤900s ceiling) snapshot
@@ -158,14 +164,17 @@ and exit-code/report behavior (US1) all call into these two files.
   per data-model.md §2, and tri-state tallies) in `tests/stress/sim016_report.py` — per
   data-model.md §2/§3 (depends on T011 for classification inputs)
 - [ ] T013 Implement verdict computation exactly per contracts/run-report.md §2: (1)
-  `ratio_check.pass` ⇔ `unexpected_terminal ≤ max(1, ceil(0.02 × write_attempt_total))`; (2)
-  `integrity_check.pass` ⇔ no snapshot has `pass = false` (zero-tolerance, independent of
-  ratio); (3) `resource_check.pass` ⇔ every snapshot has `resource_ok = true`
-  (`scratch_bytes < 1_073_741_824` AND `scratch_monotonic_run_len < 3` AND
-  `open_connections ≤ max_connections`); (4) `overall = "PASS"` ⇔ all three pass; one
-  human-readable sentence per failed check appended to `reasons[]` in
-  `tests/stress/sim016_report.py` — per contracts/run-report.md §2 and FR-006 (depends on
-  T012)
+  `ratio_check.pass` ⇔ `unexpected_terminal ≤ max(1, ceil(0.02 × write_attempt_total))`,
+  where `write_attempt_total` counts case-write EVENTS (retries tallied separately in
+  `retry_total`, never inflating the denominator); (2) `integrity_check.pass` ⇔ no snapshot
+  has `pass = false` (zero-tolerance, independent of ratio); (3) `resource_check.pass` ⇔
+  every snapshot has `resource_ok = true` (raw `scratch_bytes < 1_073_741_824` AND
+  `scratch_monotonic_run_len < 3` computed over `scratch_leak_bytes` AND
+  `open_connections ≤ max_connections`); (4) `overall = "PASS"` ⇔ all three pass AND
+  `completed_cases ≥ 1` (else FAIL with reason `no_completed_writes`; `partial`/
+  `stopped_early` are orthogonal flags that never enter the formula); one human-readable
+  sentence per failed check appended to `reasons[]` in `tests/stress/sim016_report.py` —
+  per contracts/run-report.md §2 and FR-006 (depends on T012)
 - [ ] T014 [P] Implement the atomic JSON report writer (`tempfile` + `os.replace`, invoked
   after every snapshot and at finalization) and the append-only JSONL event writer (one line
   per completed event, tolerant of a truncated final line on `kill -9`) in
@@ -201,10 +210,16 @@ and exit-code/report behavior (US1) all call into these two files.
   publish of a dedup probe → unexpected) in `tests/stress/test_sim016_report.py` — offline,
   default CI gate (depends on T011)
 - [ ] T021 [P] Unit tests for verdict computation against contracts/run-report.md §2's
-  binding rules: ratio boundary exactly at `max(1, ceil(0.02 × N))`, zero-tolerance
-  single-snapshot-failure FAIL independent of ratio, resource_check as AND-of-all-snapshots,
-  `partial`/`stopped_early` flag semantics, in `tests/stress/test_sim016_report.py` —
-  offline, default CI gate; pure-logic proof of SC-008 (depends on T013)
+  binding rules: ratio boundary exactly at `max(1, ceil(0.02 × N))` with N = case-write
+  events (assert retries do NOT inflate the denominator), zero-tolerance
+  single-snapshot-failure FAIL independent of ratio, resource_check as AND-of-all-snapshots
+  with monotonic run computed over `scratch_leak_bytes`, the `completed_cases ≥ 1`
+  precondition (assert `completed=0, write_attempt_total=1, unexpected_terminal=1,
+  snapshots=[{sampled:[], pass:true, resource_ok:true}]` yields FAIL with
+  `no_completed_writes` — the closed vacuous-PASS loophole), and `partial`/`stopped_early`
+  flag orthogonality (an early-stopped clean sustained run PASSes with `partial=true`), in
+  `tests/stress/test_sim016_report.py` — offline, default CI gate; pure-logic proof of
+  SC-008 (depends on T013)
 - [ ] T022 [P] Unit tests for atomic-write crash safety: simulate an interrupted rewrite and
   assert the prior valid report file is unaffected; assert the JSONL reader tolerates and
   discards a truncated final line, in `tests/stress/test_sim016_report.py` — offline,
@@ -258,10 +273,13 @@ the same file.
   startup before any server-side write, in `tests/stress/lane_sim016.py` — per Constitution
   I/V, data-model.md §1, and contracts/cli.md ("violations ⇒ exit 2, nothing written
   server-side") (depends on T010, T024)
-- [ ] T028 [US1] Implement fresh run-id generation (`SIM016_<UTC-ts>_<hex4-from-seed>`) and
-  XNAT project bootstrap via `driver.connect`'s PUT-project path, refusing to proceed if the
-  target project already exists server-side, in `tests/stress/lane_sim016.py` — per
-  research.md D5 and contracts/cli.md `--project` semantics (depends on T025)
+- [ ] T028 [US1] Implement fresh run-id generation (`SIM016_<UTC-ts>_<hex4-from-seed>`), an
+  explicit pre-bootstrap project-existence probe (`GET /data/projects/{project}`; HTTP 200 ⇒
+  exit 2 — MUST be new lane code: `driver.connect`'s PUT-project bootstrap treats 409
+  already-exists as success and cannot refuse a reused name, including an
+  operator-overridden `--project`), then XNAT project bootstrap via `driver.connect`, in
+  `tests/stress/lane_sim016.py` — per research.md D5 and contracts/cli.md `--project`
+  semantics (depends on T025)
 - [ ] T029 [US1] Implement the pre-run server-project inventory preamble: capture
   `xnat_version` and the list of pre-existing projects via `driver.server_inventory` into
   `run.preamble` (recorded as evidence only, never asserted against, never written to) in
@@ -334,18 +352,25 @@ run.
   generator (`truncated_dicom`, `no_instance_number`, `three_channel`, `dup_private_tag`,
   `huge_surgery`, `not_a_dicom`) for each `malformed` subtype, and a
   `factory.overlap_cases`-derived probe (`exact`/`subset`/`superset`/`partial`) against a
-  designated earlier base case for each `dedup_probe` subtype, writing into a per-case
-  scratch directory, in `tests/stress/lane_sim016.py` — per data-model.md §2 shape
-  descriptor and plan.md Project Structure (depends on T038)
+  designated earlier base case for each `dedup_probe` subtype — with coordinator-side probe
+  gating: dispatch a probe only after its base case is `COMPLETED` (hold + record the
+  displacement as a lifecycle event); if the base terminated without completing,
+  re-designate the probe as a normal case (`probe_redesignated`, never scored unexpected)
+  per data-model.md §2 ordering guarantee — writing into a per-case scratch directory, in
+  `tests/stress/lane_sim016.py` — per data-model.md §2 shape descriptor and plan.md Project
+  Structure (depends on T038)
 - [ ] T040 [US2] Implement write-attempt execution: `driver.connect` + `driver.publish_surgery`
   wrapped in the D7 retry policy (exponential backoff, base 5s, factor 2, jitter ±20%, max 3
   retries, 60s per-attempt cap for transient failures; no retry for FRIENDLY/CRASH/dedup
   outcomes), calling the T011 classification helper on every outcome and recording
-  `attempts`/`classification`/`unexpected` on the case record, in
-  `tests/stress/lane_sim016.py` — per research.md D7 (depends on T011, T012, T039)
-- [ ] T041 [US2] Implement the ~30%-of-normal-cases annotation upload path using the
-  `lane_annotations.py` `step_build_annotation_set` / `step_upload_v1` pattern, setting
-  `has_annotations=true` on the case record for later integrity-snapshot link checks, in
+  `attempts`/`classification`/`unexpected` AND the server-side `experiment_ref` (captured at
+  publish completion; required by the integrity sampler per data-model.md §2) on the case
+  record, in `tests/stress/lane_sim016.py` — per research.md D7 (depends on T011, T012,
+  T039)
+- [ ] T041 [US2] Implement the annotation upload path for cases whose timeline-assigned
+  shape carries `has_annotations=true` (the ~30% draw happens in T007's seeded shape
+  generation, NOT here — the worker only reads the flag), using the `lane_annotations.py`
+  `step_build_annotation_set` / `step_upload_v1` pattern, in
   `tests/stress/lane_sim016.py` — per data-model.md §2 `has_annotations` and plan.md §2
   (depends on T040)
 - [ ] T042 [US2] Implement per-case `finally`-style scratch-directory cleanup on every
@@ -357,10 +382,14 @@ run.
   ledger, driving the case state machine
   (`SCHEDULED→GENERATING→UPLOADING→(RETRY_WAIT→UPLOADING)*→terminal`), in
   `tests/stress/lane_sim016.py` — per data-model.md §2 state machine (depends on T012, T040)
-- [ ] T044 [US2] Implement the sparse config-update event stream, reusing the
-  `lane_concurrent.py` `_worker_config_race`-style `database_config.json` pull/push +
-  lost-update-guard path, in `tests/stress/lane_sim016.py` — per plan.md Constitution VI
-  note (depends on T037)
+- [ ] T044 [US2] Implement the sparse config-update event stream (CLI
+  `--config-update-mean-s`, default 900 sustained / disabled smoke per contracts/cli.md),
+  reusing the `lane_concurrent.py` `_worker_config_race`-style `database_config.json`
+  pull/push + lost-update-guard path, with the D7 accounting rules: config-update events
+  are EXCLUDED from `write_attempt_total`; a `LostUpdateError` is the guard working
+  correctly ⇒ EXPECTED outcome `guarded_lost_update` (never unexpected); only an
+  unclassified exception counts as CRASH, in `tests/stress/lane_sim016.py` — per plan.md
+  Constitution VI note and research.md D7 config-update classification (depends on T037)
 
 ### Validation for User Story 2 (opt-in live-server lane)
 
@@ -444,25 +473,42 @@ per sampled case.
   T053)
 - [ ] T055 [US4] Implement per-sampled-case checks: sha256 pixel-hash comparison of
   re-downloaded files against the generation-time `factory.surgery_pixel_hashes` baseline
-  (`case.gen_hashes`); annotation link resolution via the `lane_annotations.py`
+  (`case.gen_hashes`) — the file re-download is NEW lane code (REST
+  `/data/experiments/{case.experiment_ref}/scans/.../resources/SRC/files` pull via the
+  reader's `requests.Session`; `driver.py` exposes no download function and stays
+  unmodified); annotation link resolution via the `lane_annotations.py`
   `step_download_and_compare` pattern for cases with `has_annotations=true`; presence via
   `driver.server_inventory` + `driver.empty_shells` (a completed case surfacing as an empty
-  shell = integrity failure), in `tests/stress/lane_sim016.py` — per research.md D3
-  (depends on T054)
+  shell = integrity failure; a `COMPLETED` case with no `experiment_ref` = snapshot
+  failure), in `tests/stress/lane_sim016.py` — per research.md D3 and data-model.md §2
+  `experiment_ref` (depends on T054, T071)
 - [ ] T056 [US4] Implement the FR-006 resource-observation piggyback on every snapshot:
-  recursive byte count of the run scratch root (`scratch_bytes`), open-connection count
-  (writer-pool size + reader session + coordinator, cross-checked via `/proc`-based socket
-  counting where available), and `scratch_monotonic_run_len` tracking (consecutive
-  snapshots with strictly increasing `scratch_bytes`), in `tests/stress/lane_sim016.py` —
+  recursive byte count of the run scratch root (`scratch_bytes`, raw), the leak signal
+  (`scratch_leak_bytes` = raw minus in-flight/non-terminal cases' scratch dirs),
+  open-connection count (writer-pool size + reader session + coordinator + the sampler's
+  own verification connection, cross-checked via `/proc`-based socket counting where
+  available), and `scratch_monotonic_run_len` tracking (consecutive snapshots with strictly
+  increasing `scratch_leak_bytes` — the leak signal, NOT raw scratch, so concurrent
+  in-flight uploads never false-trip the rule), in `tests/stress/lane_sim016.py` —
   per FR-006 and data-model.md §4 (depends on T053)
 - [ ] T057 [US4] Wire each snapshot's `pass`/`resources`/`resource_ok` results into the
   T012 ledger and T013 verdict computation (zero-tolerance integrity FAIL on any
-  `pass=false`; resource FAIL on `scratch_bytes ≥ 1 GB` OR `scratch_monotonic_run_len ≥ 3`
-  OR `open_connections > max_connections`), across `tests/stress/lane_sim016.py` and
-  `tests/stress/sim016_report.py` — per contracts/run-report.md §2 rules 2-3 (depends on
-  T013, T055, T056)
+  `pass=false`; resource FAIL on raw `scratch_bytes ≥ 1 GB` OR `scratch_monotonic_run_len ≥ 3`
+  over the leak signal OR `open_connections > max_connections`), across
+  `tests/stress/lane_sim016.py` and `tests/stress/sim016_report.py` — per
+  contracts/run-report.md §2 rules 2-3 (depends on T013, T055, T056)
 
 ### Validation for User Story 4 (opt-in live-server lane)
+
+- [ ] T071 [US4] Hash-stability gating experiment (run BEFORE trusting the zero-tolerance
+  integrity check): publish exactly one `factory.make_surgery` case via
+  `driver.publish_surgery` with the stress `auto_confirmer` (ReviewDecision.CONFIRMED — no
+  redaction), re-download its DICOM files from the server via the T055 REST pull, and
+  assert `sha256(ds.PixelData)` of every re-downloaded file equals the generation-time
+  `factory.surgery_pixel_hashes` baseline. If this fails, the integrity baseline MUST move
+  to post-publish hashes and research.md D3 be amended before any sustained-mode claim —
+  per research.md D3 hash-stability precondition (opt-in, live; blocks T055's checksum
+  check from being trusted)
 
 - [ ] T058 [US4] [P] Run a sustained-mode run of sufficient length and confirm the report's
   `snapshots[]` contains ≥3 distinct timestamped entries spread across the run's duration —

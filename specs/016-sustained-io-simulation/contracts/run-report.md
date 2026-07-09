@@ -43,10 +43,12 @@ An agent's minimal read: `json.load(report)["verdict"]["overall"]` → `"PASS" |
     },
     "counts": {
       "type": "object",
-      "required": ["cases_scheduled", "write_attempt_total", "by_kind", "by_category"],
+      "required": ["cases_scheduled", "completed_cases", "write_attempt_total", "retry_total", "by_kind", "by_category"],
       "properties": {
         "cases_scheduled":     { "type": "integer" },
+        "completed_cases":     { "type": "integer" },
         "write_attempt_total": { "type": "integer" },
+        "retry_total":         { "type": "integer" },
         "by_kind":     { "type": "object", "additionalProperties": { "type": "integer" } },
         "by_category": { "type": "object",
           "properties": { "normal": {"type":"integer"}, "malformed": {"type":"integer"}, "dedup_probe": {"type":"integer"} } }
@@ -99,9 +101,10 @@ An agent's minimal read: `json.load(report)["verdict"]["overall"]` → `"PASS" |
           "pass": { "type": "boolean" },
           "resources": {
             "type": "object",
-            "required": ["scratch_bytes", "open_connections", "scratch_monotonic_run_len"],
+            "required": ["scratch_bytes", "scratch_leak_bytes", "open_connections", "scratch_monotonic_run_len"],
             "properties": {
-              "scratch_bytes": {"type":"integer"}, "open_connections": {"type":"integer"},
+              "scratch_bytes": {"type":"integer"}, "scratch_leak_bytes": {"type":"integer"},
+              "open_connections": {"type":"integer"},
               "scratch_monotonic_run_len": {"type":"integer"}
             }
           },
@@ -137,21 +140,41 @@ An agent's minimal read: `json.load(report)["verdict"]["overall"]` → `"PASS" |
 ## §2 Verdict computation rules (normative)
 
 1. `ratio_check.pass` ⇔ `failures.unexpected_terminal ≤ max(1, ceil(0.02 × counts.write_attempt_total))`.
-   `threshold` records the computed bound; `observed` the count. Expected FRIENDLY rejections
-   of injected malformed cases and `DedupReviewRequired` on dedup probes are EXCLUDED from
-   the numerator and tallied in `failures.expected_friendly`. An injected malformed case that
-   is silently ACCEPTED, or that CRASHes, and a dedup probe that publishes cleanly, are
-   INCLUDED as unexpected (SC-008; clarify session answer 1).
+   **`write_attempt_total` counts case-write EVENTS (one per scheduled case that reached
+   `UPLOADING` at least once), NOT individual retry attempts** — retries are tallied
+   separately in `counts.retry_total` and never inflate the denominator (a flaky run must
+   not loosen its own gate). `threshold` records the computed bound; `observed` the count.
+   Expected FRIENDLY rejections of injected malformed cases and `DedupReviewRequired` on
+   dedup probes are EXCLUDED from the numerator and tallied in `failures.expected_friendly`.
+   An injected malformed case that is silently ACCEPTED, or that CRASHes, and a dedup probe
+   that publishes cleanly, are INCLUDED as unexpected (SC-008; clarify session answer 1).
 2. `integrity_check.pass` ⇔ every element of `snapshots[]` has `pass = true`. One failing
    snapshot at any point ⇒ overall FAIL, independent of the ratio (zero-tolerance clause).
+   A snapshot whose `sampled[]` is empty carries no evidential weight (it is vacuously
+   `pass = true` but proves nothing); vacuous-PASS abuse is prevented by rule 4's
+   completed-cases precondition, which guarantees the mandatory final snapshot samples at
+   least one completed case on any run eligible to PASS.
 3. `resource_check.pass` ⇔ every element of `snapshots[]` has `resource_ok = true`, where
-   `resource_ok` ⇔ `scratch_bytes < 1_073_741_824` AND `scratch_monotonic_run_len < 3` AND
+   `resource_ok` ⇔ `scratch_bytes < 1_073_741_824` (gross-runaway backstop on RAW scratch,
+   in-flight included) AND `scratch_monotonic_run_len < 3` AND
    `open_connections ≤ config.max_connections` (default 10).
-4. `overall = "PASS"` ⇔ all three checks pass AND (`partial = false` OR the run is smoke
-   mode); a partial sustained run reports its checks but sets `overall` from the evidence it
-   has and `partial = true` — consuming agents MUST treat `partial = true` as "verdict is
-   about the truncated run only".
-5. Every FAIL appends exactly one human-readable sentence per failed check to `reasons[]`.
+   **`scratch_monotonic_run_len` is computed over `scratch_leak_bytes`** — the run scratch
+   root's byte count EXCLUDING the scratch directories of cases currently in a non-terminal
+   state — so legitimately concurrent in-flight uploads never register as growth; only
+   bytes surviving past their case's terminal state (a genuine leak) do. The snapshot
+   sampler's own verification connection IS included in `open_connections` and the budget.
+4. `overall = "PASS"` ⇔ all three checks pass AND `counts.completed_cases ≥ 1`; otherwise
+   `"FAIL"`. A run in which no case ever reached `COMPLETED` cannot PASS regardless of the
+   three checks (reason string: `no_completed_writes`) — this closes the vacuous-PASS
+   loophole where a run whose only write failed terminally would otherwise satisfy the
+   `max(1, …)` floor and empty-snapshot integrity vacuity simultaneously.
+   `partial` and `stopped_early` are ORTHOGONAL informational flags and never enter this
+   formula: an early-stopped run's verdict is computed from the evidence it accumulated,
+   exactly as a full run's is, and consuming agents MUST treat `partial = true` as "verdict
+   covers the truncated run only". (This single formula is binding; `data-model.md` §5 and
+   tasks.md T013 state the identical rule.)
+5. Every FAIL appends exactly one human-readable sentence per failed check (and one for a
+   failed completed-cases precondition) to `reasons[]`.
 
 ## §3 JSONL event-line schema (one object per line)
 

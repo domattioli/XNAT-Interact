@@ -23,7 +23,12 @@ tuning. A single parameter (the mean) couples directly to the clarified default 
 ⇒ expected ≥30 cases per 60-min run, keeping SC-003 non-vacuous). `expovariate` is stdlib —
 no new dependency. Pre-generating the timeline makes the schedule deterministic given the
 seed (reproducible bug reports) and lets the floor top-up pass (≥3 malformed, ≥3 dedup) be
-applied before execution. The clamp floor (2 s) prevents pathological same-instant bursts
+applied before execution — subject to the dedup-probe ordering guarantee (data-model.md §2):
+a probe's `scheduled_at` must land strictly after its base case's scheduled time plus an
+expected-completion margin, top-up may only create a probe where an eligible earlier base
+exists, and the coordinator additionally gates probe dispatch on the base reaching
+`COMPLETED` (re-designating the probe as normal if the base terminates without completing).
+The clamp floor (2 s) prevents pathological same-instant bursts
 that would turn the lane back into `lane_concurrent.py`; the clamp ceiling prevents a single
 freak draw from silently emptying a smoke run.
 
@@ -78,7 +83,17 @@ are never sampled (US4 scenario 2). Checks per sampled case: sha256 pixel-hash c
 re-downloaded files vs. generation-time `surgery_pixel_hashes`, annotation link resolution
 via the `download_annotation_set` path where annotations were uploaded, and presence via
 `server_inventory` + `empty_shells` (a completed case surfacing as an empty shell fails the
-snapshot). Every snapshot additionally records scratch bytes and open-connection count
+snapshot). **The file re-download is NEW lane code** (a REST
+`/data/experiments/{experiment_ref}/scans/.../resources/SRC/files` pull via the reader's
+`requests.Session`) — `driver.py` exposes no download function and is reused unmodified, so
+the sampler locates cases via the `experiment_ref` captured on the case record at publish
+completion (data-model.md §2). **Hash-stability precondition**: the design assumes the
+publish path does not mutate `PixelData` when the pixel-review confirmer returns CONFIRMED
+(no redaction applied, matching the existing stress-lane `auto_confirmer`); the
+implementation pass MUST validate this with a one-case publish→re-download→sha256-compare
+experiment BEFORE trusting the zero-tolerance integrity check — if the round-trip mutates
+pixels, the baseline must move to post-publish hashes and this decision be amended. Every
+snapshot additionally records scratch bytes (raw + leak signal) and open-connection count
 (FR-006 piggyback).
 
 **Rationale**: Constant sample size keeps snapshot cost flat over a multi-hour run — a
@@ -140,7 +155,11 @@ pre-existing project list in the report preamble.
 humans sortable provenance; the hex suffix removes the same-second double-invocation
 collision; a single token shared across project, files, and scratch means any artifact found
 later is traceable to its run with no lookup table. Alphanumeric-plus-underscore stays
-within XNAT project-ID constraints.
+within XNAT project-ID constraints. **Freshness is enforced by an explicit pre-bootstrap
+existence probe in the lane** (`GET /data/projects/{project}`; HTTP 200 ⇒ exit 2): this must
+be new lane code because `driver.connect`'s PUT-project bootstrap treats 409
+(already-exists) as success and therefore cannot refuse a reused name — including an
+operator-overridden `--project` value.
 
 **Alternatives considered**:
 - *Timestamp only*: same-second collision between two invocations (e.g., an agent retrying).
@@ -194,10 +213,17 @@ corruption structurally impossible rather than merely unlikely (spec Edge Case 1
   malformed* case this is the **expected** outcome (excluded from the ratio, tallied
   separately); on a *normal* case it is an unexpected terminal failure.
 - **Dedup probes**: `DedupReviewRequired` raised ⇒ expected probe success (excluded from the
-  ratio). A dedup probe that publishes cleanly (silently ACCEPTED) ⇒ unexpected failure.
+  ratio). A dedup probe that publishes cleanly (silently ACCEPTED) ⇒ unexpected failure —
+  but ONLY when the probe's dispatch-ordering guarantee held (base case `COMPLETED` before
+  probe dispatch, data-model.md §2); a probe whose base never completed is re-designated
+  normal (`probe_redesignated`) and never scored as unexpected.
   Symmetrically, an injected malformed case that is silently ACCEPTED, or that CRASHes
   (any unclassified exception), counts as unexpected — the existing ACCEPTED/FRIENDLY/CRASH
   tri-state from `lane_malformed.py` is reused verbatim, per the clarify session.
+- **Config-update events**: excluded from `write_attempt_total` and the ratio entirely
+  (own `by_kind` tally). A `LostUpdateError` from the lost-update guard is the guard
+  working correctly ⇒ EXPECTED outcome (`guarded_lost_update`), never unexpected; only an
+  unclassified exception on a config update counts as CRASH/unexpected.
 - **CRASH** (any other exception): no retry, unexpected terminal failure, traceback head
   captured in the event record.
 - **Server-outage circuit breaker**: 3 consecutive transient-class failures across distinct

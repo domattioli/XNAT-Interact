@@ -19,6 +19,7 @@ standalone (stress-lane convention), NOT collected by the default pytest gate.
 | `--seed` | int | time-derived | Timeline RNG seed; echoed in report |
 | `--mean-interarrival-s` | float | 110 / 20 | Case-write Poisson mean |
 | `--read-mean-interarrival-s` | float | 45 / 15 | Read-stream Poisson mean |
+| `--config-update-mean-s` | float | 900 (sustained) / 0 = disabled (smoke) | Sparse config-update stream mean; 0 disables the stream |
 | `--variety` | `f,f,f` (normal,malformed,dedup) | `0.80,0.10,0.10` | Must sum to 1.0 |
 | `--min-malformed` | int | 3 (sustained) / 0 (smoke) | Absolute floor (FR-001) |
 | `--min-dedup` | int | 3 (sustained) / 0 (smoke) | Absolute floor (FR-001) |
@@ -30,14 +31,17 @@ standalone (stress-lane convention), NOT collected by the default pytest gate.
 | `--url` | str | `http://localhost:8080` | Env `XNAT_SERVER_URL` overrides |
 | `--user` | str | `admin` | Env `XNAT_USERNAME` overrides |
 | `--password` | str | `admin` | Env `XNAT_PASSWORD` overrides; throwaway localhost pair only — never logged, never serialized into the report |
-| `--project` | str | auto `SIM016_<utc-ts>_<hex4>` | Overriding is allowed but MUST still be a fresh, run-scoped name; the lane refuses a project that already exists server-side |
+| `--project` | str | auto `SIM016_<utc-ts>_<hex4>` | Overriding is allowed but MUST still be a fresh, run-scoped name; the lane refuses a project that already exists server-side via an explicit pre-bootstrap probe (`GET /data/projects/{project}` → HTTP 200 ⇒ exit 2). This probe is NEW lane code — `driver.connect`'s PUT-project bootstrap treats 409 as success and cannot implement the refusal |
 | `--results-dir` | path | `tests/stress/results/` | Report/JSONL/pid destination |
 | `--verbose` / `-v` | flag | off | Human-readable progress |
 
 Constraint checks at startup (violations ⇒ exit 2, nothing written server-side): variety sums
 to 1.0; `writer_pool_size + 2 ≤ max_connections`; URL host is localhost/127.0.0.1/explicit
 disposable-host env value (production RPACS hostname is a hard error); server precondition
-probe `GET /data/version` (fallback `GET /data/projects`) answers within 15 s.
+probe `GET /data/version` (fallback `GET /data/projects`) answers within 15 s; project
+existence probe `GET /data/projects/{project}` returns non-200 (an existing project — even
+an operator-overridden name — is refused to protect dedup-verdict integrity per research.md
+D5).
 
 ## Environment variables
 

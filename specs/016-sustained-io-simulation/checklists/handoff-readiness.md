@@ -26,13 +26,13 @@
 
 ## 2. Verdict Integrity — Rule Unambiguity, Tri-State Clarity, Threshold Concreteness
 
-- [ ] **CHK013** The unexpected-failure ratio threshold is stated as a concrete formula `max(1, 2% of write attempts)`, not vague adjectives [spec.md FR-006, plan.md, contracts/run-report.md §2]
+- [ ] **CHK013** The unexpected-failure ratio threshold is stated as a concrete formula `max(1, ceil(0.02 × case-write EVENTS))` — the denominator counts case-write events, NOT individual retry attempts (retries are tallied separately in `retry_total` and never loosen the gate) [spec.md FR-006, plan.md, contracts/run-report.md §2 rule 1]
 - [ ] **CHK014** The zero-tolerance integrity clause is explicit: "count 1 integrity failure at any snapshot = FAIL" [spec.md FR-006, contracts/run-report.md §2]
 - [ ] **CHK015** The tri-state failure classification (FRIENDLY, ACCEPTED, CRASH) is defined so expected vs unexpected are never conflatable [spec.md Clarifications Q1, contracts/run-report.md §2]
 - [ ] **CHK016** Expected FRIENDLY rejections of malformed injections are excluded from the ratio numerator [spec.md Clarifications Q1, plan.md]
 - [ ] **CHK017** An injected malformed case that is silently ACCEPTED (should have failed) or CRASHes (unexpected) is counted as an unexpected failure [spec.md Clarifications Q1, plan.md]
 - [ ] **CHK018** Resource bounds are concrete numbers, not adjectives: scratch <1 GB, no 3-snapshot monotonic growth, ≤10 open connections [spec.md FR-006, plan.md, contracts/run-report.md §2]
-- [ ] **CHK019** Partial-run semantics are defined: `partial=true` means verdict covers only the truncated run; overall PASS on partial only in smoke mode [contracts/run-report.md §2]
+- [ ] **CHK019** Partial-run semantics are defined: `partial`/`stopped_early` are ORTHOGONAL informational flags that never enter the verdict formula — an early-stopped clean run (any mode) PASSes with `partial=true`, and consumers must treat the verdict as covering only the truncated run; `overall` additionally requires `completed_cases >= 1` (reason `no_completed_writes`) and non-empty `snapshots[]` (reason `no_integrity_evidence`) [contracts/run-report.md §2 rules 2+4]
 - [ ] **CHK020** The tri-part verdict structure is documented: `ratio_check`, `integrity_check`, `resource_check` each with `pass: true|false` [contracts/run-report.md §1 Schema]
 - [ ] **CHK021** Verdict computation rules are normative and unambiguous [contracts/run-report.md §2, items 1-5]
 - [ ] **CHK022** The report schema includes `verdict.reasons[]` as machine-readable failure explanations, one sentence per failed check [contracts/run-report.md §1 Schema item 5]
@@ -129,7 +129,7 @@
 
 4. **Retry/outage handling (FR-011) is described narratively in procedure but not as state machine**: The quickstart (§6) and contracts/procedure-doc.md (§7) describe circuit-breaker behavior in prose ("pause, probe, resume or finalize-FAIL"), which is clear enough for a future agent to understand, but the exact backoff/probe schedule is deferred to implementation. This is appropriate for a design-only spec. No fix needed.
 
-5. **Consistency check passes**: All concrete numbers (60 min, 110 s, 80/10/10, ≥3 floors, 1GB, 3-snapshot, ≤10 connections, 720 s cadence, 90 s smoke, max(1, 2%) threshold) are stated consistently across spec, plan, and contracts. Exit codes 0/1/2/3 are consistent.
+5. **Consistency check passes** (re-affirmed after analyze cycles 1-3): All concrete numbers (60 min, 110 s, 80/10/10, ≥3 floors, 1GB raw + leak-signal monotonic rule, ≤10 connections, 720 s cadence, 90 s smoke, max(1, ceil(0.02 × case-write events)) threshold with retries excluded from the denominator, completed_cases ≥ 1 precondition, non-empty snapshots[] requirement) are stated consistently across spec, plan, data-model, and contracts. Exit codes 0/1/2/3 are consistent. CHK013/CHK019 were reconciled to the converged verdict rule during analyze cycle 3.
 
 6. **Traceability complete**: Every SC-001 through SC-008 has a documented path to validation via the report schema or event log. Edge cases have handling requirements. Clarify-session answers are propagated to FR/SC.
 

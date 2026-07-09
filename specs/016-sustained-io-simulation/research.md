@@ -85,9 +85,17 @@ via the `download_annotation_set` path where annotations were uploaded, and pres
 `server_inventory` + `empty_shells` (a completed case surfacing as an empty shell fails the
 snapshot). **The file re-download is NEW lane code** (a REST
 `/data/experiments/{experiment_ref}/scans/.../resources/SRC/files` pull via the reader's
-`requests.Session`) — `driver.py` exposes no download function and is reused unmodified, so
-the sampler locates cases via the `experiment_ref` captured on the case record at publish
-completion (data-model.md §2). **Hash-stability precondition**: the design assumes the
+`requests.Session`) — `driver.py` exposes no download function and is reused unmodified.
+The sampler locates cases via the `experiment_ref` on the case record, captured by the
+worker post-publish through a deterministic uid-keyed lookup (label match on
+`GET /data/experiments?project={run_project}`), never through list-position heuristics —
+the `lane_annotations.py` "last experiment" walk is safe only for that lane's single-case
+publishes and is forbidden here because the concurrent writer pool makes list position
+racy (a cross-wired ref would produce false integrity FAILs). Ref-capture determinism is
+itself gated by the T072 experiment (one publish, then two concurrent publishes, assert
+each case's lookup resolves to its own accession) before the integrity verdict is trusted;
+if uid-keyed lookup proves unavailable on the deployed XNAT build, this decision must be
+amended with a proven alternative before implementation proceeds. **Hash-stability precondition**: the design assumes the
 publish path does not mutate `PixelData` when the pixel-review confirmer returns CONFIRMED
 (no redaction applied, matching the existing stress-lane `auto_confirmer`); the
 implementation pass MUST validate this with a one-case publish→re-download→sha256-compare
@@ -183,6 +191,10 @@ report is finalized with `stopped_early: true`, `partial: true`, exit code 3. Se
 worst case is still survivable evidence-wise: the JSONL holds every completed event and the
 last atomically-written report snapshot remains valid on disk. The documented operator/agent
 gesture is `kill -INT $(cat tests/stress/results/sim016_<run_id>.pid)`.
+
+A run finalized with zero snapshots (double-signal before the first cadence tick) reports
+`integrity_check.pass = false` with reason `no_integrity_evidence` — an unverified run is
+never reported as verified (see contracts/run-report.md §2 rule 2).
 
 **Rationale**: Directly satisfies FR-010 and SC-006 ("readable partial report … zero
 unreadable/corrupted report files"). Signals are the one stop channel every shell-capable

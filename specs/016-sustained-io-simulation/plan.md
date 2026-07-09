@@ -18,7 +18,7 @@ open-ended stream of synthetic surgical cases arriving at uneven, seeded-random 
 a configurable duration (smoke ~90 s; sustained default 60 min), interleaves concurrent read
 traffic with in-flight writes, samples data integrity periodically mid-run (≥4 snapshots per
 default run), and emits a machine-readable JSON run report with a tri-part PASS/FAIL verdict
-(unexpected-terminal-failure ratio ≤ max(1, 2% of writes); zero tolerance for integrity
+(unexpected-terminal-failure ratio ≤ max(1, ceil(0.02 × case-write events)), a zero-completed-writes run can never PASS; zero tolerance for integrity
 failures; resource bounds: scratch <1 GB, no 3-snapshot monotonic growth, ≤10 open connections).
 The design maximally reuses existing infrastructure: `tests/stress/driver.py` (connect /
 publish_surgery / server_inventory / empty_shells), `tests/stress/factory.py` (make_surgery,
@@ -185,11 +185,13 @@ least one full write-then-read-then-verify cycle. Full rationale and rejected al
 At each cadence tick the sampler selects only **completed** cases (write ok, config push
 done): the most recently completed case + up to 2 seeded-random earlier cases, one of which
 must have been verified in a prior snapshot (drift detection across time). For each sampled
-case it re-downloads the case's DICOM files and compares sha256 pixel hashes against the
-`factory.surgery_pixel_hashes` values recorded at generation time, resolves annotation links
-via the `download_annotation_set` path for cases that carried annotations, and checks
-presence via `driver.server_inventory` + `driver.empty_shells` (a completed case appearing as
-an empty shell = integrity failure). Each snapshot also records the FR-006 resource
+case it re-downloads the case's DICOM files (NEW lane code — a REST files pull keyed on the
+case's `experiment_ref`, which the worker captures post-publish via a deterministic
+uid-keyed lookup, never a list-position walk; see research.md D3 and data-model.md §2) and
+compares sha256 pixel hashes against the `factory.surgery_pixel_hashes` values recorded at
+generation time, resolves annotation links via the `download_annotation_set` path for cases
+that carried annotations, and checks presence via `driver.server_inventory` +
+`driver.empty_shells` (a completed case appearing as an empty shell = integrity failure). Each snapshot also records the FR-006 resource
 observations: simulation-attributable scratch bytes (recursive size of the run scratch root)
 and open-connection count (writer-pool size + reader session + coordinator connections,
 cross-checked against `/proc`-based socket counting where available). Any snapshot check

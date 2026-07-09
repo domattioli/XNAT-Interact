@@ -56,7 +56,7 @@ A synthetic surgical case generated and uploaded at a scheduled point (spec Key 
 | `shape` | object | See shape descriptor below |
 | `gen_hashes` | {filename: sha256} | From `factory.surgery_pixel_hashes` at generation time; integrity baseline |
 | `has_annotations` | bool | Assigned during seeded timeline PRE-GENERATION (part of the shape draw, ~30% of normal cases), NOT decided in the worker — preserves D1's deterministic-given-seed guarantee across the multiprocessing boundary |
-| `experiment_ref` | str \| null | Server-side experiment accession/URI captured at publish completion; REQUIRED for integrity-snapshot re-download and `download_annotation_set` link resolution — a `COMPLETED` case without it cannot be sampled and MUST be treated as a snapshot failure |
+| `experiment_ref` | str \| null | Server-side experiment accession/URI. Capture mechanism (binding): a deterministic, uid-keyed post-publish lookup — `GET /data/experiments?project={run_project}&format=json`, selecting the row whose label matches this case's uid-derived label — retried with short backoff to absorb server indexing lag. "Last subject"/"last experiment" list-position heuristics (the single-case `lane_annotations.py` pattern) are FORBIDDEN: they are concurrency-unsafe under the default 3-process writer pool and would cross-wire cases into false integrity FAILs. A case only transitions to `COMPLETED` once `experiment_ref` is captured; lookup exhaustion ⇒ `FAILED_TERMINAL` (unexpected), so the "COMPLETED without ref" state is unreachable (the snapshot-failure clause below is a defensive invariant guard only). REQUIRED for integrity-snapshot re-download and `download_annotation_set` link resolution; T041's annotation upload reads this same field. Validated by the T072 gating experiment (single + two-concurrent publishes) before the integrity verdict may be trusted |
 | `status` | enum | State machine below |
 | `attempts` | int | Write attempts incl. retries (D7) |
 | `classification` | `null \| "FRIENDLY" \| "ACCEPTED" \| "CRASH"` | Tri-state, `lane_malformed.py` semantics |
@@ -156,7 +156,8 @@ tasks.md T013)**:
 - `ratio_check.pass` ⇔ `unexpected_terminal_count ≤ max(1, ceil(0.02 × write_attempt_total))`,
   where `write_attempt_total` counts case-write EVENTS (retries tallied separately in
   `retry_total`, never inflating the denominator)
-- `integrity_check.pass` ⇔ no snapshot in the run has `pass = false`
+- `integrity_check.pass` ⇔ `snapshots[]` is non-empty AND no snapshot has `pass = false`
+  (empty `snapshots[]` ⇒ fail with reason `no_integrity_evidence`)
 - `resource_check.pass` ⇔ every snapshot has `resource_ok = true`
 - `overall = "PASS"` ⇔ all three pass AND `completed_cases ≥ 1`; else `"FAIL"`, with one
   human-readable string per failed check (reason `no_completed_writes` for the

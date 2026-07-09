@@ -62,13 +62,18 @@
     },
     "analyze": {
       "status": "in_progress",
-      "resolve_cycles": 1,
+      "resolve_cycles": 2,
       "cycle1": {
         "verdict": "READY-WITH-FIXES",
         "findings": "1 CRITICAL (verdict formula divergence), 5 HIGH (project-refusal seam, download seam+experiment_ref+hash stability, dedup-probe ordering, config_update accounting, vacuous-PASS loophole), 3 MEDIUM, 3 LOW",
         "fixes_applied": "all CRITICAL/HIGH/MEDIUM + 2 of 3 LOW (CI-matrix note deferred as out-of-016-scope)"
       },
-      "at": "2026-07-09"
+      "at": "2026-07-09",
+      "cycle2": {
+        "verdict": "NOT-READY",
+        "findings": "NEW-1 HIGH experiment_ref race-free capture unspecified; NEW-2 HIGH stale CHK013/CHK019 assert pre-fix rules; residual prose cleanups",
+        "fixes_applied": "uid-keyed lookup mechanism specified + forbidden heuristics named + T072 gating experiment added; CHK013/CHK019/Observation-5 reconciled; empty-snapshots no_integrity_evidence rule; ceil-precision prose; T045 30min; plan \u00a73 experiment_ref note"
+      }
     }
   }
 }

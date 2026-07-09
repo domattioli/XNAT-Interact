@@ -148,8 +148,11 @@ An agent's minimal read: `json.load(report)["verdict"]["overall"]` → `"PASS" |
    dedup probes are EXCLUDED from the numerator and tallied in `failures.expected_friendly`.
    An injected malformed case that is silently ACCEPTED, or that CRASHes, and a dedup probe
    that publishes cleanly, are INCLUDED as unexpected (SC-008; clarify session answer 1).
-2. `integrity_check.pass` ⇔ every element of `snapshots[]` has `pass = true`. One failing
-   snapshot at any point ⇒ overall FAIL, independent of the ratio (zero-tolerance clause).
+2. `integrity_check.pass` ⇔ `snapshots[]` is non-empty AND every element has `pass = true`.
+   One failing snapshot at any point ⇒ overall FAIL, independent of the ratio
+   (zero-tolerance clause). An EMPTY `snapshots[]` at finalization (reachable only via a
+   double-signal stop before the first cadence tick) ⇒ `integrity_check.pass = false` with
+   reason `no_integrity_evidence` — an unverified run is never reported as verified.
    A snapshot whose `sampled[]` is empty carries no evidential weight (it is vacuously
    `pass = true` but proves nothing); vacuous-PASS abuse is prevented by rule 4's
    completed-cases precondition, which guarantees the mandatory final snapshot samples at

@@ -166,8 +166,9 @@ and exit-code/report behavior (US1) all call into these two files.
 - [ ] T013 Implement verdict computation exactly per contracts/run-report.md §2: (1)
   `ratio_check.pass` ⇔ `unexpected_terminal ≤ max(1, ceil(0.02 × write_attempt_total))`,
   where `write_attempt_total` counts case-write EVENTS (retries tallied separately in
-  `retry_total`, never inflating the denominator); (2) `integrity_check.pass` ⇔ no snapshot
-  has `pass = false` (zero-tolerance, independent of ratio); (3) `resource_check.pass` ⇔
+  `retry_total`, never inflating the denominator); (2) `integrity_check.pass` ⇔
+  `snapshots[]` non-empty AND no snapshot has `pass = false` (zero-tolerance, independent
+  of ratio; empty snapshots ⇒ fail, reason `no_integrity_evidence`); (3) `resource_check.pass` ⇔
   every snapshot has `resource_ok = true` (raw `scratch_bytes < 1_073_741_824` AND
   `scratch_monotonic_run_len < 3` computed over `scratch_leak_bytes` AND
   `open_connections ≤ max_connections`); (4) `overall = "PASS"` ⇔ all three pass AND
@@ -363,10 +364,13 @@ run.
   wrapped in the D7 retry policy (exponential backoff, base 5s, factor 2, jitter ±20%, max 3
   retries, 60s per-attempt cap for transient failures; no retry for FRIENDLY/CRASH/dedup
   outcomes), calling the T011 classification helper on every outcome and recording
-  `attempts`/`classification`/`unexpected` AND the server-side `experiment_ref` (captured at
-  publish completion; required by the integrity sampler per data-model.md §2) on the case
-  record, in `tests/stress/lane_sim016.py` — per research.md D7 (depends on T011, T012,
-  T039)
+  `attempts`/`classification`/`unexpected` AND the server-side `experiment_ref` — captured
+  via the deterministic uid-keyed lookup (label match on
+  `GET /data/experiments?project={run_project}`, short retries for indexing lag; NEVER the
+  concurrency-unsafe "last experiment" list-position walk; lookup exhaustion ⇒
+  `FAILED_TERMINAL`, a case is only `COMPLETED` once its ref is captured) — on the case
+  record, in `tests/stress/lane_sim016.py` — per research.md D7, data-model.md §2
+  `experiment_ref` (depends on T011, T012, T039)
 - [ ] T041 [US2] Implement the annotation upload path for cases whose timeline-assigned
   shape carries `has_annotations=true` (the ~30% draw happens in T007's seeded shape
   generation, NOT here — the worker only reads the flag), using the `lane_annotations.py`
@@ -393,7 +397,7 @@ run.
 
 ### Validation for User Story 2 (opt-in live-server lane)
 
-- [ ] T045 [US2] [P] Run a sustained-mode run of ≥20-30 minutes and inspect the event
+- [ ] T045 [US2] [P] Run a sustained-mode run of ≥30 minutes and inspect the event
   timeline for measurably non-uniform, non-clustered-at-start inter-arrival gaps — proves
   SC-002 and spec.md US2 Acceptance Scenario 1 (opt-in, live)
 - [ ] T046 [US2] [P] Run a sustained-mode run producing ≥30 cases and confirm ≥3 distinct
@@ -480,8 +484,9 @@ per sampled case.
   `step_download_and_compare` pattern for cases with `has_annotations=true`; presence via
   `driver.server_inventory` + `driver.empty_shells` (a completed case surfacing as an empty
   shell = integrity failure; a `COMPLETED` case with no `experiment_ref` = snapshot
-  failure), in `tests/stress/lane_sim016.py` — per research.md D3 and data-model.md §2
-  `experiment_ref` (depends on T054, T071)
+  failure — a defensive invariant guard, unreachable if T040's capture rule held), in
+  `tests/stress/lane_sim016.py` — per research.md D3 and data-model.md §2
+  `experiment_ref` (depends on T054, T071, T072)
 - [ ] T056 [US4] Implement the FR-006 resource-observation piggyback on every snapshot:
   recursive byte count of the run scratch root (`scratch_bytes`, raw), the leak signal
   (`scratch_leak_bytes` = raw minus in-flight/non-terminal cases' scratch dirs),
@@ -509,6 +514,16 @@ per sampled case.
   to post-publish hashes and research.md D3 be amended before any sustained-mode claim —
   per research.md D3 hash-stability precondition (opt-in, live; blocks T055's checksum
   check from being trusted)
+- [ ] T072 [US4] Ref-capture determinism gating experiment (run BEFORE trusting the
+  integrity verdict, alongside T071): (a) publish one `factory.make_surgery` case and
+  assert the uid-keyed lookup (`GET /data/experiments?project={P}&format=json`, label
+  match) resolves exactly one experiment whose accession downloads back that case's files;
+  (b) publish TWO cases concurrently (2-process pool) and assert each case's lookup
+  resolves to its OWN accession (no cross-wiring — the failure mode of the forbidden
+  "last experiment" heuristic). If uid-keyed lookup is unavailable on the deployed XNAT
+  build, HALT implementation and amend research.md D3 with a proven race-free alternative —
+  per data-model.md §2 `experiment_ref` capture mechanism (opt-in, live; blocks T055 and
+  the zero-tolerance integrity check)
 
 - [ ] T058 [US4] [P] Run a sustained-mode run of sufficient length and confirm the report's
   `snapshots[]` contains ≥3 distinct timestamped entries spread across the run's duration —

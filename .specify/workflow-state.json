@@ -61,19 +61,12 @@
       "at": "2026-07-09"
     },
     "analyze": {
-      "status": "in_progress",
-      "resolve_cycles": 2,
-      "cycle1": {
-        "verdict": "READY-WITH-FIXES",
-        "findings": "1 CRITICAL (verdict formula divergence), 5 HIGH (project-refusal seam, download seam+experiment_ref+hash stability, dedup-probe ordering, config_update accounting, vacuous-PASS loophole), 3 MEDIUM, 3 LOW",
-        "fixes_applied": "all CRITICAL/HIGH/MEDIUM + 2 of 3 LOW (CI-matrix note deferred as out-of-016-scope)"
-      },
-      "at": "2026-07-09",
-      "cycle2": {
-        "verdict": "NOT-READY",
-        "findings": "NEW-1 HIGH experiment_ref race-free capture unspecified; NEW-2 HIGH stale CHK013/CHK019 assert pre-fix rules; residual prose cleanups",
-        "fixes_applied": "uid-keyed lookup mechanism specified + forbidden heuristics named + T072 gating experiment added; CHK013/CHK019/Observation-5 reconciled; empty-snapshots no_integrity_evidence rule; ceil-precision prose; T045 30min; plan \u00a73 experiment_ref note"
-      }
+      "status": "succeeded",
+      "resolve_cycles": 3,
+      "final_verdict": "READY",
+      "cycle_history": "cycle1 READY-WITH-FIXES (1C/5H/3M/3L, all fixed); cycle2 NOT-READY (2 new HIGH from fix ripple, fixed); cycle3 READY (1 optional LOW tidy, applied)",
+      "at": "2026-07-09"
     }
-  }
+  },
+  "pipeline_complete": "specify+clarify+plan+tasks+checklist+analyze all succeeded; implement WITHHELD per operator instruction"
 }

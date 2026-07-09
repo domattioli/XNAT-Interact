@@ -1,0 +1,61 @@
+{
+  "feature_directory": "specs/016-sustained-io-simulation",
+  "pipeline": "speckit-pipeline v1.2",
+  "invocation": "design sustained real-world I/O simulation; stop just shy of implement; adversarial fable-5 surrogate at clarify gate",
+  "resolved_phases": [
+    "specify",
+    "clarify",
+    "plan",
+    "tasks",
+    "checklist",
+    "analyze"
+  ],
+  "implement_withheld": "explicit operator instruction \u2014 'do not implement, stop just shy of that'",
+  "phases": {
+    "specify": {
+      "status": "succeeded",
+      "artifact": "specs/016-sustained-io-simulation/spec.md",
+      "at": "2026-07-09"
+    },
+    "clarify": {
+      "status": "succeeded",
+      "mode": "surrogate",
+      "surrogate": "clarify-surrogate agent, model=fable (claude-fable-5), adversarial brief per operator instruction",
+      "questions_asked": 5,
+      "questions_answered": 5,
+      "unresolved": 0,
+      "deviations_from_recommended": [
+        "Q1 error threshold (2% + max(1,) floor, tri-state)",
+        "Q3 variety (80/10/10 + count floors)",
+        "Q4 resource bound (per-case cleanup + monotonic-growth rule)"
+      ],
+      "note": "WARN: clarify answered by clarify-surrogate (adversarial fable-5 per operator direction), not the operator \u2014 see spec Clarifications section for grounding.",
+      "at": "2026-07-09"
+    },
+    "plan": {
+      "status": "succeeded",
+      "artifacts": [
+        "specs/016-sustained-io-simulation/plan.md",
+        "research.md",
+        "data-model.md",
+        "quickstart.md",
+        "contracts/run-report.md",
+        "contracts/cli.md",
+        "contracts/procedure-doc.md"
+      ],
+      "agent": "Plan (read-only; main session wrote artifacts verbatim)",
+      "constitution_gates": "7/7 PASS",
+      "at": "2026-07-09"
+    },
+    "tasks": {
+      "status": "pending"
+    },
+    "checklist": {
+      "status": "pending"
+    },
+    "analyze": {
+      "status": "pending",
+      "resolve_cycles": 0
+    }
+  }
+}

@@ -9,6 +9,7 @@ from dateutil import parser
 import pytz
 import hashlib
 import tempfile
+import threading
 from pyxnat import Interface
 from pyxnat.core.resources import Project as pyxnatProject
 from src.services.xnat_gateway import XnatGateway, build_gateway as _build_gateway
@@ -378,11 +379,13 @@ class XNATConnection( UIDandMetaInfo ):
     # print( my_connection )
     """
     _instance = None
+    _instance_lock = threading.Lock()  # serializes __new__ check-then-create (#56)
 
     def __new__( cls, *args, **kwargs ): # Only one instance of this class should be allowed to exist at a time.
-        if cls._instance is not None:   cls._instance.__del__()  # Explicitly call __del__ on the existing instance
-        cls._instance = super( XNATConnection, cls ).__new__( cls )
-        return cls._instance
+        with cls._instance_lock:  # guard against concurrent double-init → double-__del__ (#56)
+            if cls._instance is not None:   cls._instance.__del__()  # Explicitly call __del__ on the existing instance
+            cls._instance = super( XNATConnection, cls ).__new__( cls )
+            return cls._instance
 
     def __init__( self, login_info: XNATLogin, stay_connected: bool = False, verbose: Opt[bool] = True ):
         if not login_info.is_valid:

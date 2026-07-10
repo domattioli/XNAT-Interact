@@ -245,3 +245,51 @@ class TestH3LostUpdatePropagates:
             raised = True
 
         assert raised, "LostUpdateError must propagate out of push_to_xnat, not be swallowed"
+
+
+# ---------------------------------------------------------------------------
+# #56 — XNATConnection singleton __new__ must be lock-guarded so concurrent
+# construction cannot race the check-then-create (which would double-__del__).
+# ---------------------------------------------------------------------------
+
+class TestSingletonConstructionLock:
+    """#56: XNATConnection.__new__ serializes the check-then-create."""
+
+    def test_instance_lock_is_a_real_lock(self):
+        import threading
+        from src.utilities import XNATConnection
+
+        lock = XNATConnection._instance_lock
+        assert isinstance(lock, type(threading.Lock())), (
+            "XNATConnection._instance_lock must be a threading lock"
+        )
+
+    def test_new_acquires_instance_lock(self):
+        """__new__ must enter the instance lock's context around the
+        check-then-create so two threads cannot both create an instance."""
+        from src.utilities import XNATConnection
+
+        events = []
+
+        class _RecordingLock:
+            def __enter__(self):
+                events.append("enter")
+                return self
+
+            def __exit__(self, *exc):
+                events.append("exit")
+                return False
+
+        # Neutralise __del__ (real one calls close() → needs a live gateway) so
+        # garbage-collecting the throwaway instance stays quiet.
+        with mock.patch.object(XNATConnection, "_instance_lock", _RecordingLock()), \
+             mock.patch.object(XNATConnection, "__del__", lambda self: None):
+            XNATConnection._instance = None
+            try:
+                XNATConnection.__new__(XNATConnection)
+            finally:
+                XNATConnection._instance = None
+
+        assert events == ["enter", "exit"], (
+            f"__new__ must enter/exit the instance lock exactly once; got {events}"
+        )

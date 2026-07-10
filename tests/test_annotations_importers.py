@@ -508,3 +508,46 @@ class TestPackUnpackHelpers:
         up_b = _unpack_binary_frame(packed, 8, 8, 1)
         np.testing.assert_array_equal(up_a, (mask_a > 0).astype(np.uint8))
         np.testing.assert_array_equal(up_b, (mask_b > 0).astype(np.uint8))
+
+
+# ===========================================================================
+# #55 — SegmentationType read per-segment, not only at the dataset root.
+# Per the DICOM-SEG IOD SegmentationType may vary per segment; a dataset-level
+# only read misses a per-segment FRACTIONAL type and would return a garbage
+# binary mask instead of refusing.
+# ===========================================================================
+
+class TestPerSegmentFractionalGuard:
+
+    def _two_segment_seg(self) -> Dataset:
+        masks = [_make_binary_mask(seed=20), _make_binary_mask(seed=21)]
+        return _make_minimal_dicom_seg(masks, ["worker_A1", "worker_B2"])
+
+    def test_per_segment_fractional_raises(self):
+        """A per-segment FRACTIONAL override must be caught even when the dataset
+        root has no (or a BINARY) SegmentationType — the #55 regression."""
+        ds = self._two_segment_seg()
+        # Dataset root stays BINARY / unset; only the second segment is FRACTIONAL.
+        ds.SegmentSequence[1].SegmentationType = "FRACTIONAL"
+        with pytest.raises(AnnotationError) as exc_info:
+            from_dicom_seg(ds)
+        assert "FRACTIONAL" in str(exc_info.value)
+
+    def test_dataset_level_fractional_still_raises(self):
+        """Regression guard: a dataset-level FRACTIONAL type (segments carry
+        none → fall back to the root value) must still be refused."""
+        ds = self._two_segment_seg()
+        ds.SegmentationType = "FRACTIONAL"
+        with pytest.raises(AnnotationError) as exc_info:
+            from_dicom_seg(ds)
+        assert "FRACTIONAL" in str(exc_info.value)
+
+    def test_per_segment_binary_override_allows_import(self):
+        """A segment that explicitly declares BINARY is honoured over a
+        FRACTIONAL dataset root (the fallback only applies when unset)."""
+        ds = self._two_segment_seg()
+        ds.SegmentationType = "FRACTIONAL"
+        for seg in ds.SegmentSequence:
+            seg.SegmentationType = "BINARY"
+        anns = from_dicom_seg(ds)
+        assert len(anns) == 2

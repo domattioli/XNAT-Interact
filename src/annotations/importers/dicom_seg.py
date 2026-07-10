@@ -81,20 +81,11 @@ def from_dicom_seg(ds: Any) -> List[Annotation]:
             ],
         ))
 
-    # ---- Check for unsupported FRACTIONAL type ----
-    seg_type = getattr(ds, "SegmentationType", "BINARY")
-    if str(seg_type).upper() == "FRACTIONAL":
-        _raise(FriendlyError(
-            title="Unsupported DICOM SEG type: FRACTIONAL",
-            message=(
-                "This importer supports BINARY segmentation type only. "
-                f"The dataset has SegmentationType='{seg_type}'."
-            ),
-            recourse=[
-                "Convert the FRACTIONAL SEG to BINARY before importing.",
-                "Or use a specialised DICOM SEG library (e.g. highdicom) for FRACTIONAL support.",
-            ],
-        ))
+    # ---- Dataset-level SegmentationType (default for segments that don't override) ----
+    # Per the DICOM-SEG IOD, SegmentationType may vary per segment; the dataset-level
+    # value is only the fallback. The actual FRACTIONAL guard runs per-segment below
+    # (#55) so a per-segment FRACTIONAL type is not missed by a top-level-only read.
+    ds_seg_type = getattr(ds, "SegmentationType", "BINARY")
 
     # ---- Extract pixel data ----
     if not hasattr(ds, "PixelData") or ds.PixelData is None:
@@ -183,6 +174,23 @@ def from_dicom_seg(ds: Any) -> List[Annotation]:
     for seg_item in ds.SegmentSequence:
         seg_number = int(getattr(seg_item, "SegmentNumber", 0))
         seg_label = str(getattr(seg_item, "SegmentLabel", "")).strip()
+
+        # ---- Per-segment FRACTIONAL guard (#55) ----
+        # SegmentationType may be overridden per segment; fall back to the
+        # dataset-level value when the segment does not carry its own.
+        seg_type = getattr(seg_item, "SegmentationType", ds_seg_type)
+        if str(seg_type).upper() == "FRACTIONAL":
+            _raise(FriendlyError(
+                title="Unsupported DICOM SEG type: FRACTIONAL",
+                message=(
+                    "This importer supports BINARY segmentation type only. "
+                    f"SegmentNumber {seg_number} has SegmentationType='{seg_type}'."
+                ),
+                recourse=[
+                    "Convert the FRACTIONAL SEG to BINARY before importing.",
+                    "Or use a specialised DICOM SEG library (e.g. highdicom) for FRACTIONAL support.",
+                ],
+            ))
 
         if not seg_label:
             _raise(FriendlyError(

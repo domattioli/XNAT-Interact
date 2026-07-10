@@ -75,6 +75,52 @@ def sample_rest_response_mixed_types() -> dict:
 
 
 @pytest.fixture()
+def sample_rest_response_all_three_types() -> dict:
+    """
+    Sample REST response with all three session types the tool must surface (#39):
+    - xnat:mrSessionData  — historical uploads (pre-PR#38 ignored-xsiType bug)
+    - xnat:rfSessionData   — trauma / fluoroscopy uploads (post-fix)
+    - xnat:esvSessionData  — arthroscopy uploads (post-fix)
+
+    Regression guard: the query→preview path must not drop any of the three,
+    or historical mr-typed data stays invisible while new data appears.
+    """
+    return {
+        "ResultSet": {
+            "Result": [
+                {
+                    "ID": "expt_mr",
+                    "label": "Historical_MR",
+                    "xsiType": "xnat:mrSessionData",
+                    "subject_ID": "subj_mr",
+                    "subject_label": "S_MR",
+                    "date": "2024-01-15",
+                    "insert_date": "2024-01-15T10:30:00",
+                },
+                {
+                    "ID": "expt_rf",
+                    "label": "Trauma_RF",
+                    "xsiType": "xnat:rfSessionData",
+                    "subject_ID": "subj_rf",
+                    "subject_label": "S_RF",
+                    "date": "2024-02-16",
+                    "insert_date": "2024-02-16T14:45:00",
+                },
+                {
+                    "ID": "expt_esv",
+                    "label": "Arthro_ESV",
+                    "xsiType": "xnat:esvSessionData",
+                    "subject_ID": "subj_esv",
+                    "subject_label": "S_ESV",
+                    "date": "2024-03-17",
+                    "insert_date": "2024-03-17T09:15:00",
+                },
+            ]
+        }
+    }
+
+
+@pytest.fixture()
 def sample_rest_response_empty() -> dict:
     """Sample REST response with no results."""
     return {
@@ -211,6 +257,49 @@ def test_query_experiments_rest_handles_list_response_format(mock_validated_logi
 
         assert len(result) == 1
         assert result['expt_id'].iloc[0] == 'expt_001'
+
+
+def test_query_preview_surfaces_all_three_session_types(mock_validated_login, sample_rest_response_all_three_types):
+    """
+    Regression for #39: the query→preview path must surface sessions of ALL
+    THREE types — mr (historical, ignored-xsiType bug), rf (trauma), and esv
+    (arthroscopy). Historical mr-typed uploads must remain visible after the
+    PR#38 creation-call fix, or data forks into visible-new / invisible-old.
+
+    Guards the query leg AND the preview-block derivation in
+    download_queried_data (procedure <- xsiType; subject_id <- subject_label).
+    """
+    with patch('main.requests.get') as mock_get:
+        mock_response = Mock()
+        mock_response.json.return_value = sample_rest_response_all_three_types
+        mock_response.raise_for_status.return_value = None
+        mock_get.return_value = mock_response
+
+        result = query_experiments_rest(mock_validated_login, "GROK_AHRQ_Data")
+
+        # Query leg: all three rows survive, no type filter drops any.
+        assert len(result) == 3
+        xsi_types = set(result['xsiType'])
+        assert xsi_types == {
+            'xnat:mrSessionData',
+            'xnat:rfSessionData',
+            'xnat:esvSessionData',
+        }, f"A session type was dropped by the query leg: {xsi_types}"
+
+        # Preview-block derivation (mirrors download_queried_data): procedure
+        # carries the raw xsiType and every type is represented.
+        result['procedure'] = result['xsiType']
+        result['subject_id'] = result['subject_label']
+        assert set(result['procedure']) == {
+            'xnat:mrSessionData',
+            'xnat:rfSessionData',
+            'xnat:esvSessionData',
+        }
+        assert set(result['subject_id']) == {'S_MR', 'S_RF', 'S_ESV'}
+
+        # insert_date split used by the preview must work for every row.
+        result['insert_date'] = pd.to_datetime(result['insert_date'])
+        assert result['insert_date'].dt.date.notna().all()
 
 
 # ---------------------------------------------------------------------------

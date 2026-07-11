@@ -175,7 +175,9 @@ class TestDryRun:
         _dcs.delete_metatables(server=fake, dry_run=True)  # type: ignore[arg-type]
         out = capsys.readouterr().out
         assert "DRY" in out.upper() or "dry" in out.lower()
-        assert "MetaTables" in out
+        # #33 M9: dry-run must name the real server file, not the phantom
+        # 'MetaTables.json' that matched no resource.
+        assert "database_config.json" in out
 
     def test_dry_run_empty_project_zero_deletes(self, capsys: pytest.CaptureFixture) -> None:
         """No subjects → dry_run still records nothing and doesn't raise."""
@@ -209,8 +211,20 @@ class TestDeletionFailureNotSwallowed:
         # Inject failure on the next file.delete() call
         fake.set_next_failure(ConnectionError("server dropped connection"))
 
-        with pytest.raises(RuntimeError, match="MetaTables.json could not be deleted"):
+        with pytest.raises(RuntimeError, match="database_config.json could not be deleted"):
             _dcs.delete_metatables(server=fake, dry_run=False)  # type: ignore[arg-type]
+
+    def test_metatables_delete_targets_config_resource(self) -> None:
+        """#33 M9: delete_metatables must delete the real 'config' resource file
+        (database_config.json), not the phantom 'MetaTables.json' that matched no
+        server resource and made `--method metatables` a silent no-op."""
+        fake = FakeXNAT()  # base fake: clean delete_file path, records file.delete
+        _dcs.delete_metatables(server=fake, dry_run=False)  # type: ignore[arg-type]
+        deleted = [c for c in fake.calls if c["op"] == "file.delete"]
+        assert deleted, "expected a file.delete call — the deletion silently no-opped"
+        names = [c["kwargs"].get("_filename") for c in deleted]
+        assert "database_config.json" in names
+        assert "MetaTables.json" not in names
 
     def test_partial_failure_reports_failed_count(self) -> None:
         """First subject fails; error message names only the failed one."""

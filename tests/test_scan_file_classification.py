@@ -64,3 +64,19 @@ def test_extensionless_dicom_file_is_dicom(scan_stub, tmp_path):
     dicom_file = tmp_path / "no_extension_dicom"
     make_synthetic_dicom(dicom_file)
     assert scan_stub.is_dicom(dicom_file) is True
+
+
+# ---------------------------------------------------------------------------
+# #33 M1 — generate_source_image_file_name off-by-one (≥1000 instances)
+# ---------------------------------------------------------------------------
+def test_source_image_file_name_pads_under_1000():
+    """<1000 instance numbers zero-pad to 4 digits (unchanged behavior)."""
+    assert ScanFile.generate_source_image_file_name("7", "PUID") == "0007-PUID"
+    assert ScanFile.generate_source_image_file_name("999", "PUID") == "0999-PUID"
+
+
+def test_source_image_file_name_no_crash_at_or_above_1000():
+    """#33 M1: instance counts of 1000+ must not raise AssertionError; they keep
+    their natural width instead of crashing the batch publish loop."""
+    assert ScanFile.generate_source_image_file_name("1000", "PUID") == "1000-PUID"
+    assert ScanFile.generate_source_image_file_name("12345", "PUID") == "12345-PUID"

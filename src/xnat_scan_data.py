@@ -106,9 +106,11 @@ class ScanFile( UIDandMetaInfo ):
 
     @staticmethod
     def generate_source_image_file_name( inst_str: str, patient_uid: str ) -> str:
-        assert len( inst_str ) < 4, f'This function is intended for use with creating dicom file names from their metadata instance number. It is assumed that there may be no more than 999 instances possible. You entered "{inst_str}", which exceeds that threshold.'
-        if inst_str.isdigit() and int( inst_str ) < 1000:
-            # Append the appropriate number of leading zeros
+        if inst_str.isdigit():
+            # Zero-pad to at least 4 digits for stable lexical ordering. Instance
+            # counts of 1000+ keep their natural width instead of raising
+            # AssertionError (#33 M1 off-by-one): zfill(4) is a no-op once the
+            # string already has 4+ digits, so filenames stay well-formed.
             inst_str = inst_str.zfill(4)
         return f"{inst_str}-{patient_uid}"
 

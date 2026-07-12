@@ -70,22 +70,109 @@ def check_that_virtualenv_activated() -> bool:
     return 'VIRTUAL_ENV' in os.environ
 
 
+def _parse_requirement_line(line: str) -> Optional[str]:
+    """
+    Return the installable requirement spec on a requirements.txt line, or None.
+
+    Strips inline ``# ...`` comments and skips blank lines, full-line comments,
+    and pip option/include lines (``-r``, ``-e``, ``--hash=``, ...).  Lets
+    requirements.txt carry explanatory comments (the librarian's single source
+    of truth) without breaking the installer.  See issue #10.
+    """
+    spec = line.split('#', 1)[0].strip()
+    if not spec:
+        return None
+    if spec.startswith('-'):        # -r other.txt, -e ., --hash=..., etc.
+        return None
+    return spec
+
+
+def _dist_name(requirement: str) -> str:
+    """
+    Reduce a requirement spec to its bare distribution name.
+
+    ``SQLAlchemy>=2.0`` -> ``SQLAlchemy``; ``psycopg[binary]`` -> ``psycopg``;
+    ``package==1.2; python_version<'3.10'`` -> ``package``.
+    """
+    name = requirement.split(';', 1)[0]
+    for sep in ('===', '==', '>=', '<=', '~=', '!=', '>', '<'):
+        name = name.split(sep, 1)[0]
+    name = name.split('[', 1)[0]
+    return name.strip()
+
+
+# Distributions whose import name can't be derived by normalization and which
+# may not expose an importlib.metadata mapping.  Last-resort fallback only; the
+# metadata lookup below handles the general case automatically.
+_IMPORT_NAME_FALLBACKS = {
+    'opencv-python': 'cv2',
+    'matplotlib-inline': 'matplotlib_inline',
+    'charset-normalizer': 'charset_normalizer',
+    'fonttools': 'fontTools',
+    'python-dateutil': 'dateutil',
+    'pillow': 'PIL',
+    'pyyaml': 'yaml',
+    'beautifulsoup4': 'bs4',
+    'importlib-resources': 'importlib_resources',
+}
+
+
+def _distribution_import_map() -> dict:
+    """Map lower-cased distribution name -> list of top-level import modules."""
+    try:
+        from importlib.metadata import packages_distributions
+    except Exception:
+        return {}
+    mapping: dict = {}
+    for module, dists in packages_distributions().items():
+        if module.startswith('_'):
+            continue
+        for dist in dists:
+            mapping.setdefault(dist.lower(), []).append(module)
+    return mapping
+
+
+def resolve_import_name(dist_name: str, dist_map: Optional[dict] = None) -> str:
+    """
+    Resolve the importable module name for an installed distribution.
+
+    Prefers the authoritative ``importlib.metadata`` distribution->module map so
+    requirements.txt stays the ONLY file the librarian edits: a package whose
+    import name differs from its distribution name (``opencv-python`` -> ``cv2``,
+    ``SQLAlchemy`` -> ``sqlalchemy``) resolves automatically once installed, with
+    no per-package special-case needed here.  See issue #10.
+    """
+    if dist_map is None:
+        dist_map = _distribution_import_map()
+    modules = dist_map.get(dist_name.lower())
+    if modules:
+        normalized = dist_name.lower().replace('-', '_')
+        for module in modules:
+            if module.lower() == normalized:
+                return module
+        return sorted(modules)[0]
+    if dist_name.lower() in _IMPORT_NAME_FALLBACKS:
+        return _IMPORT_NAME_FALLBACKS[dist_name.lower()]
+    return dist_name.replace('-', '_')
+
+
 def check_and_install_requirements(requirements_file: Path) -> None:
     with open(requirements_file, 'r') as file:
-        requirements = file.readlines()
+        lines = file.readlines()
 
-    for requirement in requirements:
-        requirement = requirement.strip()
-        if requirement:
-            try:
-                pkg_resources.require(requirement)
-                print(f"\t\t'{requirement}' is installed.")
-            except pkg_resources.DistributionNotFound:
-                print(f"\t\t'{requirement}' is NOT installed. Installing...")
-                subprocess.check_call([sys.executable, "-m", "pip", "install", requirement])
-            except pkg_resources.VersionConflict as e:
-                print(f"\t\t'{requirement}' has a version conflict: {e}.\n\t\t-- Installing correct version...")
-                subprocess.check_call([sys.executable, "-m", "pip", "install", requirement])
+    for line in lines:
+        requirement = _parse_requirement_line(line)
+        if requirement is None:
+            continue
+        try:
+            pkg_resources.require(requirement)
+            print(f"\t\t'{requirement}' is installed.")
+        except pkg_resources.DistributionNotFound:
+            print(f"\t\t'{requirement}' is NOT installed. Installing...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", requirement])
+        except pkg_resources.VersionConflict as e:
+            print(f"\t\t'{requirement}' has a version conflict: {e}.\n\t\t-- Installing correct version...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", requirement])
 
 
 def import_all_necessary_modules(requirements_file: Path) -> None:
@@ -93,23 +180,20 @@ def import_all_necessary_modules(requirements_file: Path) -> None:
     check_and_install_requirements(requirements_file)
 
     with open(requirements_file, 'r') as file:
-        requirements = file.readlines()
+        lines = file.readlines()
 
     print(f"\n\t...Checking import of each installed library...")
-    for requirement in requirements:
-        requirement = requirement.strip()
-        if requirement:
-            library_name = requirement.split('==')[0].split('>=')[0].split('<=')[0].split('>')[0].split('<')[0]
-            try:
-                if library_name == 'opencv-python':         importlib.import_module('cv2')
-                elif library_name == 'matplotlib-inline':   importlib.import_module('matplotlib_inline')
-                elif library_name == 'charset-normalizer':  importlib.import_module('charset_normalizer')
-                elif library_name == 'fonttools':           importlib.import_module('fontTools')
-                elif library_name == 'python-dateutil':     importlib.import_module('dateutil')
-                else:                                       importlib.import_module(library_name)
-                print(f"\t\tSuccessfully imported {library_name}")
-            except ImportError as e:
-                print(f"\t\tError importing {library_name}: {e}")
+    dist_map = _distribution_import_map()
+    for line in lines:
+        requirement = _parse_requirement_line(line)
+        if requirement is None:
+            continue
+        module_name = resolve_import_name(_dist_name(requirement), dist_map)
+        try:
+            importlib.import_module(module_name)
+            print(f"\t\tSuccessfully imported {module_name}")
+        except ImportError as e:
+            print(f"\t\tError importing {module_name}: {e}")
 
 
 def run_tests() -> int:

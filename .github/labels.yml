@@ -1,0 +1,137 @@
+# XNAT-Interact canonical label taxonomy — pulled from DomI (spec 007, minimal 5-class set).
+# Pull-side of the DomI label-sync contract (issue #26): DomI never edits this repo;
+# this repo carries its own copy of the canonical taxonomy and applies it locally.
+# Source-of-truth upstream: domattioli/DomI `.github/labels.yml`.
+# Convention: `<class>: <name>` (colon + space) for class-prefixed labels.
+#
+# This is a tailored copy: DomI-self-only labels (self-audit, sanitizer: flagged,
+# skill-marketplace status: probationary/rejected) are omitted as not applicable
+# to a downstream application repo. The type/priority/status/request classes are
+# canonical and MUST match DomI.
+#
+# Applying: needs a `gh`-equipped or operator session (this repo has no label-write
+# path from the cloud routine sessions). Apply with DomI's
+# `skills/git-issue-label-manager/scripts/apply_labels.sh` (audit → apply → prune),
+# or `gh label create/edit` per row. See issue #26 for the migration checklist.
+#
+# Required classes per open issue (soft-enforced — audit warns, does not block):
+#   type     (exactly one: bug, feat, docs, chore, refactor)
+#   priority (exactly one: now, normal, someday)
+#   status   (exactly one: triage, brainstorming, ready, in-progress, blocked,
+#            needs-operator, done)
+# Optional / conditional:
+#   request    (≤ one: skill, research, enhancement, audit)
+#   functional (≤ n: domi-sync, pending-pr)
+
+labels:
+  # ---- type (exactly one per open issue) ----
+  - name: "type: bug"
+    color: "1d76db"
+    description: "Defect in existing behavior."
+    class: type
+  - name: "type: feat"
+    color: "1d76db"
+    description: "New capability."
+    class: type
+  - name: "type: docs"
+    color: "1d76db"
+    description: "Documentation only."
+    class: type
+  - name: "type: chore"
+    color: "1d76db"
+    description: "Tooling/maintenance/dependencies."
+    class: type
+  - name: "type: refactor"
+    color: "1d76db"
+    description: "Internal restructure; no behavior change."
+    class: type
+
+  # ---- priority (exactly one per open issue) ----
+  - name: "priority: now"
+    color: "b60205"
+    description: "Build now / expedite — jump the queue regardless of other labels."
+    class: priority
+  - name: "priority: normal"
+    color: "fbca04"
+    description: "Default importance."
+    class: priority
+  - name: "priority: someday"
+    color: "a2abaf"
+    description: "Background; pick when queue thins."
+    class: priority
+
+  # ---- status (exactly one per open issue, single-valued) ----
+  - name: "status: triage"
+    color: "ededed"
+    description: "Unclassified; awaiting type/priority/status assignment."
+    class: status
+  - name: "status: brainstorming"
+    color: "c5def5"
+    description: "Design phase; not yet implementable. Agents do NOT open a PR while in this state."
+    class: status
+  - name: "status: ready"
+    color: "0e8a16"
+    description: "Spec complete; implementable now."
+    class: status
+  - name: "status: in-progress"
+    color: "fbca04"
+    description: "Active work in flight."
+    class: status
+  - name: "status: blocked"
+    color: "b60205"
+    description: "Cannot progress; non-operator dependency."
+    class: status
+  - name: "status: needs-operator"
+    color: "f97316"
+    description: "Agent handed a decision back to the operator. SOLE trigger for the weekday attention digest."
+    class: status
+  - name: "status: done"
+    color: "196127"
+    description: "Work complete and merged."
+    class: status
+
+  # ---- request (conditional, ≤ 1 per issue) ----
+  - name: "request: skill"
+    color: "8b008b"
+    description: "Request for a new skill upstream in DomI."
+    class: request
+  - name: "request: research"
+    color: "8b008b"
+    description: "Request for an investigation; deliverable is a report."
+    class: request
+  - name: "request: enhancement"
+    color: "8b008b"
+    description: "Request to improve an existing capability (non-breaking)."
+    class: request
+  - name: "request: audit"
+    color: "8b008b"
+    description: "Request for a correctness/quality/security audit of existing work."
+    class: request
+
+  # ---- functional (automation plumbing; ≤ n per issue) ----
+  - name: "domi-sync"
+    color: "ededed"
+    description: "Auto-opened downstream DomI sync issue; consumed by sync-from-domi. Do not strip."
+    class: functional
+  - name: "pending-pr"
+    color: "ededed"
+    description: "Issue is implemented on a branch riding an open PR; see linked PR for status."
+    class: functional
+
+  # ---- GitHub defaults (kept) ----
+  - name: "duplicate"
+    color: "cccccc"
+    description: "Duplicate of another issue."
+    class: meta
+  - name: "question"
+    color: "d876e3"
+    description: "Question rather than actionable issue."
+    class: meta
+
+# ---- Deprecated (remap before delete; a `gh`/operator session prunes) ----
+# Legacy labels observed on this repo's issues. Remap each to its canonical
+# replacement, then delete. Do NOT blind-delete — remap first to avoid orphaning.
+deprecated:
+  - "bug"          # → type: bug
+  - "enhancement"  # → request: enhancement (or type: feat if it is net-new capability)
+  - "To-Do"        # → status: ready (or drop)

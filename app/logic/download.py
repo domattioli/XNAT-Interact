@@ -630,47 +630,11 @@ def assemble_zip(
                     )
                     return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
 
-        # H8: never emit an empty zip for a selection that yielded no files —
-        # that would report ok=True while silently delivering nothing.
-        if not files_written:
-            fe = FriendlyError(
-                title="Nothing to download",
-                message=(
-                    "None of the selected rows had any downloadable files, so no "
-                    "zip was created."
-                ),
-                recourse=[
-                    "Confirm the selection contains scans with staged files.",
-                    "Contact the Data Librarian if you expected files here.",
-                ],
-            )
-            return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
-
-        # Pack all downloaded files into the zip.  H8: on any packing error,
-        # remove the truncated zip so no partial artifact is left behind.
-        try:
-            with _zipfile.ZipFile(zip_dest, "w", _zipfile.ZIP_DEFLATED) as zf:
-                for fp in files_written:
-                    # Archive name = relative path from tmp_path.
-                    arcname = fp.relative_to(tmp_path)
-                    zf.write(fp, arcname)
-        except Exception as exc:  # noqa: BLE001
-            try:
-                if zip_dest.exists() and zip_dest.is_file():
-                    zip_dest.unlink()
-            except OSError:
-                pass
-            from src.services.errors import handle as _handle
-            fe = _handle(
-                exc,
-                title="Could not assemble zip file",
-                message="The download succeeded but the zip archive could not be written.",
-                recourse=[
-                    "Check available disk space at the destination.",
-                    "Re-run the download to retry.",
-                ],
-                context=f"assemble_zip pack, zip_dest={zip_dest}",
-            )
-            return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
+        # Pack all downloaded files into the zip.
+        with _zipfile.ZipFile(zip_dest, "w", _zipfile.ZIP_DEFLATED) as zf:
+            for fp in files_written:
+                # Archive name = relative path from tmp_path.
+                arcname = fp.relative_to(tmp_path)
+                zf.write(fp, arcname)
 
     return DownloadOutcome(ok=True, files_written=files_written, friendly=None)

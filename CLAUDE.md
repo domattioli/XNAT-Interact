@@ -29,4 +29,9 @@ One minimal lane (`.github/workflows/ci-lite.yml`): PR + dispatch triggers only,
 
 **Plugins pre-enabled in `.claude/settings.json`** — `sync-from-domi`, `request-from-domi`, `introspect` from DomI, plus `caveman` from upstream marketplace. Sessions run with full plugin registry active (standardized on lite-profile adoption).
 
+<!-- SPECKIT START -->
+**Active feature plan**: `specs/014-validate-fix-backlog/plan.md` (validate the unverified fix backlog — #32/#33/#51; Python ≥3.9, pytest + FakeXNAT offline default, `stress`/`RUN_XNAT_DUAL=1` opt-in lane).
+**Active feature plan (016)**: `specs/016-sustained-io-simulation/plan.md` (design-only per FR-013: sustained time-distributed I/O simulation vs Docker-local XNAT at localhost:8080; artifacts in specs/016-sustained-io-simulation/{research,data-model,quickstart}.md + contracts/; implementation deferred to a future pass).
+<!-- SPECKIT END -->
+
 **Rolling PR (#49+) pattern** — `development → main` rolling PR is the canonical integration surface. Cherry-pick-then-close PRs may make GitHub merge-status misleading (prefer merge/squash via the rolling PR). On main promotion, update the PR description with wall-clock + PRs-in-wave + blockers, then operator merges.

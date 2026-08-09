@@ -123,11 +123,18 @@ def _image_qs(image_ref: str, project_name: Optional[str]) -> str:
     """
     Build the XNAT query string for an image scan resource.
 
-    If project_name is supplied and image_ref does not already start with
-    '/project', a qualified query string is built using conventions;
-    otherwise image_ref is used verbatim.
+    If project_name is supplied and image_ref is not already a fully
+    qualified query string (starting with '/project/', this module's own
+    convention -- see _project_qs), a qualified query string is built using
+    conventions; otherwise image_ref is used verbatim.
+
+    #33 S4: previously checked `startswith("/project")` with no trailing
+    slash -- a substring match that happened to also match an unqualified
+    ref beginning with the bare word "project" (e.g. a resource literally
+    named "projectXYZ") as if it were already fully qualified. The trailing
+    slash anchors the check to the actual path-segment delimiter.
     """
-    if project_name and not image_ref.startswith("/project"):
+    if project_name and not image_ref.startswith("/project/"):
         return _project_qs(project_name) + "/" + image_ref.lstrip("/")
     return image_ref
 

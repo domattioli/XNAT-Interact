@@ -361,6 +361,19 @@ def make_automated_pixel_confirmer(
     return _automated_confirmer
 
 
+def _find_invalid_rows( df ):
+    '''
+    #33 M4: return rows whose IS_VALID is not True.
+
+    `df['IS_VALID'] == False` misses NaN/None cells (NaN == False is False,
+    not True) that can appear if IS_VALID's dtype degrades to object due to a
+    mixed-type assignment -- those rows silently passed the invalid-rows gate.
+    `!= True` correctly treats NaN/None as "not valid" (NaN != True is True),
+    while still excluding rows that are actually True.
+    '''
+    return df[ df['IS_VALID'] != True ]    # noqa: E712 (intentional -- see docstring)
+
+
 #--------------------------------------------------------------------------------------------------------------------------
 ## Base class for all xnat experiment sessions.
 class ExperimentData():
@@ -1168,7 +1181,7 @@ class SourceRFSession( ExperimentData ):
         assert success, f"According to the config data, subject has already been uploaded to XNAT; error given:\n\t{msg}"
 
         # Lets fail this case if any of the images are already in the imagehash table
-        invalid_rows = self.df[self.df['IS_VALID'] == False]
+        invalid_rows = _find_invalid_rows( self.df )
         assert invalid_rows.empty, f"Session contains invalid images; check the following problematic rows:\n{invalid_rows}"
 
         # Zip the mp4 and dicom data to separate folders

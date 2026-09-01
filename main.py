@@ -306,7 +306,7 @@ def query_experiments_rest(validated_login: XNATLogin, project_name: str) -> pd.
     # Parse the JSON response
     try:
         data = response.json()
-    except ValueError as e:
+    except ValueError:
         fe = FriendlyError(
             title="Invalid JSON response from XNAT",
             message="The XNAT server response could not be parsed as JSON.",

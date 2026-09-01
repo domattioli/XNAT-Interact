@@ -882,7 +882,7 @@ class ExperimentData():
                 status_text = f'\t...Successfully published {self.schema_prefix_str} session to XNAT!\nAttempting to push config data to XNAT...'
             except DedupReviewRequired:
                 raise  # propagate human-review signal — do NOT treat as upload error
-            except Exception as e:
+            except Exception:
                 status_text = f'\t!!! Failed to publish {self.schema_prefix_str} session to XNAT!\nChecking if subject was successfully pushed to xnat...'
                 if subj_inst.exists(): # type: ignore
                     status_text += '\n\t...Subject exists; attempting to delete subject...'
@@ -895,7 +895,7 @@ class ExperimentData():
             try:
                 config.push_to_xnat( verbose=verbose )
                 status_text = '\t...Successfully pushed config file to XNAT!'
-            except Exception as e:
+            except Exception:
                 status_text = '\t!!! Failed to push config file to XNAT!\nChecking if subject was successfully pushed to xnat...'
                 if subj_inst.exists(): # type: ignore
                     status_text += '\n\t...Subject exists; attempting to delete subject...'
@@ -1383,7 +1383,7 @@ class SourceESVSession( ExperimentData ):
         try:
             for video in self.mp4:
                 video.__del__()
-        except Exception as e:
+        except Exception:
             pass
 
 

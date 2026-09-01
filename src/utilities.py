@@ -468,7 +468,7 @@ class XNATConnection( UIDandMetaInfo ):
                 context="_verify_login, server.get('/')",
             )
             print(render(_fe))
-        except (SSLError, MaxRetryError) as e:
+        except (SSLError, MaxRetryError):
             print( "\t-- SSL Certificate is expired! -- Contact IIBI staff to renew; you cannot use XNAT until this is done!" )
         if self.project_handle is None:
             self._failed_tests['Project Handle is None'] = True

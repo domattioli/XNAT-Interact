@@ -495,7 +495,7 @@ class ORDataIntakeForm( ResourceFile ):
             self._assessment_title = self.running_text_file['SKILLS_ASSESSMENT_INFO']['ASSESSMENT_TITLE']
             self._assessor_hawk_id = self.running_text_file['SKILLS_ASSESSMENT_INFO']['ASSESSOR_UID']
             self._assessment_details = self.running_text_file['SKILLS_ASSESSMENT_INFO']['ASSESSMENT_DETAILS']
-        except Exception as e:
+        except Exception:
             if verbose:     print( '\t--- Only minimally required fields were found in the inputted form.' )
 
     
@@ -560,7 +560,7 @@ class ORDataIntakeForm( ResourceFile ):
             except KeyboardInterrupt:
                 print( '\n\n...User cancelled task via Ctrl+C...' )
                 sys.exit( 0 )
-            except (ValueError, OverflowError) as e:
+            except (ValueError, OverflowError):
                 num_attempts += 1
                 print( "Invalid date format. Please enter the date in YYYY-MM-DD format." )
         if num_attempts == max_num_attempts:

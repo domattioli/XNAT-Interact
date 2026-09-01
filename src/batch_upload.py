@@ -364,7 +364,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
                 performer_hawk_id_task = ast.literal_eval( formatted_str )
                 performer_hawk_id_task = {k.lower(): v for k, v in performer_hawk_id_task.items()}
                 assert isinstance( performer_hawk_id_task, dict ), "The input string was not in a valid format, e.g., {k1: v1; ...; kn: vn}."
-            except (ValueError, SyntaxError, KeyError, AssertionError) as e:
+            except (ValueError, SyntaxError, KeyError, AssertionError):
                 self._log_issue(
                     idx=idx,
                     column='Performer HawkID-Task',

@@ -175,7 +175,7 @@ def main():
                     result["error"] = error_msg[:300]
                     print("  outcome: ERROR")
 
-        except DedupReviewRequired as e:
+        except DedupReviewRequired:
             # Caught at publish_surgery level
             result["dedup_review_required"] = True
             result["observed"] = "reject"

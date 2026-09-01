@@ -9,12 +9,11 @@ from dateutil import parser
 import json
 from collections import OrderedDict
 import pandas as pd
-from pathlib import Path
 import pytz
 import string
 import difflib
 
-from src.utilities import UIDandMetaInfo, ConfigTables, USCentralDateTime, XNATLogin, USCentralDateTime
+from src.utilities import UIDandMetaInfo, ConfigTables, USCentralDateTime, XNATLogin
 
 
 # ---------------------------------------------------------------------------

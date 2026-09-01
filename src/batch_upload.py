@@ -12,12 +12,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from tabulate import tabulate
 import textwrap
-import ast
 from typing import List, Dict, Any, Tuple, AnyStr as typehintAnyStr
 from collections.abc import Hashable
-from tabulate import tabulate
 import requests
-from requests.adapters import HTTPAdapter
 import difflib
 
 from src.utilities import ConfigTables, XNATConnection, UIDandMetaInfo

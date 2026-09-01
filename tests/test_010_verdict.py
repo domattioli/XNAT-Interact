@@ -17,10 +17,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import os
 import tempfile
 from pathlib import Path
-from typing import List
 
 import numpy as np
 import pytest
@@ -35,7 +33,6 @@ from src.services.pixel_deid.verdict import (
 from tests.synthetic_data import (
     make_burned_in_phi_pixel_array,
     make_faint_burned_in_phi_pixel_array,
-    make_multiframe_phi_case,
     make_profiled_device_dataset,
     make_unprofiled_device_dataset,
 )
@@ -485,7 +482,6 @@ class TestImportCost:
         (Verified by importing here — the test suite already imported the module
         at collection time; this test just documents the requirement.)
         """
-        import sys
         # If presidio_analyzer is NOT installed, this module must still import.
         # If it IS installed, it must not have been loaded at module-import time.
         # We simply verify the module itself is importable without error.

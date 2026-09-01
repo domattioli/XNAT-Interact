@@ -11,13 +11,11 @@ Also covers the migrate_sqlite_to_pg code path offline (sqlite→sqlite-core).
 from __future__ import annotations
 
 import os
-import tempfile
 from pathlib import Path
 
 import pytest
 
-from src.services.registry import MigrationReport, Registry
-from src.services.xnat_gateway import GatewayError
+from src.services.registry import Registry
 
 sqlalchemy = pytest.importorskip("sqlalchemy", reason="sqlalchemy not installed")
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 from pathlib import Path
 
-from tests.fakes.fake_xnat import FakeXNAT, FakeSelectable, FakeResource, FakeFile, FakeProject
+from tests.fakes.fake_xnat import FakeXNAT, FakeSelectable, FakeResource, FakeProject
 
 
 # ---------------------------------------------------------------------------

@@ -17,7 +17,7 @@ Also computes raw-byte sha256 and 16x16 aHash (average-hash) as comparison colum
 import json
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 import hashlib
 
 import numpy as np

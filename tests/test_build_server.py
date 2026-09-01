@@ -14,7 +14,6 @@ from __future__ import annotations
 from unittest import mock
 from typing import Any
 
-import pytest
 
 # Import the function under test.
 from src.services.xnat_gateway import build_server

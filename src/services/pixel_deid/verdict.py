@@ -32,7 +32,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
@@ -102,7 +102,7 @@ def _get_analyzer():
     if _analyzer is not None:
         return _analyzer
 
-    from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
+    from presidio_analyzer import AnalyzerEngine
     from presidio_analyzer.nlp_engine import NlpEngineProvider
 
     # Build the NLP engine (spaCy en_core_web_lg if available; small otherwise).
@@ -506,7 +506,7 @@ def _check_phi_outside_mask(
 
     for frame in frames:
         try:
-            from src.services.pixel_deid.detect import union_dilate, tesseract_boxes, image_variants
+            from src.services.pixel_deid.detect import tesseract_boxes, image_variants
             for _name, variant in image_variants(frame).items():
                 for box in tesseract_boxes(variant):
                     crop_text = _ocr_crop([frame], box)

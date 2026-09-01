@@ -9,7 +9,7 @@ import pkg_resources
 import importlib
 import sys
 import os
-from typing import Optional, Tuple
+from typing import Optional
 from pathlib import Path
 
 

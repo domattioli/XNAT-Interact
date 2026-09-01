@@ -13,7 +13,6 @@ Step 4  Upload        — progress spinner; success summary or FriendlyError pan
 """
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import streamlit as st

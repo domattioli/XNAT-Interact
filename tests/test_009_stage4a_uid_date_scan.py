@@ -11,7 +11,6 @@ Offline only. No real server, no PHI.
 """
 from __future__ import annotations
 
-import hashlib
 import pandas as pd
 import pytest
 from types import SimpleNamespace
@@ -226,7 +225,6 @@ class TestNoReadableOldStudyDate:
 
     def test_case_date_hash_present_when_salt_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """When XNAT_IDENTITY_SALT is set, (0x0019,0x1001) contains CaseDateHash."""
-        import os
         monkeypatch.setenv("XNAT_IDENTITY_SALT", "deadbeef" * 8)
 
         orig_date = "20230115"
@@ -275,7 +273,6 @@ class TestScanParamSelectable:
 
     def _make_session(self) -> Any:
         """Minimal SourceRFSession-shaped object."""
-        import types
         import src.xnat_experiment_data as _mod
 
         class _Stub:
@@ -290,7 +287,6 @@ class TestScanParamSelectable:
 
     def test_default_scan_is_zero(self) -> None:
         """No scan arg → scan_label='0' in the generated query string."""
-        from src.services import xnat_conventions as conventions
         session = self._make_session()
         conn = self._make_connection()
         _, _, scan_qs, _, _ = session._generate_queries(conn)

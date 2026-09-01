@@ -23,9 +23,7 @@ from __future__ import annotations
 import shutil
 import time
 from pathlib import Path
-from typing import Optional
 
-import numpy as np
 import pytest
 
 from src.services.pixel_deid.batch import assess_batch, batch_summary

@@ -16,8 +16,7 @@ Tests inject a FakeXNAT-backed factory.
 """
 from __future__ import annotations
 
-import ssl as _ssl
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from src.services.config import AppConfig

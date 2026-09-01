@@ -22,14 +22,14 @@ import uuid
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional, Tuple
 
 import pytest
 
 from src.xnat_experiment_data import ExperimentData, ReviewDecision
 from src.services import xnat_conventions as conventions
 from tests.fakes.fake_xnat import FakeXNAT
-from app.logic.download import download_selection, list_downloadable
+from app.logic.download import download_selection
 from tests.contract.comparator import XnatStateComparator
 
 try:

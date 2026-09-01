@@ -186,7 +186,6 @@ def _build_seed_config(username: str) -> str:
     Construct the minimal database_config.json that ConfigTables expects.
     Mirrors what _instantiate_json_file + _initialize_tables would create.
     """
-    import pandas as pd
     from src.utilities import UIDandMetaInfo
     uid_gen = UIDandMetaInfo()
     now = uid_gen.now_datetime

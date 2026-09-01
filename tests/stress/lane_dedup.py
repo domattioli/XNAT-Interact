@@ -191,7 +191,6 @@ def main():
                 pass
 
         except Exception as e:
-            import traceback
             error_msg = f"{type(e).__name__}: {str(e)}"
             result["error"] = error_msg[:300]
             result["observed"] = "error"

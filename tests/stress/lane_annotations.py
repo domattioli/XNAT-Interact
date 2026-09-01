@@ -123,7 +123,6 @@ def step_publish_surgery(
 
             # Create 1 surgery with 3 DICOM frames using factory
             # Use timestamp + random to make each run unique
-            import uuid
             rng_seed = int(time.time() * 1000000) % 100000000
             surgery_uid = f"ANNOT_SURGERY_{rng_seed}"
             # Use diverse seed values to get different pixel content each run

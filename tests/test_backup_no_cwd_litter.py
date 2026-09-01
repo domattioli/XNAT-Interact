@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import tempfile
 import types
 from pathlib import Path
 from typing import Any

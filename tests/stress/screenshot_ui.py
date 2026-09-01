@@ -10,7 +10,6 @@ Not a pytest test — a one-shot demo-asset generator. Run:
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 
 OUT = Path("docs/site/assets/ui")

@@ -10,10 +10,9 @@ Exit: 0 if ALL assertions pass; non-zero with failing section name otherwise.
 from __future__ import annotations
 
 import sys
-import os
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List
 
 # ---------------------------------------------------------------------------
 # Ensure repo root is on sys.path so `app`, `src`, `installer`, `tests`
@@ -31,20 +30,20 @@ from tests.synthetic_data import (                                      # noqa: 
     make_burned_in_phi_pixel_array,
     make_mixed_validity_batch_xlsx,
 )
-from app.logic.auth import attempt_login, LoginResult                   # noqa: E402
+from app.logic.auth import attempt_login                   # noqa: E402
 from app.logic.browse import fetch_data_table, filter_rows              # noqa: E402
 from app.logic.upload import prepare_and_upload                         # noqa: E402
 from app.logic.batch import load_batch, validate_batch, run_batch, rerun_failed_rows  # noqa: E402
 from app.logic.download import list_downloadable, download_selection    # noqa: E402
 from app.logic.onboarding import check_onboarding, build_access_request # noqa: E402
 from app.logic.metrics import (                                          # noqa: E402
-    record_event, record_first_upload, summarize, ALLOWED_EVENT_NAMES,
+    record_event, record_first_upload, summarize,
 )
 from app.logic.learn import learn_snippets                               # noqa: E402
 from src.services.deidentify import (                                   # noqa: E402
     deidentify_dataset, needs_pixel_review, apply_redaction,
 )
-from src.services.errors import FriendlyError, render as render_error   # noqa: E402
+from src.services.errors import render as render_error   # noqa: E402
 from src.xnat_experiment_data import ReviewDecision                     # noqa: E402
 from installer.python_detect import detect_python                       # noqa: E402
 from installer.update_checker import check_for_update                   # noqa: E402

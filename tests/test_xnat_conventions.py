@@ -7,7 +7,6 @@ currently embedded in xnat_experiment_data.py, xnat_resource_data.py,
 utilities.py, and annotations/io_xnat.py.
 """
 
-import pytest
 from src.services.xnat_conventions import (
     SCAN_DEFAULT,
     project_qs,

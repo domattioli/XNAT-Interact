@@ -24,7 +24,6 @@ Covers (T013→T015b):
 """
 from __future__ import annotations
 
-import io
 import sys
 import zipfile
 from pathlib import Path
@@ -36,7 +35,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from app.logic.download import download_selection, list_downloadable, DownloadOutcome
+from app.logic.download import download_selection, list_downloadable
 from src.services.errors import FriendlyError
 from tests.fakes.fake_xnat import FakeXNAT, FakeResource
 

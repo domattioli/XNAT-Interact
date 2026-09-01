@@ -8,8 +8,6 @@ and UNIQUE constraint enforcement on PG side.
 from __future__ import annotations
 
 import os
-import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -73,7 +71,7 @@ def test_pg_unique_enforced_after_migrate(sqlite_source):
     must not duplicate the row (ON CONFLICT DO UPDATE).
     """
     from src.services.registry_backend import migrate_sqlite_to_pg, CoreRegistry, make_engine
-    from sqlalchemy import select, func, text
+    from sqlalchemy import select, func
 
     migrate_sqlite_to_pg(str(sqlite_source), PG_DSN)
     pg = CoreRegistry(make_engine(PG_DSN))

@@ -10,10 +10,9 @@ The fallbacks allow the browse UI to work against real pyxnat.Interface
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List
 from unittest.mock import MagicMock
 
-import pytest
 
 from app.logic.browse import (
     _experiment_labels,
@@ -22,7 +21,6 @@ from app.logic.browse import (
     fetch_data_table,
     COLUMNS,
 )
-from tests.fakes.fake_xnat import FakeXNAT
 
 
 # ---------------------------------------------------------------------------

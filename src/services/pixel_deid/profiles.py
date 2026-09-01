@@ -28,9 +28,8 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
-import numpy as np
 
 logger = logging.getLogger(__name__)
 

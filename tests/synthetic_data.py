@@ -41,7 +41,6 @@ def make_phi_dicom_dataset(
     Returned dataset is what the de-identification routine is supposed to scrub.
     Kept in-memory (not written to disk) so de-id logic can be tested directly.
     """
-    import pydicom
     from pydicom.dataset import FileDataset, FileMetaDataset
     from pydicom.uid import (
         ExplicitVRLittleEndian,
@@ -321,7 +320,6 @@ def make_unprofiled_device_dataset(
     pydicom.dataset.FileDataset
         A DICOM dataset with burned-in PHI, no device profile.
     """
-    import pydicom
     from pydicom.dataset import FileDataset, FileMetaDataset
     from pydicom.uid import (
         ExplicitVRLittleEndian,
@@ -404,7 +402,6 @@ def make_profiled_device_dataset(
     pydicom.dataset.FileDataset
         A DICOM dataset with burned-in PHI and device identification.
     """
-    import pydicom
     from pydicom.dataset import FileDataset, FileMetaDataset
     from pydicom.uid import (
         ExplicitVRLittleEndian,

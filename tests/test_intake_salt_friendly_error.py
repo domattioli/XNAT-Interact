@@ -15,7 +15,6 @@ from __future__ import annotations
 import pytest
 
 from src.services.xnat_gateway import GatewayError
-from src.xnat_resource_data import pseudonymize_surgeon_ids
 
 
 # ---------------------------------------------------------------------------

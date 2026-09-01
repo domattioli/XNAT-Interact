@@ -35,7 +35,6 @@ Stage 3 routes all call sites to these builders; Stage 2 only defines them.
 """
 
 from pathlib import PurePosixPath
-from typing import Optional
 
 
 # Default scan label — XNAT sessions can hold multiple scans; we use one.

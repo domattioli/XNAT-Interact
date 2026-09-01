@@ -8,7 +8,6 @@ no real PATH traversal.  Tests cover every branch of the detection logic.
 """
 from __future__ import annotations
 
-import pytest
 
 from installer.python_detect import DetectResult, detect_python
 

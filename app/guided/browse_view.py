@@ -16,7 +16,7 @@ import streamlit as st
 
 from app.guided import components, wizard_state
 from app.logic.browse import fetch_data_table
-from app.logic.download import download_selection, list_downloadable
+from app.logic.download import download_selection
 from src.services.errors import FriendlyError
 
 

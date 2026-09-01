@@ -18,7 +18,7 @@ import sys
 import time
 from pathlib import Path
 from datetime import datetime
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
 
 
 # Ensure env vars set BEFORE importing src

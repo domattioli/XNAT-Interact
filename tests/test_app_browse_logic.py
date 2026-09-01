@@ -316,7 +316,7 @@ def test_display_frame_maps_all_columns_correctly():
     display shows exactly 5 renamed headers, scan_id is absent.
     """
     # Import here to avoid top-level streamlit import in test file
-    from app.pages.browse import _display_frame, DISPLAY_MAP
+    from app.pages.browse import _display_frame
 
     # Sample row with all 6 COLUMNS keys
     filtered = [

@@ -14,7 +14,6 @@ Covers:
 """
 from __future__ import annotations
 
-import pytest
 
 from installer.python_detect import DetectResult
 from installer.launcher import (

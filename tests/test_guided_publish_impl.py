@@ -9,7 +9,6 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-import pytest
 
 from app.guided.demo import build_demo_server
 from app.guided.publish_impl import make_publish_fn

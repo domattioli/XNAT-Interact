@@ -17,11 +17,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import sys
-import tempfile
 import types
-import unittest.mock as mock
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +32,6 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tests.fakes.fake_xnat import FakeXNAT
-from src.services.errors import FriendlyError
 
 
 # ---------------------------------------------------------------------------

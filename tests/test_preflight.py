@@ -14,9 +14,7 @@ No real network required.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
-import pytest
 
 from src.services.errors import FriendlyError
 from src.services.preflight import (

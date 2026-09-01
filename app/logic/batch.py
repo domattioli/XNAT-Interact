@@ -15,7 +15,7 @@ from __future__ import annotations
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, Callable, List, Optional
 
 import pandas as pd
 

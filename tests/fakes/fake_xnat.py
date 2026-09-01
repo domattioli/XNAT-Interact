@@ -49,7 +49,6 @@ Failure injection:
 """
 from __future__ import annotations
 
-import shutil
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
 

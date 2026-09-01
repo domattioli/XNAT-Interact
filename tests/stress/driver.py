@@ -14,10 +14,8 @@ import os
 import tempfile
 import traceback
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
-import pydicom
 import requests
 
 
@@ -296,7 +294,6 @@ def publish_surgery(
             print(f"  [publish_surgery] uid={uid}, n_files={n_files}")
 
         # STEP 5: build intake series
-        from src.utilities import XNATLogin
 
         intake_series_index = [
             "Case Name [Optional]",

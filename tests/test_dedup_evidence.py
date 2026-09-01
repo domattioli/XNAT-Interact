@@ -12,7 +12,6 @@ No live XNAT required.  No RUN_XNAT_DUAL gate.
 from __future__ import annotations
 
 import hashlib
-import tempfile
 from pathlib import Path
 from typing import Set
 

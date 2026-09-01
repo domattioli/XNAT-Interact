@@ -14,16 +14,14 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import sqlite3
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
 from src.services.deploy_009 import deploy
-from src.services.registry import MigrationReport, Registry
+from src.services.registry import Registry
 
 # ---------------------------------------------------------------------------
 # Shared fixture helpers

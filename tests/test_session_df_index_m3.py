@@ -14,7 +14,6 @@ from __future__ import annotations
 import types
 
 import pandas as pd
-import pytest
 from types import SimpleNamespace
 from typing import Any
 

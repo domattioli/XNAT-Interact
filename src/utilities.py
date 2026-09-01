@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 from dateutil import parser
 import pytz
 import hashlib

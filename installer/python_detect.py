@@ -25,7 +25,7 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
-from typing import Callable, Iterable, Optional, Sequence, Tuple
+from typing import Callable, Iterable, Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # Result type

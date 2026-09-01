@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Any, List
 from unittest.mock import MagicMock
 
-import numpy as np
 import pandas as pd
 import pytest
 

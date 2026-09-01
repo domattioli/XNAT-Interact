@@ -13,13 +13,12 @@ No live server required — all tests use mocked requests.
 from __future__ import annotations
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import pandas as pd
 from requests.auth import HTTPBasicAuth
 from requests.exceptions import HTTPError, RequestException
 
 from main import query_experiments_rest
-from src.services.errors import FriendlyError
 from src.utilities import XNATLogin
 
 

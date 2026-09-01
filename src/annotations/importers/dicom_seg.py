@@ -20,7 +20,7 @@ Unsupported corners (documented):
 """
 from __future__ import annotations
 
-from typing import List, Optional, Any
+from typing import List, Any
 
 import numpy as np
 
@@ -68,7 +68,6 @@ def from_dicom_seg(ds: Any) -> List[Annotation]:
         - FRACTIONAL segmentation type.
         - Segments with no corresponding frame (mask returned as all-zeros).
     """
-    import pydicom
 
     # ---- Validate dataset has SegmentSequence ----
     if not hasattr(ds, "SegmentSequence") or not ds.SegmentSequence:
@@ -278,7 +277,6 @@ def to_dicom_seg(
         - Only 2-D (single-slice) masks.
         - No per-frame functional groups written for geometry (position/orientation).
     """
-    import pydicom
     from pydicom.dataset import Dataset, FileDataset, FileMetaDataset
     from pydicom.sequence import Sequence
     from pydicom.uid import (

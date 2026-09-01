@@ -14,9 +14,7 @@ NO network, NO real XNAT server. Uses FakeXNAT + offline stubs only.
 from __future__ import annotations
 
 import sys
-import types
 from pathlib import Path
-from typing import Any
 from unittest import mock
 
 import pytest

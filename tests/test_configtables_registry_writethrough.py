@@ -16,10 +16,9 @@ from __future__ import annotations
 
 import types
 from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock
 
 import pandas as pd
-import pytest
 
 from src.services.registry import Registry
 from src.utilities import ConfigTables

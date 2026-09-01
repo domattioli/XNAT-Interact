@@ -12,11 +12,9 @@ from __future__ import annotations
 
 import inspect
 from pathlib import Path
-from typing import get_type_hints
 
 import pytest
 
-from src.services.errors import FriendlyError
 from src.services.xnat_gateway import XnatGateway, PyxnatGateway, GatewayError
 from tests.fakes.fake_xnat import FakeXNAT, FakeGateway
 

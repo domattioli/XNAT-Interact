@@ -114,7 +114,6 @@ class _MinimalRFSessionForMetadata:
 
         # Inject num_valid_shots into the method's globals so the real code can see it.
         # This is a bit of a hack but necessary to test the real code path.
-        import types as t
         code = _mod.SourceRFSession._mine_session_metadata.__code__
         # Instead, we'll call it via the real class and just catch/verify the error
         bound()

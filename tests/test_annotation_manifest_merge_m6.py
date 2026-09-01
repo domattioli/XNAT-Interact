@@ -15,10 +15,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import List
 
 import numpy as np
-import pytest
 
 from tests.fakes.fake_xnat import FakeXNAT
 from src.annotations.model import Annotation, AnnotationSet

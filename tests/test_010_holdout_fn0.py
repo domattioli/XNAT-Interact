@@ -12,9 +12,7 @@ The absence of detection on an unknown device is NOT proof of clean (FR-006).
 from __future__ import annotations
 
 import shutil
-import tempfile
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import pytest
@@ -116,8 +114,6 @@ class TestFN0Holdout:
 
     def _cell_profiled_crisp(self) -> HoldoutCell:
         """Cell 1: profiled + crisp PHI rendered INTO the profile box region."""
-        import numpy as np
-        import cv2
         from tests.synthetic_data import make_burned_in_phi_pixel_array
 
         # Profile box (0,48,150,70) — 128×256 frame, text renders at y≈52-65 (inside box)

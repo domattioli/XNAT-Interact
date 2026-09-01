@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
 import streamlit as st
 

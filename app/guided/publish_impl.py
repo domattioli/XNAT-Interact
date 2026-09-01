@@ -14,8 +14,6 @@ Real pyxnat path: drives the full pipeline from tests/stress/driver.py
 from __future__ import annotations
 
 import os
-import tempfile
-import traceback
 from pathlib import Path
 from typing import Any, Callable
 
@@ -168,11 +166,10 @@ def _make_real_publish_fn(server: Any) -> Callable:
         image_dir: Any,
         pixel_review_confirmer: Any,
     ) -> None:
-        import json
         import time
         import pandas as pd
 
-        from src.xnat_experiment_data import ReviewDecision, SourceRFSession
+        from src.xnat_experiment_data import SourceRFSession
         from src.xnat_resource_data import ORDataIntakeForm
 
         # Ensure XNAT_IDENTITY_SALT is set (demo default — must be a valid hex string).

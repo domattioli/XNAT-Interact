@@ -10,8 +10,6 @@ RULES:
 """
 from __future__ import annotations
 
-import sqlite3
-import tempfile
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -24,7 +22,6 @@ from src.xnat_experiment_data import (
     DedupReviewRequired,
     ExperimentData,
     ReviewDecision,
-    UploadError,
 )
 from tests.fakes.fake_xnat import FakeXNAT
 

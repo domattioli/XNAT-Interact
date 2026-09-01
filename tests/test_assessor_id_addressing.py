@@ -18,13 +18,10 @@ Coverage:
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from unittest.mock import Mock, call
+from unittest.mock import Mock
 
-import pytest
 
-from src.services.xnat_gateway import PyxnatGateway, GatewayError
-from src.services.errors import FriendlyError
+from src.services.xnat_gateway import PyxnatGateway
 
 
 # ---------------------------------------------------------------------------

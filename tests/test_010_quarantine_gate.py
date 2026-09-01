@@ -17,11 +17,9 @@ All fixtures are synthetic; no real PHI is used anywhere.
 from __future__ import annotations
 
 import json
-import tempfile
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
-from typing import List, Tuple
 
 import numpy as np
 import pytest
@@ -745,7 +743,6 @@ class TestMakeAutomatedPixelConfirmer:
     def test_factory_returns_callable(self) -> None:
         """make_automated_pixel_confirmer must return a callable."""
         frames = [np.zeros((64, 256), dtype=np.uint8)]
-        import pydicom
         from pydicom.dataset import FileDataset, FileMetaDataset
         from pydicom.uid import ExplicitVRLittleEndian, SecondaryCaptureImageStorage, generate_uid
 
@@ -763,7 +760,6 @@ class TestMakeAutomatedPixelConfirmer:
 
     def test_factory_with_quarantine_store_returns_callable(self, tmp_path: Path) -> None:
         """Factory must accept quarantine_store and case_id kwargs without error."""
-        import pydicom
         from pydicom.dataset import FileDataset, FileMetaDataset
         from pydicom.uid import ExplicitVRLittleEndian, SecondaryCaptureImageStorage, generate_uid
 

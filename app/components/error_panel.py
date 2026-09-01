@@ -5,7 +5,6 @@ Never shows a raw traceback.  Always surfaces title + message + recourse.
 """
 from __future__ import annotations
 
-from typing import Optional
 
 import streamlit as st
 

@@ -20,14 +20,13 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 import numpy as np
 import pytest
 
 # Only import from app/logic (no streamlit) + src.* + tests.fakes.
 from app.logic.upload import (
-    UploadOutcome,
     dropdown_options,
     prepare_and_upload,
     upload_preview,

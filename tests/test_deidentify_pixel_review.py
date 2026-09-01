@@ -12,7 +12,6 @@ All tests are offline, no PHI, no network.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from src.services.deidentify import apply_redaction, needs_pixel_review
 from tests.synthetic_data import make_burned_in_phi_pixel_array

@@ -64,7 +64,6 @@ def no_instance_number(dir_path: Path, seed: int = 1) -> Path:
         Path to the .dcm file without InstanceNumber.
     """
     from tests.synthetic_data import make_phi_dicom_dataset
-    import pydicom
 
     dir_path = Path(dir_path)
     dir_path.mkdir(parents=True, exist_ok=True)
@@ -100,7 +99,6 @@ def three_channel(dir_path: Path, seed: int = 2) -> Path:
         Path to the 3-channel .dcm file.
     """
     from tests.synthetic_data import make_phi_dicom_dataset
-    import pydicom
 
     dir_path = Path(dir_path)
     dir_path.mkdir(parents=True, exist_ok=True)

@@ -26,8 +26,7 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-from app.logic.download import download_selection, DownloadOutcome
-from src.services.errors import FriendlyError
+from app.logic.download import download_selection
 from tests.fakes.fake_xnat import FakeXNAT, FakeResource
 
 

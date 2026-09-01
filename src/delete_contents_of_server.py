@@ -22,10 +22,10 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Any, List
+from typing import List
 
 from src.services.config import AppConfig
-from src.services.errors import FriendlyError, handle, render
+from src.services.errors import handle, render
 from src.services.xnat_gateway import XnatGateway, build_gateway as _build_gateway
 from src.services.xnat_conventions import project_qs as _project_qs, subject_qs as _subject_qs
 

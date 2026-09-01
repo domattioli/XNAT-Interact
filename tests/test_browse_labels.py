@@ -28,7 +28,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from app.logic.browse import fetch_data_table, COLUMNS
 from app.logic.download import list_downloadable
 from src.services.errors import FriendlyError
 from tests.fakes.fake_xnat import FakeXNAT

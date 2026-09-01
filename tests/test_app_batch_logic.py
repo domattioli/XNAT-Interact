@@ -29,11 +29,10 @@ Full Path to Data — which are absent from the synthetic xlsx. So:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 from unittest.mock import MagicMock
 
 import pandas as pd
-import pytest
 
 from app.logic.batch import (
     RowValidation,

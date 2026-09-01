@@ -34,7 +34,6 @@ import pytest
 from app.logic.metrics import (
     ALLOWED_EVENT_NAMES,
     ALLOWED_FIELD_KEYS,
-    ALLOWED_SCREEN_VALUES,
     MetricEvent,
     make_session_token,
     record_app_opened,

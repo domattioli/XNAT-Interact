@@ -1,6 +1,5 @@
 """Tests for app.guided.browse_view — offline, no streamlit mocking needed."""
 import pytest
-import pandas as pd
 from app.guided.demo import build_demo_server
 from app.guided.browse_view import _browse_display_frame
 from app.logic.browse import fetch_data_table

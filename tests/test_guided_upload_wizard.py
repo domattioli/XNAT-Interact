@@ -10,7 +10,6 @@ skipping privacy check, etc.).
 """
 from __future__ import annotations
 
-import pytest
 
 # Only import from app/logic and our wizard (which must not import streamlit directly)
 from app.guided.wizard_upload import step_blockers

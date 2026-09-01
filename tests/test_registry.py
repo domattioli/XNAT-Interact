@@ -8,12 +8,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import tempfile
 from pathlib import Path
 
 import pytest
 
-from src.services.registry import CrosswalkStore, MigrationReport, Registry
+from src.services.registry import CrosswalkStore, Registry
 from src.services.xnat_gateway import GatewayError
 
 

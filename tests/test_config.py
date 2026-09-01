@@ -12,7 +12,6 @@ Rules verified:
 from __future__ import annotations
 
 import json
-import os
 import pytest
 from pathlib import Path
 

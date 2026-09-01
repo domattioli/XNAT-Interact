@@ -11,13 +11,11 @@ No network, no PHI, no credentials.
 """
 from __future__ import annotations
 
-import io
-import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 import pytest
 
-from tests.fakes.fake_xnat import FakeXNAT, FakeSelectable, FakeResource, FakeFile
+from tests.fakes.fake_xnat import FakeXNAT, FakeSelectable
 
 # ---------------------------------------------------------------------------
 # Extended fake that supports .select(...).get() for the subjects wildcard

@@ -19,7 +19,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
 
 import pytest
 
@@ -88,8 +87,6 @@ def _make_config_tables_stub(
     if project_users is None:
         project_users = ["testuser"]
 
-    from src.utilities import UIDandMetaInfo
-    from unittest.mock import patch, PropertyMock
 
     fake_xnat = FakeXNAT(project_name=project_name, project_users=project_users)
     login_info = SimpleNamespace(

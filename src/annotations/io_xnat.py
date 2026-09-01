@@ -48,7 +48,7 @@ from src.services.errors import FriendlyError, handle as _handle
 from src.annotations.model import AnnotationSet
 from src.annotations.registry import get_type
 from src.annotations.codecs import get_codec
-from src.services.xnat_conventions import ResourceLabel as _ResourceLabel, project_qs as _project_qs
+from src.services.xnat_conventions import project_qs as _project_qs
 
 
 # ---------------------------------------------------------------------------

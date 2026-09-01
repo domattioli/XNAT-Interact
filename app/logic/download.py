@@ -26,13 +26,12 @@ Legacy bugs avoided (from main.py ~388-404)
 """
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, List, Optional, Union
 
 from src.services.errors import FriendlyError
-from app.logic.browse import fetch_data_table, COLUMNS
+from app.logic.browse import fetch_data_table
 
 
 # ---------------------------------------------------------------------------

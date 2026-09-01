@@ -17,7 +17,7 @@ import uuid
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, Generator, List, Optional
+from typing import Any, Dict
 
 import pytest
 
@@ -187,7 +187,6 @@ def synthetic_rf_dicom_missing_instance_number(tmp_path: Path) -> Path:
 
     This requires custom generation since make_synthetic_dicom always includes all tags.
     """
-    import pydicom
     from pydicom.dataset import FileDataset, FileMetaDataset
     from pydicom.uid import (
         ExplicitVRLittleEndian,
@@ -233,7 +232,6 @@ def synthetic_rf_dicom_missing_instance_number(tmp_path: Path) -> Path:
 def synthetic_ct_dicom(tmp_path: Path) -> Path:
     """Generate a synthetic CT DICOM file (for mixed-modality test T005)."""
     # Reuse make_synthetic_dicom but change modality
-    import pydicom
     from pydicom.dataset import FileDataset, FileMetaDataset
     from pydicom.uid import (
         ExplicitVRLittleEndian,

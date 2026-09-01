@@ -8,9 +8,7 @@ All tests are offline — no XNAT server, no VPN, no PHI.
 """
 from __future__ import annotations
 
-import pytest
 
-from src.services.identity import surgeon_pseudonym
 from src.xnat_resource_data import pseudonymize_surgeon_ids
 from src.services import xnat_conventions as conventions
 from tests.fakes.fake_xnat import FakeXNAT

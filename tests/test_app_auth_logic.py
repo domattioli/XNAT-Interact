@@ -22,7 +22,7 @@ from typing import Any
 import pytest
 
 # Only import from app/logic (no streamlit) and existing test infrastructure.
-from app.logic.auth import attempt_login, LoginResult
+from app.logic.auth import attempt_login
 from src.services.errors import FriendlyError
 from src.services.config import AppConfig
 from tests.fakes.fake_xnat import FakeXNAT

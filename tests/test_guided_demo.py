@@ -6,8 +6,6 @@ and login flow. No real XNAT server; all operations against FakeXNAT.
 """
 from __future__ import annotations
 
-import os
-from typing import List
 
 import pytest
 

@@ -8,7 +8,6 @@ from __future__ import annotations
 import re
 import sys
 
-import pytest
 
 # ---------------------------------------------------------------------------
 # Guard: streamlit must NOT be importable in the test env

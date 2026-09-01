@@ -12,20 +12,11 @@ Covers:
 from __future__ import annotations
 
 import base64
-import io
-from typing import Any
 
 import cv2
 import numpy as np
 import pytest
-import pydicom
-from pydicom.dataset import Dataset, FileDataset, FileMetaDataset
-from pydicom.sequence import Sequence
-from pydicom.uid import (
-    ExplicitVRLittleEndian,
-    SegmentationStorage,
-    generate_uid,
-)
+from pydicom.dataset import Dataset
 
 from src.annotations.exc import AnnotationError
 from src.annotations.model import Annotation

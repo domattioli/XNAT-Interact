@@ -76,7 +76,6 @@ def _default_candidates_provider() -> Iterable[str]:
 
     # --- Common non-PATH locations (Windows) ---
     if sys.platform == "win32":
-        import os.path
         local_app = os.environ.get("LOCALAPPDATA", "")
         program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
         pf_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")

@@ -114,7 +114,7 @@ def step_publish_surgery(
         )
 
         if verbose:
-            print(f"  Connected. Creating fresh DICOM directory...")
+            print("  Connected. Creating fresh DICOM directory...")
 
         # Create a single surgery with DICOM frames
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -153,7 +153,7 @@ def step_publish_surgery(
                 return False, None, pub_result.get("error"), pub_result
 
             if verbose:
-                print(f"  Surgery published. Querying experiments...")
+                print("  Surgery published. Querying experiments...")
 
             # Find the experiment ID that was just created
             # assessments contain experiments (via /assessors endpoint)
@@ -214,7 +214,7 @@ def step_publish_surgery(
                                 )
 
                 if verbose:
-                    print(f"  No experiments found")
+                    print("  No experiments found")
 
             except Exception as e:
                 if verbose:

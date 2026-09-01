@@ -73,7 +73,7 @@ def main():
     from src.xnat_experiment_data import DedupReviewRequired
 
     print("=" * 70)
-    print(f"DEDUP STRESS TEST")
+    print("DEDUP STRESS TEST")
     print(f"  project:  {args.project}")
     print(f"  url:      {args.url}")
     print("=" * 70)
@@ -119,7 +119,7 @@ def main():
     shutil.rmtree(temp_dir, ignore_errors=True)
 
     # STEP 2: Overlap test cases
-    print(f"\nOVERLAP TEST CASES:")
+    print("\nOVERLAP TEST CASES:")
     print("-" * 70)
 
     overlap_test_cases = overlap_cases(base_seeds)
@@ -163,23 +163,23 @@ def main():
 
             if pub_result["ok"]:
                 result["observed"] = "accept"
-                print(f"  outcome: ACCEPTED (ok=True)")
+                print("  outcome: ACCEPTED (ok=True)")
             else:
                 error_msg = pub_result.get("error", "")
                 if "DedupReviewRequired" in error_msg:
                     result["dedup_review_required"] = True
                     result["observed"] = "reject"
-                    print(f"  outcome: REJECTED (DedupReviewRequired)")
+                    print("  outcome: REJECTED (DedupReviewRequired)")
                 else:
                     result["observed"] = "error"
                     result["error"] = error_msg[:300]
-                    print(f"  outcome: ERROR")
+                    print("  outcome: ERROR")
 
         except DedupReviewRequired as e:
             # Caught at publish_surgery level
             result["dedup_review_required"] = True
             result["observed"] = "reject"
-            print(f"  outcome: REJECTED (DedupReviewRequired)")
+            print("  outcome: REJECTED (DedupReviewRequired)")
 
             # Try to get inventory after
             try:

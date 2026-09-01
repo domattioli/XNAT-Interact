@@ -70,7 +70,7 @@ def main():
     from tests.stress.factory import make_surgery
 
     print("=" * 70)
-    print(f"VOLUME STRESS TEST")
+    print("VOLUME STRESS TEST")
     print(f"  surgeries:  {args.surgeries}")
     print(f"  frames:     {args.frames}")
     print(f"  project:    {args.project}")
@@ -153,7 +153,7 @@ def main():
             print(f"  empty shells: {shells}")
             results["empty_shells"] = shells
         else:
-            print(f"  empty shells: none")
+            print("  empty shells: none")
             results["empty_shells"] = []
 
         results["inventory"] = inv

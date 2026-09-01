@@ -161,9 +161,9 @@ class TestCleanupOnFailure:
         subj_qs = f"/project/TEST_PROJECT/subject/{intake.uid}"
         exp_qs = f"{subj_qs}/experiment/SOURCE_DATA-{intake.uid}"
         scan_qs = f"{exp_qs}/scan/0"
-        assert not fake.exists(subj_qs), f"subject should be deleted, but exists() returned True"
-        assert not fake.exists(exp_qs), f"experiment should be deleted, but exists() returned True"
-        assert not fake.exists(scan_qs), f"scan should be deleted, but exists() returned True"
+        assert not fake.exists(subj_qs), "subject should be deleted, but exists() returned True"
+        assert not fake.exists(exp_qs), "experiment should be deleted, but exists() returned True"
+        assert not fake.exists(scan_qs), "scan should be deleted, but exists() returned True"
 
     def test_success_path_unchanged(self, tmp_path, fake_zip):
         """Successful upload has no deletes; all objects + files present.
@@ -213,13 +213,13 @@ class TestCleanupOnFailure:
         subj_qs = f"/project/TEST_PROJECT/subject/{intake.uid}"
         exp_qs = f"{subj_qs}/experiment/SOURCE_DATA-{intake.uid}"
         scan_qs = f"{exp_qs}/scan/0"
-        assert fake.exists(subj_qs), f"subject should exist after successful upload"
-        assert fake.exists(exp_qs), f"experiment should exist after successful upload"
-        assert fake.exists(scan_qs), f"scan should exist after successful upload"
+        assert fake.exists(subj_qs), "subject should exist after successful upload"
+        assert fake.exists(exp_qs), "experiment should exist after successful upload"
+        assert fake.exists(scan_qs), "scan should exist after successful upload"
 
         # Verify files uploaded to SRC
         src_files = fake.list_files(scan_qs, "SRC")
-        assert len(src_files) > 0, f"expected files in SRC resource; got none"
+        assert len(src_files) > 0, "expected files in SRC resource; got none"
 
     def test_subject_preexisting_with_other_experiment_not_deleted(self, tmp_path, fake_zip):
         """Subject pre-exists with other experiment → on failure, only new
@@ -281,14 +281,14 @@ class TestCleanupOnFailure:
         new_scan_qs = f"{new_exp_qs}/scan/0"
 
         # Subject should still exist (not deleted)
-        assert fake.exists(old_subj_qs), f"pre-existing subject should NOT be deleted"
+        assert fake.exists(old_subj_qs), "pre-existing subject should NOT be deleted"
 
         # Old experiment should still exist
-        assert fake.exists(old_exp_qs), f"pre-existing experiment should NOT be deleted"
+        assert fake.exists(old_exp_qs), "pre-existing experiment should NOT be deleted"
 
         # New experiment + scan should be deleted
-        assert not fake.exists(new_exp_qs), f"new experiment should be deleted on failure"
-        assert not fake.exists(new_scan_qs), f"new scan should be deleted on failure"
+        assert not fake.exists(new_exp_qs), "new experiment should be deleted on failure"
+        assert not fake.exists(new_scan_qs), "new scan should be deleted on failure"
 
     def test_assessor_failure_cleans_subject_only(self, tmp_path, fake_zip):
         """Assessor create raises after put_zip succeeds → cleanup safeguard:
@@ -357,5 +357,5 @@ class TestCleanupOnFailure:
         subj_qs = f"/project/TEST_PROJECT/subject/{intake.uid}"
         exp_qs = f"{subj_qs}/experiment/SOURCE_DATA-{intake.uid}"
         scan_qs = f"{exp_qs}/scan/0"
-        assert not fake.exists(subj_qs), f"subject should be deleted after assessor failure"
+        assert not fake.exists(subj_qs), "subject should be deleted after assessor failure"
         # Note: scan and experiment remain (fail-safe: don't delete when files detected)

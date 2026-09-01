@@ -565,7 +565,7 @@ class ExperimentData():
             #  should patch the pixel arrays before calling write(), or supply
             #  REDACT decision with boxes here for the confirmer to act on.)
             if redact_boxes and verbose:
-                print( f'\t[PHI GATE] Redaction boxes supplied — apply_redaction called before upload.' )
+                print( '\t[PHI GATE] Redaction boxes supplied — apply_redaction called before upload.' )
             # Note: pixel data inside the zip cannot be patched post-zip without
             # re-writing. REDACT is provided so test scenarios can verify the
             # apply_redaction path; production workflows should redact before write().
@@ -637,13 +637,13 @@ class ExperimentData():
             subj_inst.create()                                                                              # type: ignore -- doesnt recognize .create() attribute of subj_inst
             _created_subject = True
         subj_inst.attrs._datatype = 'xnat:subjectData'                                                     # type: ignore -- set datatype cache for FakeXNAT fidelity test (pyxnat internals, #27)
-        subj_inst.attrs.mset( { f'xnat:subjectData/GROUP': self.intake_form.group } )                      # type: ignore -- doesnt recognize .attrs attribute of subj_inst
+        subj_inst.attrs.mset( { 'xnat:subjectData/GROUP': self.intake_form.group } )                      # type: ignore -- doesnt recognize .attrs attribute of subj_inst
         if not exp_inst.exists():                                                                           # type: ignore -- doesnt recognize .exists() attribute of exp_inst
             exp_inst.create(experiments=f'xnat:{self.schema_prefix_str}SessionData')                        # type: ignore -- doesnt recognize .create() attribute of exp_inst
             _created_experiment = True
         exp_inst.attrs._datatype = f'xnat:{self.schema_prefix_str}SessionData'                             # type: ignore -- set datatype cache for FakeXNAT fidelity test (pyxnat internals, #27)
-        exp_inst.attrs.mset( {  f'xnat:experimentData/ACQUISITION_SITE': self.intake_form.acquisition_site, # type: ignore -- doesnt recognize .attrs attribute of exp_inst
-                                f'xnat:experimentData/DATE': self.intake_form.datetime.date
+        exp_inst.attrs.mset( {  'xnat:experimentData/ACQUISITION_SITE': self.intake_form.acquisition_site, # type: ignore -- doesnt recognize .attrs attribute of exp_inst
+                                'xnat:experimentData/DATE': self.intake_form.datetime.date
                             } )
         if not scan_inst.exists():                                                                          # type: ignore -- doesnt recognize .exists() attribute of scan_inst
             scan_inst.create(scans=f'xnat:{self.schema_prefix_str}ScanData')                                # type: ignore -- doesnt recognize .create() attribute of scan_inst
@@ -652,7 +652,7 @@ class ExperimentData():
         scan_inst.attrs.mset( { f'xnat:{self.schema_prefix_str}ScanData/TYPE': self.scan_type_label,       # type: ignore -- doesnt recognize .attrs attribute of scan_inst
                                 f'xnat:{self.schema_prefix_str}ScanData/SERIES_DESCRIPTION': self.intake_form.ortho_procedure_type,
                                 f'xnat:{self.schema_prefix_str}ScanData/QUALITY': self.intake_form.scan_quality,
-                                f'xnat:imageScanData/NOTE': f'BY: {validated_login.validated_username.upper()}; AT: {USCentralDateTime(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))}'
+                                'xnat:imageScanData/NOTE': f'BY: {validated_login.validated_username.upper()}; AT: {USCentralDateTime(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))}'
                             } )
 
         # Issue #32 — wrap upload + assessor in try-except so that on ANY exception
@@ -711,7 +711,7 @@ class ExperimentData():
             # that THIS call created, in reverse order: scan → experiment → subject.
             # Only delete if empty + only objects THIS call created.
             if verbose:
-                print( f'\t[CLEANUP] Upload/assessor failed; attempting to clean up empty objects...' )
+                print( '\t[CLEANUP] Upload/assessor failed; attempting to clean up empty objects...' )
 
             # Helper: check if a resource is empty (has no files).
             def _resource_is_empty(resource_label_check: str) -> bool:
@@ -729,10 +729,10 @@ class ExperimentData():
                         if hasattr(scan_inst, 'delete') and callable(scan_inst.delete):  # type: ignore
                             scan_inst.delete()  # type: ignore
                             if verbose:
-                                print( f'\t[CLEANUP] Deleted empty scan.' )
+                                print( '\t[CLEANUP] Deleted empty scan.' )
                         else:
                             if verbose:
-                                print( f'\t[CLEANUP] Scan has no .delete() method; skipping (pyxnat version may not support it).' )
+                                print( '\t[CLEANUP] Scan has no .delete() method; skipping (pyxnat version may not support it).' )
                 except Exception as _cleanup_exc:
                     if verbose:
                         print( f'\t[CLEANUP] Could not delete scan: {_cleanup_exc}' )
@@ -746,10 +746,10 @@ class ExperimentData():
                         if hasattr(exp_inst, 'delete') and callable(exp_inst.delete):  # type: ignore
                             exp_inst.delete()  # type: ignore
                             if verbose:
-                                print( f'\t[CLEANUP] Deleted empty experiment.' )
+                                print( '\t[CLEANUP] Deleted empty experiment.' )
                         else:
                             if verbose:
-                                print( f'\t[CLEANUP] Experiment has no .delete() method; skipping (pyxnat version may not support it).' )
+                                print( '\t[CLEANUP] Experiment has no .delete() method; skipping (pyxnat version may not support it).' )
                 except Exception as _cleanup_exc:
                     if verbose:
                         print( f'\t[CLEANUP] Could not delete experiment: {_cleanup_exc}' )
@@ -777,10 +777,10 @@ class ExperimentData():
                         if hasattr(subj_inst, 'delete') and callable(subj_inst.delete):  # type: ignore
                             subj_inst.delete()  # type: ignore
                             if verbose:
-                                print( f'\t[CLEANUP] Deleted empty subject.' )
+                                print( '\t[CLEANUP] Deleted empty subject.' )
                         else:
                             if verbose:
-                                print( f'\t[CLEANUP] Subject has no .delete() method; skipping (pyxnat version may not support it).' )
+                                print( '\t[CLEANUP] Subject has no .delete() method; skipping (pyxnat version may not support it).' )
                 except Exception as _cleanup_exc:
                     if verbose:
                         print( f'\t[CLEANUP] Could not delete subject: {_cleanup_exc}' )
@@ -807,7 +807,7 @@ class ExperimentData():
 
         if verbose:
             print( f'\t...{self.schema_prefix_str}Session succesfully pushed to XNAT!' )
-            print( f'\t...Successfully deleted zip file:\n' + '\n'.join(f'\t\t{key}' for key in zipped_data.keys()) + '\n')
+            print( '\t...Successfully deleted zip file:\n' + '\n'.join(f'\t\t{key}' for key in zipped_data.keys()) + '\n')
 
 
     def write_publish_catalog_subroutine( self, config: ConfigTables, xnat_connection: XNATConnection, validated_login: XNATLogin, verbose: Opt[bool] = True, delete_zip: Opt[bool] = True, pixel_review_confirmer: Opt[Callable] = None ) -> ConfigTables:
@@ -885,22 +885,22 @@ class ExperimentData():
             except Exception as e:
                 status_text = f'\t!!! Failed to publish {self.schema_prefix_str} session to XNAT!\nChecking if subject was successfully pushed to xnat...'
                 if subj_inst.exists(): # type: ignore
-                    status_text += f'\n\t...Subject exists; attempting to delete subject...'
+                    status_text += '\n\t...Subject exists; attempting to delete subject...'
                     subj_inst.delete() # type: ignore
-                    status_text += f'\n\t...Subject deleted.'
-                    print( f'\n\t!!!Do not try to upload this case again without contacting the data librarian!!!')
+                    status_text += '\n\t...Subject deleted.'
+                    print( '\n\t!!!Do not try to upload this case again without contacting the data librarian!!!')
                 return config
 
             # If successful, try to push the config data to xnat
             try:
                 config.push_to_xnat( verbose=verbose )
-                status_text = f'\t...Successfully pushed config file to XNAT!'
+                status_text = '\t...Successfully pushed config file to XNAT!'
             except Exception as e:
-                status_text = f'\t!!! Failed to push config file to XNAT!\nChecking if subject was successfully pushed to xnat...'
+                status_text = '\t!!! Failed to push config file to XNAT!\nChecking if subject was successfully pushed to xnat...'
                 if subj_inst.exists(): # type: ignore
-                    status_text += f'\n\t...Subject exists; attempting to delete subject...'
+                    status_text += '\n\t...Subject exists; attempting to delete subject...'
                     subj_inst.delete() # type: ignore
-                    status_text += f'\n\t...Subject deleted.'
+                    status_text += '\n\t...Subject deleted.'
         except DedupReviewRequired:
             raise  # propagate human-review signal — bypass error-log path
         except Exception as e:
@@ -908,7 +908,7 @@ class ExperimentData():
             raise
 
         # Delete local copy of the config data
-        if verbose:         print( f'\t...Deleting local copy of config data...' )
+        if verbose:         print( '\t...Deleting local copy of config data...' )
         if os.path.exists( config.config_ffn ): os.remove( config.config_ffn )
         else: print(f'---------- error deleting config data file; no file found at:----------\n\t\t{config.config_ffn}')
         return config
@@ -919,7 +919,7 @@ class ExperimentData():
         text += f'User: {validated_login.validated_username}\n'
         text += f'Attempted Session Creation Type: {self.schema_prefix_str}\n'
         text += f'Intake Form:\n{self.intake_form}\n'
-        text += status_text + f'\n'
+        text += status_text + '\n'
         text += f"\n{'---'*25}\n"
         text += f'Error Message:\n{error_message}\n'
 
@@ -1156,10 +1156,10 @@ class SourceRFSession( ExperimentData ):
         Example Usage:
         rf_sess.write( config=ConfigTables, verbose=True )
         """
-        assert self.is_valid, f"Session is invalid; could be for several reasons. try evaluating whether all of the image hash_strings already exist in the matatable."
+        assert self.is_valid, "Session is invalid; could be for several reasons. try evaluating whether all of the image hash_strings already exist in the matatable."
         
         # (Try to) Add the subject to the config
-        if verbose:         print( f'\t...Validating subject uniqueness...' )
+        if verbose:         print( '\t...Validating subject uniqueness...' )
         success, msg = config.add_new_item( table_name='SUBJECTS', item_name=self.intake_form.uid, item_uid=self.intake_form.uid, verbose=verbose,
                                             extra_columns_values={ 'ACQUISITION_SITE': config.get_uid( table_name='ACQUISITION_SITES', item_name=self.intake_form.acquisition_site ),
                                                                 'GROUP': config.get_uid( table_name='GROUPS', item_name=self.intake_form.group ) }
@@ -1174,7 +1174,7 @@ class SourceRFSession( ExperimentData ):
         # Zip the mp4 and dicom data to separate folders
         zipped_data, home_dir = {}, self.tmp_source_data_dir
         num_dicom, num_successes = 0, 0
-        if verbose:         print( f'\t...Validating dicom files and writing to temporary directory for zipping...' )
+        if verbose:         print( '\t...Validating dicom files and writing to temporary directory for zipping...' )
         with tempfile.TemporaryDirectory( dir=home_dir ) as dcm_temp_dir:
             for idx in range( len( self.df ) ): # Iterate through each row in the DataFrame, writing each to a temp directory before we zip it up and delete the unzipped folder.
                 # if self.df.loc[idx, 'IS_VALID']:
@@ -1272,11 +1272,11 @@ class SourceESVSession( ExperimentData ):
         # Read all jpg images;  sort images by their creation date-time, append mp4 ffn to the list before we build the dataframe
         all_ffns = list( self.intake_form.relevant_folder.rglob("*.[jJ][pP][gG]") ) + list( self.intake_form.relevant_folder.rglob("*.[jJ][pP][eE][gG]") )
         if len( all_ffns ) == 0: # prompt the user to confirm that they do indeed want to proceed without any images.
-            print( f'\n\tNo image files were found in the inputted folder; if this is correct, enter "1" to proceed, otherwise "2" to exit.' )
+            print( '\n\tNo image files were found in the inputted folder; if this is correct, enter "1" to proceed, otherwise "2" to exit.' )
             print( f'\t\tFiles found: {all_ffns}' )
             proceed_without_images = self.intake_form.prompt_until_valid_answer_given( 'No Images in Found in Folder', acceptable_options=['1', '2'] ) 
-            if proceed_without_images != '1': raise ValueError( f'User did not enter "1" to proceed without images; software currently does not support this option -- exiting application...' )
-            print( f'\n\t...Proceeding without images...' )
+            if proceed_without_images != '1': raise ValueError( 'User did not enter "1" to proceed without images; software currently does not support this option -- exiting application...' )
+            print( '\n\t...Proceeding without images...' )
         # assert len( all_ffns ) > 0, f"No image files found in the inputted folder; make sure that all image files in folder have the correct ('.jpg' or '.jpeg') extension.\n\tDirectory given:  {self.intake_form.relevant_folder}."
             all_ffns = mp4_ffn
         else:
@@ -1327,7 +1327,7 @@ class SourceESVSession( ExperimentData ):
         Example Usage:
         esv_sess.write( config=ConfigTables, verbose=True )
         """
-        assert self.is_valid, f"Session is invalid; could be for several reasons. try evaluating whether all of the image hash_strings already exist in the matatable."
+        assert self.is_valid, "Session is invalid; could be for several reasons. try evaluating whether all of the image hash_strings already exist in the matatable."
 
         # (Try to) Add the subject to the config
         config.add_new_item( table_name='SUBJECTS', item_name=self.intake_form.uid, item_uid=self.intake_form.uid, verbose=verbose,

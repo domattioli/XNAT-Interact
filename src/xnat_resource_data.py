@@ -93,7 +93,7 @@ def pseudonymize_surgeon_ids(
 ordered_keys_of_intake_text_file = ['FORM_LAST_MODIFIED', 'OPERATION_DATE', 'SUBJECT_UID', 'FILER_HAWKID', 'FORM_AVAILABLE_FOR_PERFORMANCE', 'SCAN_QUALITY',
                                     'SURGICAL_PROCEDURE_INFO', 'SKILLS_ASSESSMENT_INFO', 'STORAGE_DEVICE_INFO', 'INFO_DERIVED_FROM_ORIGINAL_FILE_METADATA']
 
-indent_str = f'\n\t\t-- '
+indent_str = '\n\t\t-- '
 
 
 #### `ResourceFile` Class:
@@ -144,7 +144,7 @@ class ResourceFile( UIDandMetaInfo ):
     def _init_all_fields( self )    -> None:        raise NotImplementedError( 'This method must be implemented in the subclass.' )
         
 
-    def __str__( self )             -> str:         return '-----'*5 + f'\nOR Data Intake Form\n' + '-----'*5 + '\n\n'
+    def __str__( self )             -> str:         return '-----'*5 + '\nOR Data Intake Form\n' + '-----'*5 + '\n\n'
 
 
     def _construct_dict_of_ortho_procedure_names( self, config: ConfigTables ) -> Dict[str, str]:
@@ -220,8 +220,8 @@ class ORDataIntakeForm( ResourceFile ):
         self._init_all_fields( config=config )
         
         # Either read in the inputted text file and distribute that data, or prompt the user for the data.
-        assert not isinstance( input_data, str ), f"You provided input_data as a string; retry with 'input_data = Path( input_data )'"
-        if verbose:                             print( f'\n...Processing OR Data Intake Form...' )
+        assert not isinstance( input_data, str ), "You provided input_data as a string; retry with 'input_data = Path( input_data )'"
+        if verbose:                             print( '\n...Processing OR Data Intake Form...' )
         if isinstance( input_data, pd.Series ): self._read_from_series( data_row=input_data, config=config, verbose=verbose )
         elif isinstance( input_data, Path ):    self._read_from_file( parent_folder=input_data, verbose=verbose )
         elif input_data is None:                # User must define intake form from a set of prompts.
@@ -269,14 +269,14 @@ class ORDataIntakeForm( ResourceFile ):
         """
         # Define the expected columns
         expected_columns = [
-            f'Filer\nHawkID', f'Operation\nDate', f'Quality', f'Institution\nName', f'Procedure\nName',
-            f'Epic\nStart\nTime', f'Epic\nEnd\nTime', f'Side of\nPatient\nBody', f'OR Room\nName/\nLocation',
-            f'Supervising\nSurgeon\nHawkID', f'Supervising\nSurgeon\nPresence', f'Performing\nSurgeon\nHawkID',
-            f'Performing\nSurgeon\n# Years\nExperience', f'Performing\nSurgeon\n# Prior\nCases',
-            f'# of\nParticipating\nPerforming\nSurgeons', f'Performer\nHawkID-Task', f'Unusual\nFeatures',
-            f'Diagnotistic\nNotes', f'Additional\nComments', f'Skills\nAssessment\nRequested', f'Assessor\nHawkID',
-            f'Additional\nAssessment\nDetails', f'Name/\nType of\nStorage\nDevice', f'Full Path to Data',
-            f'Was\nRadiology\nContacted', f'Radiology\nContact\nDate', f'Radiology\nContact\nTime']
+            'Filer\nHawkID', 'Operation\nDate', 'Quality', 'Institution\nName', 'Procedure\nName',
+            'Epic\nStart\nTime', 'Epic\nEnd\nTime', 'Side of\nPatient\nBody', 'OR Room\nName/\nLocation',
+            'Supervising\nSurgeon\nHawkID', 'Supervising\nSurgeon\nPresence', 'Performing\nSurgeon\nHawkID',
+            'Performing\nSurgeon\n# Years\nExperience', 'Performing\nSurgeon\n# Prior\nCases',
+            '# of\nParticipating\nPerforming\nSurgeons', 'Performer\nHawkID-Task', 'Unusual\nFeatures',
+            'Diagnotistic\nNotes', 'Additional\nComments', 'Skills\nAssessment\nRequested', 'Assessor\nHawkID',
+            'Additional\nAssessment\nDetails', 'Name/\nType of\nStorage\nDevice', 'Full Path to Data',
+            'Was\nRadiology\nContacted', 'Radiology\nContact\nDate', 'Radiology\nContact\nTime']
         
         # Verify incoming data's columns match the expected columns; Map the column names from the data to the expected column names
         incoming_col_names = data_row.index.tolist()[1:]  # Exclude the first column (index) -- 'Case Name [Optional]'
@@ -293,65 +293,65 @@ class ORDataIntakeForm( ResourceFile ):
         self._form_available = False
         issues = {}
         self._filer_name = data_row['Filer\nHawkID']
-        if self.filer_name not in config.list_of_all_items_in_table( table_name='REGISTERED_USERS' ):               issues[f'Filer\nHawkID'] = f'Filer name "{self.filer_name}" not registered w/ the database.'
+        if self.filer_name not in config.list_of_all_items_in_table( table_name='REGISTERED_USERS' ):               issues['Filer\nHawkID'] = f'Filer name "{self.filer_name}" not registered w/ the database.'
         
         self._operation_date = data_row['Operation\nDate']
-        if not self.operation_date:                                                                                 issues[f'Operation\nDate'] = f'Operation Date is missing and required.'
-        elif not re.match( r'\d{4}-\d{2}-\d{2}', self.operation_date ):                                             issues[f'Operation\nDate'] = f'Operation Date "{self.operation_date}" is not in the correct format (YYYY-MM-DD).'
+        if not self.operation_date:                                                                                 issues['Operation\nDate'] = 'Operation Date is missing and required.'
+        elif not re.match( r'\d{4}-\d{2}-\d{2}', self.operation_date ):                                             issues['Operation\nDate'] = f'Operation Date "{self.operation_date}" is not in the correct format (YYYY-MM-DD).'
 
         self._scan_quality = data_row['Quality'].lower()
         if self.scan_quality == 'unknown': self._scan_quality = ''
-        if self.scan_quality not in ['usable', 'unusable', 'questionable', '']:                                     issues[f'Quality'] = f'Quality "{self.scan_quality}" is not one of the expected values.'
+        if self.scan_quality not in ['usable', 'unusable', 'questionable', '']:                                     issues['Quality'] = f'Quality "{self.scan_quality}" is not one of the expected values.'
 
         self._institution_name = data_row['Institution\nName']
-        if self.institution_name not in config.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ):        issues[f'Institution\nName'] = f'Institution name "{self.institution_name}"is not registered w/ the database.'
+        if self.institution_name not in config.list_of_all_items_in_table( table_name='ACQUISITION_SITES' ):        issues['Institution\nName'] = f'Institution name "{self.institution_name}"is not registered w/ the database.'
         
         self._ortho_procedure_name = data_row['Procedure\nName']
         if self.ortho_procedure_name not in config.list_of_all_items_in_table( table_name='Groups' ):
-            issues[f'Procedure\nName'] = f'Procedure name "{self.ortho_procedure_name}"is not registered w/ the database.'
-            issues[f'Procedure\nType'] = f'Procedure type cannot reliably be discerned because the inputted procedure name is not registed w the database and we currently dont ask the user to explicitly declare it.'
+            issues['Procedure\nName'] = f'Procedure name "{self.ortho_procedure_name}"is not registered w/ the database.'
+            issues['Procedure\nType'] = 'Procedure type cannot reliably be discerned because the inputted procedure name is not registed w the database and we currently dont ask the user to explicitly declare it.'
  
         if "ARTHROSCOPY" in self.ortho_procedure_name.upper():  self._ortho_procedure_type = 'ARTHRO'
         else:  self._ortho_procedure_type = 'TRAUMA'
 
         self._epic_start_time = data_row['Epic\nStart\nTime']
-        if not self.epic_start_time:                                                                                issues[f'Epic\nStart\nTime'] = f'Epic Start Time is missing and required.'
+        if not self.epic_start_time:                                                                                issues['Epic\nStart\nTime'] = 'Epic Start Time is missing and required.'
         self._epic_end_time = data_row['Epic\nEnd\nTime']
-        if self.epic_end_time and self.epic_end_time < self.epic_start_time:                                        issues[f'Epic\nEnd\nTime'] = f'Epic End Time "{self.epic_end_time}" cannot be before Start Time "{self.epic_start_time}".'
+        if self.epic_end_time and self.epic_end_time < self.epic_start_time:                                        issues['Epic\nEnd\nTime'] = f'Epic End Time "{self.epic_end_time}" cannot be before Start Time "{self.epic_start_time}".'
         
         self._side_of_patient_body = data_row['Side of\nPatient\nBody'].upper()
-        if self.side_of_patient_body not in ['RIGHT', 'LEFT', 'BOTH', 'UNKNOWN']:                                   issues[f'Side of\nPatient\nBody'] = f'Side of Patient Body "{self.side_of_patient_body}" is not one of the expected values.'
+        if self.side_of_patient_body not in ['RIGHT', 'LEFT', 'BOTH', 'UNKNOWN']:                                   issues['Side of\nPatient\nBody'] = f'Side of Patient Body "{self.side_of_patient_body}" is not one of the expected values.'
 
         self._OR_location = data_row['OR Room\nName/\nLocation']
 
         self._supervising_surgeon_hawk_id = data_row['Supervising\nSurgeon\nHawkID'].upper()
-        if self.supervising_surgeon_hawk_id not in config.list_of_all_items_in_table( table_name='Surgeons' ):      issues[f'Supervising\nSurgeon\nHawkID'] = f'Supervising Surgeon HawkID "{self.supervising_surgeon_hawk_id}" is not registered w/ the database.'
+        if self.supervising_surgeon_hawk_id not in config.list_of_all_items_in_table( table_name='Surgeons' ):      issues['Supervising\nSurgeon\nHawkID'] = f'Supervising Surgeon HawkID "{self.supervising_surgeon_hawk_id}" is not registered w/ the database.'
 
         self._supervising_surgeon_presence = data_row['Supervising\nSurgeon\nPresence'].upper()
         if self.supervising_surgeon_presence not in ['PRESENT', 'RETROSPECTIVE_REVIEW', 'OTHER-SEE_ADDITIONAL_COMMENTS']:
-            issues[f'Supervising\nSurgeon\nPresence'] = f'Supervising Surgeon Presence "{self.supervising_surgeon_presence}" is not one of the expected values.'
+            issues['Supervising\nSurgeon\nPresence'] = f'Supervising Surgeon Presence "{self.supervising_surgeon_presence}" is not one of the expected values.'
 
         self._performing_surgeon_hawk_id = data_row['Performing\nSurgeon\nHawkID'].upper()
-        if self.performing_surgeon_hawk_id not in config.list_of_all_items_in_table( table_name='Surgeons' ):       issues[f'Performing\nSurgeon\nHawkID'] = f'Performing Surgeon HawkID "{self.performing_surgeon_hawk_id}" is not registered w/ the database.'
+        if self.performing_surgeon_hawk_id not in config.list_of_all_items_in_table( table_name='Surgeons' ):       issues['Performing\nSurgeon\nHawkID'] = f'Performing Surgeon HawkID "{self.performing_surgeon_hawk_id}" is not registered w/ the database.'
 
         self._performer_year_in_residency = data_row['Performing\nSurgeon\n# Years\nExperience']
-        if not isinstance( self.performer_year_in_residency, int ) or self.performer_year_in_residency <= 0:        issues[f'Performing\nSurgeon\n# Years\nExperience'] = f'Performing Surgeon Years in Residency "{self.performer_year_in_residency}" is not a valid value -- must be a positive integer.'
+        if not isinstance( self.performer_year_in_residency, int ) or self.performer_year_in_residency <= 0:        issues['Performing\nSurgeon\n# Years\nExperience'] = f'Performing Surgeon Years in Residency "{self.performer_year_in_residency}" is not a valid value -- must be a positive integer.'
         
         self._performer_num_of_similar_logged_cases = data_row['Performing\nSurgeon\n# Prior\nCases']
-        if not isinstance( self.performer_num_of_similar_logged_cases, int ) or self.performer_num_of_similar_logged_cases < 0: issues[f'Performing\nSurgeon\n# Prior\nCases'] = f'Performing Surgeon Number of Similar Logged Cases "{self.performer_num_of_similar_logged_cases}" is not a valid value -- must be a non-negative integer.'
+        if not isinstance( self.performer_num_of_similar_logged_cases, int ) or self.performer_num_of_similar_logged_cases < 0: issues['Performing\nSurgeon\n# Prior\nCases'] = f'Performing Surgeon Number of Similar Logged Cases "{self.performer_num_of_similar_logged_cases}" is not a valid value -- must be a non-negative integer.'
 
         # Parsing string describing surgeon tasks
         num_surgeons = data_row['# of\nParticipating\nPerforming\nSurgeons']
-        if not isinstance( num_surgeons, int ) or num_surgeons < 0: issues[f'# of\nParticipating\nPerforming\nSurgeons'] = f'Number of Participating Performing Surgeons "{num_surgeons}" is not a valid value -- must be a non-negative integer.'
+        if not isinstance( num_surgeons, int ) or num_surgeons < 0: issues['# of\nParticipating\nPerforming\nSurgeons'] = f'Number of Participating Performing Surgeons "{num_surgeons}" is not a valid value -- must be a non-negative integer.'
         performer_tasks_string = data_row['Performer\nHawkID-Task']
         task_pattern = r'^\{(?:\s*([a-zA-Z0-9_]+)\s*:\s*([^,{}]+)\s*,)*\s*([a-zA-Z0-9_]+)\s*:\s*([^,{}]+)\s*\}$'
-        if not re.match( task_pattern, performer_tasks_string ):                                                    issues[f'Performer\nHawkID-Task'] = f'Performer HawkID-Task "{performer_tasks_string}" is not in the expected format, i.e., {{hawkid: task}}".'
+        if not re.match( task_pattern, performer_tasks_string ):                                                    issues['Performer\nHawkID-Task'] = f'Performer HawkID-Task "{performer_tasks_string}" is not in the expected format, i.e., {{hawkid: task}}".'
         key_value_pattern = r'([a-zA-Z0-9_]+)\s*:\s*([^,{}]+)'
         matches = re.findall( key_value_pattern, performer_tasks_string )
         surgeon_task_dict = {key: value for key, value in matches}
         for key in surgeon_task_dict.keys():
-            if key not in config.list_of_all_items_in_table(table_name='Surgeons'):                                 issues[f'Performer\nHawkID-Task'] = f'HawkID "{key}" in Performer HawkID-Task is not registered w/ the database.'
-        if len(surgeon_task_dict) != num_surgeons:                                                                  issues[f'Performer\nHawkID-Task'] = f'The number of HawkIDs in Performer HawkID-Task does not match the number of Participating Performing Surgeons "{num_surgeons}".'
+            if key not in config.list_of_all_items_in_table(table_name='Surgeons'):                                 issues['Performer\nHawkID-Task'] = f'HawkID "{key}" in Performer HawkID-Task is not registered w/ the database.'
+        if len(surgeon_task_dict) != num_surgeons:                                                                  issues['Performer\nHawkID-Task'] = f'The number of HawkIDs in Performer HawkID-Task does not match the number of Participating Performing Surgeons "{num_surgeons}".'
         self._performance_enumerated_task_performer = surgeon_task_dict
 
         self._list_unusual_features_of_performance = data_row['Unusual\nFeatures']
@@ -497,7 +497,7 @@ class ORDataIntakeForm( ResourceFile ):
             self._assessor_hawk_id = self.running_text_file['SKILLS_ASSESSMENT_INFO']['ASSESSOR_UID']
             self._assessment_details = self.running_text_file['SKILLS_ASSESSMENT_INFO']['ASSESSMENT_DETAILS']
         except Exception as e:
-            if verbose:     print( f'\t--- Only minimally required fields were found in the inputted form.' )
+            if verbose:     print( '\t--- Only minimally required fields were found in the inputted form.' )
 
     
     def get_time_input( self, prompt ) -> str:
@@ -537,7 +537,7 @@ class ORDataIntakeForm( ResourceFile ):
     def prompt_until_valid_answer_given( selection_name: str, acceptable_options: list, max_num_attempts: int=2 ) -> str:
         num_attempts = 0
         while True and num_attempts < max_num_attempts:
-            user_input, num_attempts = input( f'\tAnswer:\t' ), num_attempts + 1
+            user_input, num_attempts = input( '\tAnswer:\t' ), num_attempts + 1
             if user_input.upper() in acceptable_options:    return user_input.upper()
             else:                                           print( f'\t--- Invalid entry for {selection_name}! Please enter one of the options listed above.' )
         raise InvalidInputError( f'Failed to provide a valid entry for {selection_name} after {max_num_attempts} attempts.' )
@@ -559,7 +559,7 @@ class ORDataIntakeForm( ResourceFile ):
                 self._operation_date = parser.parse( date_str ).date().strftime('%Y-%m-%d')
                 break
             except KeyboardInterrupt:
-                print( f'\n\n...User cancelled task via Ctrl+C...' )
+                print( '\n\n...User cancelled task via Ctrl+C...' )
                 sys.exit( 0 )
             except (ValueError, OverflowError) as e:
                 num_attempts += 1
@@ -576,15 +576,15 @@ class ORDataIntakeForm( ResourceFile ):
         self._running_text_file['SUBJECT_UID'] = str( self.uid )
     
     def _prompt_user_for_scan_quality( self ):
-        print( f'\n\n--- Quality/Usability of the OR Image Data ---' )
+        print( '\n\n--- Quality/Usability of the OR Image Data ---' )
         print( f'\t(4a/34)\tDo you know the quality of the OR image data?{indent_str}-- Please enter "1" for Yes or "2" for No.' )
         #"1" for Usable, "2" for Un-usable, "3" for Questionable, or "4" for Unknown.' )
         known_scan_quality = self.prompt_until_valid_answer_given( 'Quality of the Scan', acceptable_options=['1', '2'] )
         if known_scan_quality == '1':
-            print( f'\n\t(4b/34)\tPlease enter "1" for Usable, "2" for Un-usable, or "3" for Questionable.' )
-            print( f'\t\t--- Usable:\t\tThe image data is of sufficient quality to be used for research purposes.' )
-            print( f'\t\t--- Un-usable:\tThe image data is of insufficient quality to be used for research purposes.' )
-            print( f'\t\t--- Questionable:\tThe image data is of questionable quality and may or may not be usable for research purposes.' )
+            print( '\n\t(4b/34)\tPlease enter "1" for Usable, "2" for Un-usable, or "3" for Questionable.' )
+            print( '\t\t--- Usable:\t\tThe image data is of sufficient quality to be used for research purposes.' )
+            print( '\t\t--- Un-usable:\tThe image data is of insufficient quality to be used for research purposes.' )
+            print( '\t\t--- Questionable:\tThe image data is of questionable quality and may or may not be usable for research purposes.' )
             scan_quality = self.prompt_until_valid_answer_given( 'Quality of the Image/Video Data', acceptable_options=['1', '2', '3'] )
             if scan_quality == '1':     self._scan_quality = 'usable'
             elif scan_quality == '2':   self._scan_quality = 'unusable'
@@ -593,7 +593,7 @@ class ORDataIntakeForm( ResourceFile ):
         self._running_text_file['SCAN_QUALITY'] = self.scan_quality # type: ignore -- not sure why this is giving a type error. runs fine in spite of it.
 
     def _prompt_user_for_surgical_procedure_info( self, config: ConfigTables ): # Make sure fields that might be stored in the config are all completely capitalized
-        print( f'\n--- Surgical Procedure Information ---' )
+        print( '\n--- Surgical Procedure Information ---' )
         local_dict = {}
 
         #Encode the options for acceptable institions as a list of integer strings
@@ -649,7 +649,7 @@ class ORDataIntakeForm( ResourceFile ):
             print( f'\n\t(10a/34) Do you know the Operation or EPIC Start Time?{indent_str}Please enter "1" for Yes or "2" for No.' )
             known_start_time = self.prompt_until_valid_answer_given( 'Known EPIC Start Time', acceptable_options = list( ['1', '2'] ) )
             if known_start_time == '1':
-                epic_start_time = self.get_time_input( f'\t(10b/34) Known Epic Start Time (HH:MM in 24hr format):\t' )
+                epic_start_time = self.get_time_input( '\t(10b/34) Known Epic Start Time (HH:MM in 24hr format):\t' )
             else: epic_start_time = datetime.now().replace( hour=0, minute=0, second=0, microsecond=0 ).strftime( '%H:%M:%S' )  # Assign midnight-today as the default start time
             local_dict['EPIC_START_TIME'] = epic_start_time
             self._epic_start_time = epic_start_time
@@ -667,7 +667,7 @@ class ORDataIntakeForm( ResourceFile ):
         else:                           self._side_of_patient_body = 'Unknown'.upper()
         local_dict['PATIENT_SIDE'] = self.side_of_patient_body
 
-        print( f'\n\t(12/34) Operating Room Name/Location.\n\t\tPlease press Enter if Unknown.' )
+        print( '\n\t(12/34) Operating Room Name/Location.\n\t\tPlease press Enter if Unknown.' )
         OR_location = input( '\tAnswer:\t' ).upper().replace( '"', "'" )
         if len( OR_location ) == 0: self._OR_location = 'Unknown'.upper()
         else:                       self._OR_location = OR_location
@@ -738,7 +738,7 @@ class ORDataIntakeForm( ResourceFile ):
         print( f'\n\t(20/34) Were there any unusual features of the performance?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown.')
         any_unusual_features_of_performance = self.prompt_until_valid_answer_given( 'Unusual Features of Performance', acceptable_options=['1', '2', '3'] )
         if any_unusual_features_of_performance == '1':
-            list_of_performance_features = input( f'\n\t(21/34) Please detail any/all unusual features of the performance:\n\tAnswer: ' ).replace( '"', "'" )
+            list_of_performance_features = input( '\n\t(21/34) Please detail any/all unusual features of the performance:\n\tAnswer: ' ).replace( '"', "'" )
             if len( list_of_performance_features ) > 0:     self._list_unusual_features_of_performance = list_of_performance_features
         elif any_unusual_features_of_performance == '2':    self._list_unusual_features_of_performance = None
         else:                                               self._list_unusual_features_of_performance = 'Unknown'.upper()
@@ -748,7 +748,7 @@ class ORDataIntakeForm( ResourceFile ):
         any_diagnostic_notes = self.prompt_until_valid_answer_given( 'Performing Surgeon Assistance', acceptable_options=['1', '2', '3'] )
         # if self.ortho_procedure_type == 'Arthroscopy' or ortho_procedure_type == '2':
         if any_diagnostic_notes == '1':
-            diagnostic_notes = input( f'\n\t(23/34) Please enter any diagnostic notes about the surgical procedure:\n\tAnswer: ' ).replace( '"', "'" )
+            diagnostic_notes = input( '\n\t(23/34) Please enter any diagnostic notes about the surgical procedure:\n\tAnswer: ' ).replace( '"', "'" )
             if len( diagnostic_notes ) > 0:                 self._diagnostic_notes = diagnostic_notes
         elif any_diagnostic_notes == '2':                   self._diagnostic_notes = None
         else:                                               self._diagnostic_notes = 'Unknown'.upper()
@@ -757,7 +757,7 @@ class ORDataIntakeForm( ResourceFile ):
         print( f'\n\t(24/34) Do you have any additional comments or notes regarding BMI, pre-existing conditions, etc.?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown.' )
         any_misc_comments = self.prompt_until_valid_answer_given( ' Miscellaneous Procedure Comments', acceptable_options=['1', '2', '3'])
         if any_misc_comments == '1':
-            misc_comments = input( f'\n\t(25/34) Please enter any additional comments or notes:\n\tAnswer: ' ).replace( '"', "'" )
+            misc_comments = input( '\n\t(25/34) Please enter any additional comments or notes:\n\tAnswer: ' ).replace( '"', "'" )
             if len( misc_comments ) > 0:                    self._misc_surgical_performance_comments = misc_comments
         elif any_diagnostic_notes == '2':                   self._misc_surgical_performance_comments = None
         else:                                               self._misc_surgical_performance_comments = 'Unknown'.upper()
@@ -790,16 +790,16 @@ class ORDataIntakeForm( ResourceFile ):
         print( f'\n\t(19b/34) To denote each of the participating surgeons, please select from the following list of HawkIDs:\n{options_str}\n')
         task_performers = {}
         for i in range( num_tasks ):
-            if i == 0:      hawkid_encoding = input( f'\t\t1st Surgeon: ' )
-            elif i == 1:    hawkid_encoding = input( f'\t\t2nd Surgeon: ' )
-            elif i == 2:    hawkid_encoding = input( f'\t\t3rd Surgeon: ' )
+            if i == 0:      hawkid_encoding = input( '\t\t1st Surgeon: ' )
+            elif i == 1:    hawkid_encoding = input( '\t\t2nd Surgeon: ' )
+            elif i == 2:    hawkid_encoding = input( '\t\t3rd Surgeon: ' )
             else:           hawkid_encoding = input( f'\t\t{i+1}th Surgeon: ' )
             hawkid = acceptable_performing_surgeon_options_encoded[hawkid_encoding]
             task_performers[config.get_uid( table_name='SURGEONS', item_name=hawkid )] = input( f"\t\t\tPlease detail the task(s) performed by '{hawkid_encoding}'', i.e., {hawkid.upper()}: " ).replace( '"', "'" )
         return task_performers
 
     def _prompt_user_for_skills_assessment_info( self, config: ConfigTables ):
-        print( f'\n\n--- Skills Assessment Information ---' )
+        print( '\n\n--- Skills Assessment Information ---' )
     
         print( f'\t(26a/34) Was a Skills Assessment requested for this procedure?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown.')
         assessment_requested = self.prompt_until_valid_answer_given( 'Skills Assessment Request', acceptable_options=['1', '2', '3'] )
@@ -831,14 +831,14 @@ class ORDataIntakeForm( ResourceFile ):
                                                                 'ASSESSMENT_DETAILS': self.assessment_details}
 
     def _prompt_user_for_storage_device_info( self ):
-        print( f'\n\n--- Storage Device Information ---' )
+        print( '\n\n--- Storage Device Information ---' )
         
         self._storage_device_name_and_type = input( '\t(30/34) Please enter the name and type of the storage device:\n\tAnswer: ' ).replace( '"', "'" )
 
         while True:
             full_path_name = input( '\n\t(31/34) Please enter the full directory name of the *local* folder containing the case data:\n\tAnswer: ' )
             if os.path.exists( full_path_name ):    break
-            else:                                   print( f'!!!!!Input directory path is not accessible on this system!!!!!\n\tPlease double-check the validity of that directory and try again.' )
+            else:                                   print( '!!!!!Input directory path is not accessible on this system!!!!!\n\tPlease double-check the validity of that directory and try again.' )
         self._relevant_folder = Path( full_path_name )
 
         print( f'\n\t(32/34) Was radiology contacted for this procedure?{indent_str}Please enter "1" for Yes, "2" for No, or "3" for Unknown.' )
@@ -867,14 +867,14 @@ class ORDataIntakeForm( ResourceFile ):
         # Copy the file to the inputted parent folder of the data -- if the file exists already, save it with a different name
         dest_ffn = self.relevant_folder / self.filename
         if os.path.exists( dest_ffn ):
-            if verbose:     print( f'\t-- WARNING -- File already exists in the destination folder. Saving with a different name (appending "-copy").' )
+            if verbose:     print( '\t-- WARNING -- File already exists in the destination folder. Saving with a different name (appending "-copy").' )
             dest_ffn = self.relevant_folder / f'{self.filename.stem}-copy{self.filename.suffix}'
             print( dest_ffn)
         shutil.copy( self.saved_ffn, dest_ffn )
 
 
     def push_to_xnat( self, subj_inst=None, verbose: Opt[bool] = False, *, gateway=None, subj_qs: Opt[str] = None ):
-        if verbose:     print( f'\t\t...Uploading resource files...' )
+        if verbose:     print( '\t\t...Uploading resource files...' )
         with open( self.saved_ffn, 'r' ) as f:
             data = f.read()
         if gateway is not None and subj_qs is not None:

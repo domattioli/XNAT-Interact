@@ -613,11 +613,11 @@ class _GuardedResource:
         # Block .resource() method to simulate real pyxnat
         if name == "resource":
             raise AttributeError(
-                f"'FakeResource' object has no attribute 'resource'. "
-                f"Bug pattern detected: code tried to call .resource() on a resource "
-                f"returned by select(qs_with_/resources/...). In real pyxnat, "
-                f"select(qs) returns Resource directly when qs names a resource, "
-                f"not a Selectable."
+                "'FakeResource' object has no attribute 'resource'. "
+                "Bug pattern detected: code tried to call .resource() on a resource "
+                "returned by select(qs_with_/resources/...). In real pyxnat, "
+                "select(qs) returns Resource directly when qs names a resource, "
+                "not a Selectable."
             )
         # Delegate everything else to the wrapped resource
         return getattr(self._resource, name)

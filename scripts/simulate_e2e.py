@@ -334,7 +334,7 @@ def section_deid():
         _fail(f"PatientName not scrubbed correctly: before={name_before!r}, after={name_after!r}", SECTION)
 
     if accession_after == "REDACTED 4 XNAT":
-        _ok(f"AccessionNumber → 'REDACTED 4 XNAT'")
+        _ok("AccessionNumber → 'REDACTED 4 XNAT'")
     else:
         _fail(f"AccessionNumber not set to 'REDACTED 4 XNAT', got {accession_after!r}", SECTION)
 
@@ -703,7 +703,7 @@ def section_metrics():
         ev3 = record_first_upload(42.5, enabled=True, store_path=store)
         ev4 = record_event("upload_success", {"ok": True}, enabled=True, store_path=store)
 
-        _info(f"Recorded events: app_opened, upload_attempt, first_upload_completed, upload_success")
+        _info("Recorded events: app_opened, upload_attempt, first_upload_completed, upload_success")
         _ok("4 metric events recorded without error")
 
         # Disallowed event name
@@ -722,7 +722,7 @@ def section_metrics():
 
         # summarize
         summary = summarize(store)
-        _info(f"Summary:")
+        _info("Summary:")
         _info(f"  event_counts    = {summary['event_counts']}")
         _info(f"  upload_attempts = {summary['upload_attempts']}")
         _info(f"  success_rate    = {summary['upload_success_rate']}")
@@ -793,7 +793,7 @@ def section_packaging():
           f"latest={update_info.latest!r}, url={update_info.url!r}")
 
     if update_info.available and update_info.latest == "1.0.0":
-        _ok(f"check_for_update: update available (1.0.0 > 0.1.0)")
+        _ok("check_for_update: update available (1.0.0 > 0.1.0)")
     else:
         _fail(f"Expected update available=True, got {update_info}", SECTION)
 

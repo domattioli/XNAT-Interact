@@ -283,7 +283,7 @@ class TestAssessBatchSlow:
         # Log results for inspection
         print()
         print("=" * 70)
-        print(f"Throughput Test Results (SC-005 constraint)")
+        print("Throughput Test Results (SC-005 constraint)")
         print("=" * 70)
         print(f"  Batch size measured: {n_cases} cases")
         print(f"  Total elapsed time: {elapsed_seconds:.2f} seconds")

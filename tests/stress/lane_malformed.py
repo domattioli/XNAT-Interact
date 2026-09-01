@@ -69,7 +69,7 @@ def main():
     from tests.stress import malformed
 
     print("=" * 70)
-    print(f"MALFORMED DICOM STRESS TEST")
+    print("MALFORMED DICOM STRESS TEST")
     print(f"  project:  {args.project}")
     print(f"  url:      {args.url}")
     print("=" * 70)
@@ -153,7 +153,7 @@ def main():
             if pub_result["ok"]:
                 result["outcome_class"] = "ACCEPTED"
                 result["accepted"] = True
-                print(f"  outcome: ACCEPTED (ok=True)")
+                print("  outcome: ACCEPTED (ok=True)")
             else:
                 error_msg = pub_result.get("error", "")
                 # Classify error
@@ -164,11 +164,11 @@ def main():
                 ):
                     result["outcome_class"] = "FRIENDLY"
                     result["error"] = error_msg[:500]  # Truncate for JSON
-                    print(f"  outcome: FRIENDLY")
+                    print("  outcome: FRIENDLY")
                 else:
                     result["outcome_class"] = "CRASH"
                     result["error"] = error_msg[:500]
-                    print(f"  outcome: CRASH")
+                    print("  outcome: CRASH")
 
         except Exception as e:
             import traceback

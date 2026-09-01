@@ -283,7 +283,8 @@ class TestImportAnnotations:
 
     def test_mturk_row_dict_dispatches_to_mturk(self):
         """Dict with 'WorkerId' key → mturk.from_mturk_row."""
-        import base64, cv2
+        import base64
+        import cv2
         # Build a minimal valid 1x1 PNG mask as base64
         tiny_mask = np.zeros((4, 4), dtype=np.uint8)
         _, buf = cv2.imencode(".png", tiny_mask)

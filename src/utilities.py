@@ -469,7 +469,7 @@ class XNATConnection( UIDandMetaInfo ):
             )
             print(render(_fe))
         except (SSLError, MaxRetryError) as e:
-            print( f"\t-- SSL Certificate is expired! -- Contact IIBI staff to renew; you cannot use XNAT until this is done!" )
+            print( "\t-- SSL Certificate is expired! -- Contact IIBI staff to renew; you cannot use XNAT until this is done!" )
         if self.project_handle is None:
             self._failed_tests['Project Handle is None'] = True
             return
@@ -957,7 +957,7 @@ class ConfigTables( UIDandMetaInfo ):
             assert write_ffn.suffix == '.json', f"Provided write file path must have a '.json' extension: {write_ffn}"
             write_ffn = self.xnat_connection.gateway.get_file_copy( _proj_qs, self.xnat_config_folder_name, self.config_fn, write_ffn )
         self._load( write_ffn, verbose )
-        if verbose:                     print( f'\t...ConfigTables successfully populated from XNAT data.\n' )
+        if verbose:                     print( '\t...ConfigTables successfully populated from XNAT data.\n' )
 
         # Capture a fingerprint of the downloaded bytes so push_to_xnat can
         # detect if the server copy changed between our download and our upload.
@@ -1049,7 +1049,7 @@ class ConfigTables( UIDandMetaInfo ):
             # H4: refresh fingerprint so a second push in the same session compares
             # against the just-written content, not the pre-first-push baseline.
             self._server_fingerprint_at_load = self._fingerprint_file( self.config_ffn )
-            if verbose:                     print( f'\t...ConfigTables (config.json) successfully updated on XNAT!\n' )
+            if verbose:                     print( '\t...ConfigTables (config.json) successfully updated on XNAT!\n' )
             return True
         except LostUpdateError:
             # H3: lost-update is a distinct signal — callers must be able to tell
@@ -1352,7 +1352,7 @@ class ImageHash( UIDandMetaInfo ):
     def raw_img( self )                 -> np.ndarray:                      return self._raw_img
     @property
     def gray_img_bit_depth( self )      -> int:
-        assert self.gray_img is not None, f'Raw image must be defined before checking bit depth.'
+        assert self.gray_img is not None, 'Raw image must be defined before checking bit depth.'
         gray_img_dtype = self.gray_img.dtype
         if gray_img_dtype   in ( np.uint8, np.int8 ):
             return 8
@@ -1382,7 +1382,7 @@ class ImageHash( UIDandMetaInfo ):
         else:
             self._raw_img = img.astype( np.uint64 ).copy()
         assert self.raw_img.dtype in self.acceptable_img_dtypes, f'Bitdepth "{self.raw_img.dtype}" is unsupported; inputted image must be one of: {self.acceptable_img_dtypes}.'
-        assert 2 <= self.raw_img.ndim <= 3, f'Inputted image must be a 2D or 3D array.'
+        assert 2 <= self.raw_img.ndim <= 3, 'Inputted image must be a 2D or 3D array.'
 
 
     def _convert_to_grayscale( self ):
@@ -1402,7 +1402,7 @@ class ImageHash( UIDandMetaInfo ):
 
     def _compute_hash_str( self ):
         self._hash_str = hashlib.sha256( self.processed_img.tobytes() ).hexdigest() # alternatively: imagehash.average_hash( Image.fromarray( image ) )
-        assert self.hash_str is not None and len( self.hash_str ) == 64, f'Hash string must be 64 characters long.'
+        assert self.hash_str is not None and len( self.hash_str ) == 64, 'Hash string must be 64 characters long.'
     
 
     def _check_img_hash_metatable( self ): # check if it exists in the config data

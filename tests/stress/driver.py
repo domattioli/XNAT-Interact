@@ -195,7 +195,7 @@ def connect(
 
         if not already_exists:
             if verbose:
-                print(f"  [4-pre] seeding config on fresh project")
+                print("  [4-pre] seeding config on fresh project")
             seed_json = _build_seed_config(user)
             seed_path = Path(tempfile.mktemp(suffix=".json", prefix="seed_config_"))
             seed_path.write_text(seed_json, encoding="utf-8")
@@ -442,14 +442,14 @@ def publish_surgery(
         try:
             config.push_to_xnat(verbose=verbose)
             if verbose:
-                print(f"  config.push_to_xnat() succeeded")
+                print("  config.push_to_xnat() succeeded")
         except Exception as _cfg_exc:
             if verbose:
                 print(f"  [WARN] config.push_to_xnat() failed (non-blocking): {_cfg_exc}")
 
         result["ok"] = True
         if verbose:
-            print(f"  publish_to_xnat() succeeded")
+            print("  publish_to_xnat() succeeded")
 
     except Exception as e:
         result["error"] = f"{type(e).__name__}: {str(e)}\n{traceback.format_exc()}"

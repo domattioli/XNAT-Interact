@@ -530,7 +530,7 @@ class BatchUploadRepresentation( UIDandMetaInfo ):
         return in_str, issues
     
     def print_rows( self, rows: Opt[str]='both' ) -> str:
-        class_name = self.__class__.__name__;
+        class_name = self.__class__.__name__
         assert rows in ['errors', 'warnings', 'both', 'all'], f"Inputted 'rows' must be a list containing either 'errors', 'warnings', 'both', or 'all'; you provided '{rows}'."
         if ( self.summary_table == '' ).all().all():   return f"{class_name}\n\tFilename:\t{self.ffn.name}\n\tRows:\t{len(self.df)}\n\tCols:\t{len(self.df.columns)}\n\tIssues:\tNone"
         num_row_errs = self.summary_table.apply( lambda row: any(cell in ['E', 'EW'] for cell in row), axis=1 ).sum()

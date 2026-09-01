@@ -84,7 +84,7 @@ class ScanFile( UIDandMetaInfo ):
     def is_similar_to_template_image( self, thresh: float = 0.9 ) -> bool:
         assert not isinstance( self.image, cv2.VideoCapture ), f'BUG: cannot be calling the is_similar_to_template_image method for {type(self).__name__} with a video file.'
         min_val, _, _, _ = cv2.minMaxLoc( cv2.matchTemplate( self.image.processed_img, self.template_img, cv2.TM_CCOEFF_NORMED ) )
-        assert min_val is not None, f'BUG: template matching method should not return None type for min pixel value.'
+        assert min_val is not None, 'BUG: template matching method should not return None type for min pixel value.'
         return min_val > thresh
 
     def _validate_image( self ):                            raise NotImplementedError( 'This is a placeholder method and must be implemented in an inherited class.' )
@@ -253,7 +253,7 @@ class SourceDicomDeIdentified( ScanFile ):
         self._image = ImageHash( reference_table=config, img=self.metadata.pixel_array )
 
     def _validate_image( self ) -> None: # valid if the image has not yet been seen and if it does not match the template image.
-        assert isinstance( self.image, ImageHash ), f'BUG: cannot be validate because the object.image data is not in ImageHash format.'
+        assert isinstance( self.image, ImageHash ), 'BUG: cannot be validate because the object.image data is not in ImageHash format.'
         self._is_valid = not self.image.in_img_hash_metatable and not self.is_similar_to_template_image()
 
     def _parse_for_derived_metadata( self ) -> None:

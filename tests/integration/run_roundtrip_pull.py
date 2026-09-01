@@ -92,14 +92,14 @@ def make_staged_filename(inst_num: int) -> str:
     return f"{inst_str}-{PATIENT_UID}"
 
 
-log(f"\nStaging plan:")
+log("\nStaging plan:")
 log(f"  subject   : {SUBJECT_LABEL}")
 log(f"  experiment: {EXPERIMENT_LABEL}")
 log(f"  scan      : {SCAN_LABEL}")
 log(f"  resource  : {RESOURCE_LABEL}")
 STAGED_FILENAMES = [make_staged_filename(i) for i in range(3)]
 log(f"  files     : {STAGED_FILENAMES}")
-log(f"  (these follow generate_source_image_file_name pattern: ZZZZ-<patient_uid>)")
+log("  (these follow generate_source_image_file_name pattern: ZZZZ-<patient_uid>)")
 
 
 # ---------------------------------------------------------------------------
@@ -468,7 +468,7 @@ if isinstance(rows_result, list) and rows_result and 'outcome' in dir():
 log("\n--- STEP 6: #25 Gap Verdict ---")
 log("")
 log("DEFECT (a): SYNTHESIZED FILENAME MISMATCH")
-log(f"  download.py line 222 synthesizes: f\"{{subject}}_{{experiment}}_{{scan}}.dcm\"")
+log("  download.py line 222 synthesizes: f\"{subject}_{experiment}_{scan}.dcm\"")
 log(f"  For row subject='{SUBJECT_LABEL}', experiment='{EXPERIMENT_LABEL}', scan_type=(whatever list_downloadable returns):")
 if isinstance(rows_result, list) and rows_result:
     for row in rows_result:
@@ -478,15 +478,15 @@ if isinstance(rows_result, list) and rows_result:
         syn_fn = f"{subject}_{experiment}_{scan}.dcm"
         log(f"    synthesized filename = '{syn_fn}'")
 log(f"  Real stored filenames on server (generate_source_image_file_name pattern): {real_file_names}")
-log(f"  → resource.file(synthesized_fn).get_copy(...) will fail: the named file does not exist on XNAT")
+log("  → resource.file(synthesized_fn).get_copy(...) will fail: the named file does not exist on XNAT")
 log("")
 log("DEFECT (b): SCAN LABEL IN QUERY STRING IS scan_type, NOT THE REAL SCAN LABEL")
 log("  download.py line 165: scan = str(row.get('scan_type', '')) or 'SRC'")
 log("  download.py line 193-196 uses `scan` in the query string as the scan label:")
 log("    f\"/projects/{project}/subjects/{subject}/experiments/{experiment}/scans/{scan}/resources/SRC\"")
-log(f"  row['scan_type'] from list_downloadable is a TYPE string (e.g. '' or 'DICOM'),")
-log(f"  NOT the real scan label which is always '0' (hard-coded in upload code).")
-log(f"  → query string points to wrong/nonexistent scan path")
+log("  row['scan_type'] from list_downloadable is a TYPE string (e.g. '' or 'DICOM'),")
+log("  NOT the real scan label which is always '0' (hard-coded in upload code).")
+log("  → query string points to wrong/nonexistent scan path")
 log("")
 ok_val  = outcome.ok            if 'outcome' in dir() else 'N/A'
 fw_val  = outcome.files_written if 'outcome' in dir() else []

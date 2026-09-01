@@ -173,7 +173,7 @@ def main():
     os.environ["XNAT_PROJECT_NAME"] = args.project
 
     print("=" * 70)
-    print(f"CONCURRENT STRESS TEST")
+    print("CONCURRENT STRESS TEST")
     print(f"  workers:  {args.workers}")
     print(f"  frames:   {args.frames}")
     print(f"  project:  {args.project}")

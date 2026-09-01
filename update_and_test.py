@@ -176,13 +176,13 @@ def check_and_install_requirements(requirements_file: Path) -> None:
 
 
 def import_all_necessary_modules(requirements_file: Path) -> None:
-    print(f"\t...Checking installation of each required library...")
+    print("\t...Checking installation of each required library...")
     check_and_install_requirements(requirements_file)
 
     with open(requirements_file, 'r') as file:
         lines = file.readlines()
 
-    print(f"\n\t...Checking import of each installed library...")
+    print("\n\t...Checking import of each installed library...")
     dist_map = _distribution_import_map()
     for line in lines:
         requirement = _parse_requirement_line(line)
@@ -202,7 +202,7 @@ def run_tests() -> int:
 
     Returns the pytest exit code (0 = all tests passed).
     """
-    print(f"\n\t...Running test suite with pytest...")
+    print("\n\t...Running test suite with pytest...")
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "-q"],
         check=False  # Don't raise — we handle the return code ourselves.
@@ -214,15 +214,15 @@ def main() -> None:
     """
     Pull the latest code and run the test suite to verify your installation.
     """
-    print(f'\n...Ensuring that XNAT-Interact installation is correct and up-to-date...\n')
+    print('\n...Ensuring that XNAT-Interact installation is correct and up-to-date...\n')
 
     # --- Step 1: Virtual environment check ---
     try:
         if not check_that_virtualenv_activated():
             raise RuntimeError('Virtual environment not activated.')
-        print(f'--- Virtual environment is active...')
+        print('--- Virtual environment is active...')
     except Exception:
-        print(f'ERROR\t-- Activate your virtual environment before running this script!\n')
+        print('ERROR\t-- Activate your virtual environment before running this script!\n')
         sys.exit(1)
 
     # --- Step 2: Check and install requirements ---
@@ -230,33 +230,33 @@ def main() -> None:
     requirements_file = this_directory / 'requirements.txt'
     try:
         import_all_necessary_modules(requirements_file=requirements_file)
-        print(f'--- All necessary modules are available...\n')
+        print('--- All necessary modules are available...\n')
     except Exception as e:
         print(f'ERROR\t-- Could not verify required modules.\n\tError: {e}')
         sys.exit(1)
 
     # --- Step 3: Pull latest code ---
-    print(f'--- Pulling latest changes from the remote repository...')
-    print(f'\tNOTE: This uses git pull --ff-only.  If you have uncommitted local')
-    print(f'\tchanges that conflict, the pull will stop safely without discarding them.')
+    print('--- Pulling latest changes from the remote repository...')
+    print('\tNOTE: This uses git pull --ff-only.  If you have uncommitted local')
+    print('\tchanges that conflict, the pull will stop safely without discarding them.')
     try:
         branch = pull_latest()
         print(f'SUCCESS\t-- Codebase is up-to-date with the {branch!r} branch...\n')
     except subprocess.CalledProcessError as e:
         print(f'FAILURE\t-- Could not pull the latest code.\n\tError: {e}')
-        print(f'\tIf you have local changes, commit or stash them first.')
-        print(f'\tContact the Data Librarian if this keeps failing.')
+        print('\tIf you have local changes, commit or stash them first.')
+        print('\tContact the Data Librarian if this keeps failing.')
         sys.exit(1)
 
     # --- Step 4: Run the test suite ---
     exit_code = run_tests()
     if exit_code == 0:
-        print(f'\nSUCCESS\t-- All tests passed.  You may now proceed to main.py\n')
+        print('\nSUCCESS\t-- All tests passed.  You may now proceed to main.py\n')
         sys.exit(0)
     else:
         print(f'\nFAILURE\t-- Some tests failed (pytest exit code {exit_code}).')
-        print(f'\tDo not upload data until the test failures are resolved.')
-        print(f'\tContact the Data Librarian if you need help.\n')
+        print('\tDo not upload data until the test failures are resolved.')
+        print('\tContact the Data Librarian if you need help.\n')
         sys.exit(exit_code)
 
 

@@ -1,85 +1,89 @@
-# AGENTS.md — XNAT-Interact
+# AGENTS.md
 
-Guide for AI agents (and humans) working this repo. Goal: responsible
-delegation + token budgeting, without weakening the project's safety or
-readability rules. Governing principles: [`DomI/specs/consumers/XNAT-Interact/memory/constitution.md`](https://github.com/domattioli/DomI/tree/development/specs/consumers/XNAT-Interact/memory/constitution.md).
+## Project
 
-> Style: this file written caveman-lite (terse, articles/filler dropped, still
-> grammatical). See "Caveman levels" below for where each level applies.
+XNAT-Interact de-identifies surgical fluoroscopic images and uploads or downloads
+them from the University of Iowa RPACS XNAT server. `main.py` is the interactive
+command-line interface. The repository also contains Streamlit interfaces,
+installer code, and backend data-processing services.
 
----
+Python 3.9 or newer is required. This repository is not a pip-installable
+package.
 
-## Delegation: pick the cheapest tier that won't get it wrong
+## Setup and commands
 
-Before any subagent spawn, choose **model tier** by task complexity — do NOT
-clone the parent's model.
+Create an environment and install runtime and test dependencies:
 
-| Task class | Examples | Model |
-|---|---|---|
-| Mechanical | rename, typo, locate code, format tweak, single-fn rewrite | `haiku` |
-| Standard | scoped multi-file edit, tests for known behavior, doc drafting, research synthesis | `sonnet` |
-| Hard | algorithm-critical, cross-cutting refactor (3+ files), arch decision, ambiguous, security/PHI-sensitive | `opus` |
-
-Rule: cheapest tier that won't err. Correctness/PHI/security rounds **up**, never
-down. Known one-line answer → no subagent.
-
-## Token budget: caveman level by who reads the output
-
-| Output consumer | Caveman level |
-|---|---|
-| Parent context only (machine-read, aggregated, discarded) | **ultra** |
-| Mixed (parent reads + may quote to human) | full |
-| Human artifact (PR body, commit msg, release notes) | **none** (normal prose) |
-
-Subagent **report back to parent** → default ultra (saves main context).
-The **artifact** the subagent writes follows the doc rules below.
-
-## Doc caveman split (this repo's ratified choice)
-
-| Surface | Level | Why |
-|---|---|---|
-| Chat + machine-read tool-results | ultra | token budget |
-| Engineering specs/plans/tasks, AGENTS.md, internal notes | lite | terse but buildable |
-| `docs/IMPROVEMENT_PLAN.md`, `README`, onboarding site, student-facing copy | none (plain prose) | mission = lower skill floor; maintainer not a strong coder |
-| Precision artifacts: FR/SC lists, Given/When/Then, task IDs, code blocks, commit msgs | exact, never compressed | meaning must not drift |
-
-Hard stop: never caveman-compress human-facing docs or precision artifacts. This
-overrides a blanket "caveman everything" instruction — see constitution + the
-dispatch policy that shipped this split.
-
-## Compose a dispatch
-
-```
-Agent(
-  subagent_type: <Explore | general-purpose | specific>,
-  model: <haiku | sonnet | opus>,            # by complexity, not inherited
-  description: "<3-5 words>",
-  prompt: "<if report-back should be terse: 'Report back caveman-ultra:
-            drop articles/filler, fragments OK, code/precision exact. Then:'>
-           <task + what to read + exact output paths>"
-)
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
 ```
 
-Parallel wave → each member picks its own tier+level independently.
+Run the offline test suite:
 
----
+```bash
+pytest
+```
 
-## Repo-specific hard rules (always, every agent)
+Run an interface from the repository root:
 
-- **PHI never** in logs, tests, telemetry, or this repo. Synthetic data only
-  (`tests/synthetic_data.py`). See constitution Principle I.
-- **Tests run offline** — no XNAT server, no VPN, no PHI. Server paths sit behind
-  a seam a fake replaces (Phase 1 `FakeXNAT`). Principle IV.
-- **No credentials in argv/commits/logs.** No hardcoded server URL/project.
-  Principle V.
-- **Fail softly**: no raw traceback for foreseeable problems; give the user a next
-  step. Principle II.
-- Build order = `specs/` by number; each phase's `tasks.md` top-to-bottom, `[P]`
-  parallelizable. Phase 1 is prereq for Phase 2.
+```bash
+python main.py
+streamlit run streamlit_app.py
+streamlit run streamlit_guided.py
+bash scripts/run_demo.sh --fake
+```
 
-## Map
+The optional pixel de-identification lane has separate dependencies in
+`requirements-pixeldeid.txt`. The canonical CI test lane is
+`.github/workflows/ci-lite.yml`. It runs on Python 3.11.
 
-- `docs/IMPROVEMENT_PLAN.md` — narrative plan (plain prose).
-- `DomI/specs/consumers/XNAT-Interact/memory/constitution.md` — 6 gates.
-- `specs/NNN-*/` — per-phase spec + plan + tasks.
-- `tests/` — offline suite + synthetic data + (Phase 1) `fakes/fake_xnat.py`.
+## Layout
+
+- `app/` contains the Streamlit application and guided interface.
+- `src/` contains the command-line workflow, XNAT models, annotations, and
+  backend services.
+- `tests/` contains the offline suite, `FakeXNAT`, and synthetic fixtures.
+- `tests/integration/xnat_local/` contains the local XNAT Docker environment.
+- `installer/` contains launcher and platform build support.
+- `data/device_profiles/` contains pixel de-identification device profiles.
+- `docs/DATA_MODEL.md`, `docs/METADATA.md`, and `docs/XNAT_MODEL.md` define the
+  data, identity, metadata, and XNAT contracts.
+- `docs/OPS_CHECKLIST.md` records operator-only packaging and deployment work.
+- `specs/` contains the existing numbered implementation phases. Follow each
+  phase's `spec.md`, `plan.md`, and `tasks.md` in that order. Complete tasks
+  from top to bottom; `[P]` marks tasks that may run in parallel.
+
+## Project rules
+
+- Never put protected health information (PHI) in this repository, tests,
+  logs, telemetry, or error messages. Use only generators from
+  `tests/synthetic_data.py` for patient-like test data.
+- The default test suite must run offline without an XNAT server or virtual
+  private network (VPN). Keep server access behind the gateway seam and use
+  `tests/fakes/fake_xnat.py` in tests.
+- Never pass credentials in command arguments or store them in configuration.
+  Prompt for credentials at runtime. Do not log them.
+- Configure non-secret connection values with `XNAT_SERVER_URL` and
+  `XNAT_PROJECT_NAME`. Do not hardcode a server URL or project name.
+- Fail softly for foreseeable errors. Do not show users a raw traceback. Give
+  them a useful next step.
+- Preserve the identity, de-identification, duplicate-detection, quarantine,
+  and metadata contracts in `docs/DATA_MODEL.md` and `docs/METADATA.md`.
+- Use plain prose for the README, onboarding pages, and other user-facing
+  documentation. Keep requirement lists, success criteria, task identifiers,
+  code, and commit messages exact.
+
+## Branches and labels
+
+- The working branch is `development`. Releases go through a pull request from
+  `development` to `main`.
+- Do not push directly to `main` and do not force-push shared branches.
+- `.github/labels.yml` defines this repository's issue label taxonomy.
+
+## Governance
+
+This repository is a downstream consumer of `domattioli/DomI`.
+Universal git, coding dispatch, secrets, session lifecycle, and communication rules live in DomI `.claude/policies/`.
+Spec Kit governance artifacts for this repository live in DomI `specs/consumers/XNAT-Interact/`; never create a local `.specify/` directory.

@@ -25,14 +25,14 @@ Fill out each section. Keep PRs small and atomic.
 - [ ] skill — affects skills/
 - [ ] plugin — affects plugins/
 - [ ] ci — affects .github/workflows/
-- [ ] docs — affects README/CLAUDE.md/MANIFEST
-- [ ] claude-md — modifies CLAUDE.md instructions
+- [ ] docs — affects README/AGENTS.md/MANIFEST
+- [ ] agent-instructions — modifies AGENTS.md instructions
 
 ## Compliance Checklist
 
 <!-- All boxes must be checked before merging. -->
 
-- [ ] I read CLAUDE.md before starting
+- [ ] I read AGENTS.md before starting
 - [ ] `bash scripts/instructions_on_start.sh` reports HEALTHY (if applicable)
 - [ ] If I added a skill: it's documented in MANIFEST.md
 - [ ] If I changed a skill: SKILL.md frontmatter is valid (name + description)

@@ -2,7 +2,7 @@
 
 Guide for AI agents (and humans) working this repo. Goal: responsible
 delegation + token budgeting, without weakening the project's safety or
-readability rules. Governing principles: [`.specify/memory/constitution.md`](.specify/memory/constitution.md).
+readability rules. Governing principles: [`DomI/specs/consumers/XNAT-Interact/memory/constitution.md`](https://github.com/domattioli/DomI/tree/development/specs/consumers/XNAT-Interact/memory/constitution.md).
 
 > Style: this file written caveman-lite (terse, articles/filler dropped, still
 > grammatical). See "Caveman levels" below for where each level applies.
@@ -80,6 +80,6 @@ Parallel wave → each member picks its own tier+level independently.
 ## Map
 
 - `docs/IMPROVEMENT_PLAN.md` — narrative plan (plain prose).
-- `.specify/memory/constitution.md` — 6 gates.
+- `DomI/specs/consumers/XNAT-Interact/memory/constitution.md` — 6 gates.
 - `specs/NNN-*/` — per-phase spec + plan + tasks.
 - `tests/` — offline suite + synthetic data + (Phase 1) `fakes/fake_xnat.py`.

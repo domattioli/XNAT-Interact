@@ -1,7 +1,7 @@
 # Data Model — XNAT-Interact
 
 **Status:** Design / specification (authoritative). **Core implementation BUILT** via
-[`specs/009-data-identity-dedup`](../specs/009-data-identity-dedup/) (992 tests green offline +
+DomI `specs/consumers/XNAT-Interact/specs/009-data-identity-dedup/` (992 tests green offline +
 24 live dual-run): unique SOPInstanceUID (H1), UID preservation, `Old_StudyDate` strip + date
 hash, content-based layered dedup + evidence package, SQLite registry (write-through facade over
 ConfigTables), surgeon keyed-pseudonym + patient destroy, keep-all derived versioning. **Deferred:**
@@ -62,7 +62,7 @@ splits** (secondary) — i.e. invalidated results.
   same ingest minus the PHI scrub — so simulation never co-mingles with clinical identity.
 - XNAT hierarchy: Project → Subject → Experiment (session) → Scan → Resource → File. Derived
   results attach as **assessors** (which XNAT stores as experiments — see
-  `specs/006-xnat-alignment/contract-test.md` GAP-001).
+  `docs/testing/fakexnat-contract-test.md` GAP-001).
 
 ---
 
@@ -321,5 +321,5 @@ crosswalks sit in the same shared store as operational data despite needing a se
   of Orthopedic Technical Skill from Fluoroscopic Images* (PMC9488091); *A Vision for Using
   Simulation & Virtual Coaching to Improve the Community Practice of Orthopedic Trauma Surgery*
   (PMID 32742205).
-- Internal: `specs/006-xnat-alignment/` (gateway + assessor contract), `docs/XNAT_MODEL.md`
+- Internal: DomI `specs/consumers/XNAT-Interact/specs/006-xnat-alignment/` (gateway + assessor contract), `docs/testing/fakexnat-contract-test.md`, `docs/XNAT_MODEL.md`
   (pyxnat surface), issues #32 (dedup/identity), #33 (correctness audit).

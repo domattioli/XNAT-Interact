@@ -1,5 +1,5 @@
 """
-Tests for Stage-1 pixel de-identification detector (specs/010-pixel-deid, T004-T006).
+Tests for Stage-1 pixel de-identification detector (DomI specs/consumers/XNAT-Interact/specs/010-pixel-deid, T004-T006).
 
 All fixtures are synthetic — no real PHI, no network, no GPU.
 

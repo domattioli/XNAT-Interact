@@ -51,8 +51,9 @@ The optional pixel de-identification lane has separate dependencies in
 - `docs/DATA_MODEL.md`, `docs/METADATA.md`, and `docs/XNAT_MODEL.md` define the
   data, identity, metadata, and XNAT contracts.
 - `docs/OPS_CHECKLIST.md` records operator-only packaging and deployment work.
-- `specs/` contains the existing numbered implementation phases. Follow each
-  phase's `spec.md`, `plan.md`, and `tasks.md` in that order. Complete tasks
+- Finished numbered implementation phases live in DomI
+  `specs/consumers/XNAT-Interact/specs/`. New phases use a local `specs/` during
+  the build and move to DomI at the end. Follow each phase's `spec.md`, `plan.md`, and `tasks.md` in that order. Complete tasks
   from top to bottom; `[P]` marks tasks that may run in parallel.
 
 ## Project rules

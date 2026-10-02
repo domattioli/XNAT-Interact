@@ -43,3 +43,6 @@ registry.db-wal
 # Harness env-artifact: a nested clone of this repo appears at the repo root
 # in some cloud sessions (own .git). Never part of the project; do not commit.
 /XNAT-Interact
+
+# Session handoffs stay local (operator rule 2026-10-01)
+.claude/handoffs/

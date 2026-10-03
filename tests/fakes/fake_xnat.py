@@ -125,6 +125,12 @@ class FakeFile(_CallLog):
 
     def insert(self, data: Any, *, content: str = "", format: str = "", tags: str = "") -> None:
         self._maybe_raise(self._root)
+        # Spec 016 (T013): stage inserted bytes so list_files and get_copy can
+        # read them back, replacing an earlier file of the same name.
+        if isinstance(data, (bytes, bytearray)):
+            res = self._resource
+            res._staged_files = [(n, d) for n, d in res._staged_files if n != self._filename]
+            res._staged_files.append((self._filename, bytes(data)))
         self._record(self._root, "file.insert", (data,), {"content": content, "format": format, "tags": tags, "_filename": self._filename})
 
 
@@ -721,6 +727,10 @@ class FakeXNAT(XnatGateway):
         dest: Any,
     ) -> Any:
         """Download *filename* from *resource_label* under *querystring* to *dest*."""
+        flat = getattr(self, "_flat_resources", {})
+        if (querystring, resource_label) in flat:
+            # Spec 016 (T013): assessor files staged by create_assessor.
+            return flat[(querystring, resource_label)].file(filename).get_copy(dest)
         sel = self._selectables.setdefault(
             querystring, FakeSelectable(root=self, querystring=querystring)
         )
@@ -864,6 +874,16 @@ class FakeXNAT(XnatGateway):
             })
         if files:
             for resource_label, filename, local_path in files:
+                # Spec 016 (T013): keep the bytes so the assessor files can be
+                # listed and downloaded back through list_files/download_resource.
+                try:
+                    data = Path(local_path).read_bytes()
+                except (TypeError, OSError):
+                    data = None
+                if data is not None:
+                    res = self._flat_resource(assessor_qs, resource_label)
+                    res._staged_files = [(n, d) for n, d in res._staged_files if n != filename]
+                    res._staged_files.append((filename, data))
                 self.calls.append({
                     "op": "assessor.file.put",
                     "args": (str(local_path),),

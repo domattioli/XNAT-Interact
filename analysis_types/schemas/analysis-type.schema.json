@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "analysis-type.schema.json",
+  "title": "XNAT-Interact analysis type",
+  "description": "Meta-schema for one analysis type file under analysis_types/ (spec 016, FR-001). Version 1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type_name",
+    "type_version",
+    "description",
+    "inputs",
+    "outputs",
+    "placement",
+    "resource_label",
+    "phi_policy"
+  ],
+  "properties": {
+    "type_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{1,47}$"
+    },
+    "type_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^(source_frames|annotations|dataset|assessor:[a-z][a-z0-9_]*)$"
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pattern",
+          "format"
+        ],
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "pattern": "(^/|\\.\\.)"
+            }
+          },
+          "format": {
+            "enum": [
+              "csv",
+              "json",
+              "txt",
+              "md",
+              "npz",
+              "rle",
+              "png",
+              "dcm"
+            ]
+          },
+          "schema": {
+            "type": "string",
+            "pattern": "^schemas/[A-Za-z0-9_.-]+\\.json$"
+          },
+          "rows_per_input": {
+            "type": "boolean"
+          },
+          "mask": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "placement": {
+      "enum": [
+        "assessor",
+        "scan_resource"
+      ]
+    },
+    "resource_label": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$"
+    },
+    "phi_policy": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "no_pixels",
+          "pixels_from_source_only",
+          "text_scan"
+        ]
+      }
+    },
+    "publish_via_intake": {
+      "type": "boolean",
+      "default": true
+    },
+    "label_template": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_\\-{}]+$",
+      "description": "Base label for the published item. Placeholders {type_name} and {case_uid}. Defaults to {type_name}."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "phi_policy": {
+            "contains": {
+              "const": "no_pixels"
+            }
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "properties": {
+            "phi_policy": {
+              "contains": {
+                "const": "pixels_from_source_only"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

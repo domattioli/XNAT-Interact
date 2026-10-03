@@ -1,0 +1,13 @@
+{
+  "type_name": "segmentation_consensus",
+  "type_version": 1,
+  "description": "Consensus segmentation masks for one case, stored as whole-number label arrays.",
+  "inputs": ["annotations"],
+  "outputs": [
+    {"pattern": "*.npz", "format": "npz", "mask": true}
+  ],
+  "placement": "assessor",
+  "resource_label": "SEGMENTATION_CONSENSUS",
+  "label_template": "SEGMENTATION_CONSENSUS-{case_uid}",
+  "phi_policy": ["pixels_from_source_only"]
+}

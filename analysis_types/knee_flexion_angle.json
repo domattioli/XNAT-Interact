@@ -1,0 +1,12 @@
+{
+  "type_name": "knee_flexion_angle",
+  "type_version": 1,
+  "description": "Knee flexion angle in degrees for every input frame of one fluoroscopy case.",
+  "inputs": ["source_frames"],
+  "outputs": [
+    {"pattern": "angles.csv", "format": "csv", "schema": "schemas/knee_flexion_angle.angles.schema.json", "rows_per_input": true}
+  ],
+  "placement": "assessor",
+  "resource_label": "KNEE_FLEXION_ANGLE",
+  "phi_policy": ["no_pixels", "text_scan"]
+}

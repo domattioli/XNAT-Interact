@@ -1,0 +1,15 @@
+{
+  "type_name": "annotations",
+  "type_version": 1,
+  "description": "Annotation sets written by the annotation upload; registered here so they are described, not published by the intake.",
+  "inputs": ["source_frames"],
+  "outputs": [
+    {"pattern": "manifest.json", "format": "json"},
+    {"pattern": "*.rle", "format": "rle"},
+    {"pattern": "*.json", "format": "json"}
+  ],
+  "placement": "scan_resource",
+  "resource_label": "ANNOTATIONS",
+  "phi_policy": ["no_pixels"],
+  "publish_via_intake": false
+}

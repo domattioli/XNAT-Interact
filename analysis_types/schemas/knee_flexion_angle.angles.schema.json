@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "One row of angles.csv (knee_flexion_angle v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["frame_index", "image_identity_hash", "angle_degrees"],
+  "properties": {
+    "frame_index": {"type": "integer", "minimum": 0},
+    "image_identity_hash": {"type": "string", "minLength": 1},
+    "angle_degrees": {"type": "number", "minimum": -30, "maximum": 180}
+  }
+}

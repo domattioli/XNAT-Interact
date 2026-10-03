@@ -176,6 +176,7 @@ class _ConfigTablesRegistryAdapter:
     Implements the interface consumed by case_dedup:
       - ``_conn.execute("SELECT DISTINCT case_key FROM cases")``
       - ``case_image_hashes(case_key) -> set[str]``
+      - ``image_exists(content_hash) -> bool`` (consumed by image_dedup)
 
     The adapter is read-only — upsert_* calls are no-ops (they are called
     post-check by publish_to_xnat to register the disjoint case; the real
@@ -206,6 +207,13 @@ class _ConfigTablesRegistryAdapter:
 
     def case_image_hashes( self, case_key: str ) -> set:
         return self._case_hashes.get( str( case_key ), set() )
+
+    def image_exists( self, content_hash ) -> bool:
+        """Return True when any case already holds this hash (case-insensitive; issue #66)."""
+        if not content_hash:
+            return False
+        _key = str( content_hash ).upper()
+        return any( _key in hashes for hashes in self._case_hashes.values() )
 
     def upsert_case( self, *args, **kwargs ) -> None:
         pass
@@ -1245,7 +1253,7 @@ class SourceESVSession( ExperimentData ):
                 file_obj_rep = self.df.loc[idx, 'OBJECT']
                 if isinstance( file_obj_rep, ArthroVideo ): # video is assigned instance number 000. Our convention is to begin at 001 for image files.
                     if vid_count == 0:  vid_prefix, vid_count = '000', vid_count + 1 #to-do: horrendous code; need to fix this
-                    else:               vid_prefix =  str( len( self.df ) + 1 ).zfill( 3 )
+                    else:               vid_prefix, vid_count = str( len( self.df ) + vid_count ).zfill( 3 ), vid_count + 1 # Unique per video and past the still-image range (issue #65).
                     self._df.loc[idx, 'NEW_FN'] = file_obj_rep.generate_source_image_file_name( vid_prefix, self.intake_form.uid )
                     # self._df.loc[idx, 'NEW_FN'] = file_obj_rep.generate_source_image_file_name( '000', file_obj_rep.uid_info['Video_UID'] ) 
                     # self._df.loc[idx, 'NEW_FN'] = self.df.loc[idx, 'OBJECT'].uid_info['Video_UID']

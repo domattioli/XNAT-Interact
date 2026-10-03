@@ -1,13 +1,17 @@
 name: tests
 
-# Runs the offline test suite (no XNAT server / VPN / real PHI required).
+# Runs the offline test suite (no XNAT server / VPN / real PHI required) by default.
 # Replaces the previous conda workflow, which could not solve environment.yml
 # on CI: opencv-python / pwinput / pyxnat are PyPI-only (not on conda defaults)
 # and python=3.8 conflicted with the runner's base env.
+#
+# The live-XNAT integration test suite runs in a separate, opt-in job
+# (workflow_dispatch manual trigger, not on every push/PR).
 
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
@@ -39,4 +43,64 @@ jobs:
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --exclude=.git,__pycache__,*.ipynb --statistics
 
       - name: Run tests
-        run: pytest
+        run: pytest -m "not slow and not requires_server"
+
+  test-live-xnat:
+    # T035: Opt-in live-XNAT integration suite job
+    # Runs only on manual workflow_dispatch trigger (not on every push/PR)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system libraries for OpenCV
+        # Docker is preinstalled on ubuntu-latest runners; do not apt-install docker.io.
+        run: sudo apt-get update && sudo apt-get install -y libgl1 libglib2.0-0
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+          pip uninstall -y pathlib || true
+
+      - name: Start XNAT container
+        run: |
+          cd tests/integration/xnat_local
+          bash build_and_run.sh
+
+      - name: Run live-XNAT integration suite
+        env:
+          XNAT_SERVER_URL: ${{ secrets.XNAT_SERVER_URL }}
+          XNAT_PROJECT_NAME: ${{ secrets.XNAT_PROJECT_NAME }}
+          XNAT_USERNAME: ${{ secrets.XNAT_USERNAME }}
+          XNAT_PASSWORD: ${{ secrets.XNAT_PASSWORD }}
+        run: |
+          pytest -m requires_server tests/integration/live_xnat/ -rA --junitxml=live-results.xml
+
+      - name: Fail if no live test ran
+        if: always()
+        run: |
+          python - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          try:
+              root = ET.parse("live-results.xml").getroot()
+          except Exception as exc:
+              sys.exit("live-results.xml missing or unreadable: %s" % exc)
+          suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+          tests = sum(int(s.get("tests", 0)) for s in suites)
+          skipped = sum(int(s.get("skipped", 0)) for s in suites)
+          ran = tests - skipped
+          print("live tests: %d total, %d skipped, %d ran" % (tests, skipped, ran))
+          if ran == 0:
+              sys.exit("No live-XNAT test ran (all skipped or none collected).")
+          PY
+
+      - name: Cleanup (preserve container state per FR-016)
+        if: always()
+        run: docker stop xnat-local-it || true

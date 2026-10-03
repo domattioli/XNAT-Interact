@@ -39,3 +39,6 @@ registry.db
 registry.db-shm
 registry.db-wal
 *.archived-*.json
+
+# 014 live-XNAT integration run outputs (generated per run)
+tests/integration/live_xnat/outcomes/

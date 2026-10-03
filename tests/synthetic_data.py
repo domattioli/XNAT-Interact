@@ -632,3 +632,352 @@ def make_mixed_validity_batch_xlsx(
     df = pd.DataFrame(rows, columns=list(good_row.keys()))
     df.to_excel(path, index=False)
     return path
+
+
+# --------------------------------------------------------------------------- #
+# Real-XNAT integration test cases (live-server fixtures)
+# --------------------------------------------------------------------------- #
+def corrupt_dicom_file(path: Path, mode: str = "truncate_pixels") -> Path:
+    """
+    Corrupt an already-written .dcm file on disk.
+
+    Parameters
+    ----------
+    path
+        Path to an existing .dcm file (must be written via ds.save_as() first).
+    mode
+        One of:
+        - "truncate_pixels": truncate raw pixel bytes to half their original length,
+          producing an incomplete/unreadable pixel data block.
+        - "corrupt_header": corrupt the DICOM header bytes (flip bits in the file
+          preamble/meta section), rendering the file unreadable.
+
+    Returns
+    -------
+    Path
+        The path to the corrupted file (modified in-place).
+
+    Raises
+    ------
+    ValueError
+        If mode is not one of the recognized strings.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"DICOM file does not exist: {path}")
+
+    if mode == "truncate_pixels":
+        # Truncate the file to approximately half its original size.
+        # This leaves the header mostly intact but destroys pixel data.
+        with open(path, "r+b") as f:
+            f.seek(0, 2)  # seek to end
+            original_size = f.tell()
+            new_size = original_size // 2
+            f.truncate(new_size)
+    elif mode == "corrupt_header":
+        # Flip bits in the first 256 bytes (DICOM preamble + file meta).
+        # This makes the file unreadable but keeps some disk structure.
+        with open(path, "r+b") as f:
+            f.seek(0)
+            header = bytearray(f.read(256))
+            # Flip every other byte's MSB
+            for i in range(len(header)):
+                if i % 2 == 0:
+                    header[i] ^= 0x80
+            f.seek(0)
+            f.write(header)
+    else:
+        raise ValueError(f"Unknown corruption mode: {mode}")
+
+    return path
+
+
+# --- Live-XNAT case helpers (spec 014, FR-003) ------------------------------ #
+# Every case below has a fixed, seeded composition so that two builds produce
+# byte-identical files (SC-008). UIDs are derived from fixed strings, never
+# random. All "PHI" is fabricated.
+
+_CASE_UID_ROOT = "1.2.826.0.1.3680043.10.1014."  # private test root (synthetic)
+
+
+def _det_uid(*parts) -> str:
+    """Deterministic DICOM UID derived from ``parts`` (synthetic only)."""
+    from pydicom.uid import generate_uid
+
+    return generate_uid(prefix=_CASE_UID_ROOT, entropy_srcs=[str(p) for p in parts])
+
+
+def _phi_box(mask: "np.ndarray", pad: int = 2) -> tuple:
+    """Bounding box (x0, y0, x1, y1), exclusive end, of the non-zero ``mask``."""
+    ys, xs = np.nonzero(mask)
+    if len(xs) == 0:
+        return (0, 0, 0, 0)
+    h, w = mask.shape[-2:]
+    return (
+        max(int(xs.min()) - pad, 0),
+        max(int(ys.min()) - pad, 0),
+        min(int(xs.max()) + 1 + pad, w),
+        min(int(ys.max()) + 1 + pad, h),
+    )
+
+
+def _set_case_uids(ds, case: str, idx, study_uid: str, series_uid: str, sop_uid: str = None) -> None:
+    """Overwrite every random UID that make_phi_dicom_dataset generated."""
+    sop = sop_uid or _det_uid(case, "sop", idx)
+    ds.file_meta.MediaStorageSOPInstanceUID = sop
+    ds.file_meta.ImplementationClassUID = _det_uid("impl")
+    ds.SOPInstanceUID = sop
+    ds.StudyInstanceUID = study_uid
+    ds.SeriesInstanceUID = series_uid
+
+
+def _bright_phi_frame(text: str, rows: int, cols: int, seed: int):
+    """16-bit frame: low anatomy noise (<= 1000) with bright text (4000)."""
+    rng = np.random.default_rng(seed)
+    base = rng.integers(0, 1000, size=(rows, cols), dtype=np.uint16)
+    text_mask = make_burned_in_phi_pixel_array(text, rows=rows, cols=cols) > 0
+    base[text_mask] = 4000
+    return base, text_mask
+
+
+# Pixels above this value inside a PHI box count as "rendered text" for the
+# bright case; the anatomy noise never exceeds 1000.
+BRIGHT_TEXT_THRESHOLD = 3000
+
+
+def make_knee_2025_case(tmp_dir: Path) -> dict:
+    """
+    KNEE_2025 (FR-003): 42 RF fluoroscopy frames with bright burned-in PHI and
+    18 CT pre-op archive files (one study, two series) in ``rf/``, plus 5 MP4
+    arthroscopy clips in ``esv/``. 65 files. InstanceNumber is unique across
+    the case (1-60).
+
+    Returns a dict with ``source_files``, ``rf_files``, ``esv_files``,
+    ``phi_boxes`` (file name to box), ``series`` (file name to
+    SeriesInstanceUID), ``expected_absent_tags`` (empty) and
+    ``expected_frames`` (empty).
+    """
+    tmp_dir = Path(tmp_dir)
+    rf_dir, esv_dir = tmp_dir / "rf", tmp_dir / "esv"
+    rf_dir.mkdir(parents=True, exist_ok=True)
+    esv_dir.mkdir(parents=True, exist_ok=True)
+
+    study_uid = _det_uid("KNEE_2025", "study")
+    fluoro_series = _det_uid("KNEE_2025", "series", "fluoro")
+    ct_series = _det_uid("KNEE_2025", "series", "ct")
+    rf_files, esv_files, phi_boxes, series = [], [], {}, {}
+
+    for i in range(42):
+        p = rf_dir / f"knee_fluoro_{i:03d}.dcm"
+        ds = make_phi_dicom_dataset(rows=256, cols=256, seed=1000 + i)
+        arr, mask = _bright_phi_frame("DOE^JOHN MRN-0001234 01/02/1980", 256, 256, seed=1000 + i)
+        ds.PixelData = arr.tobytes()
+        ds.InstanceNumber = str(i + 1)
+        ds.StudyDate, ds.StudyTime = "20250115", "100000"
+        ds.PatientBirthDate = "19800102"
+        ds.Modality = "RF"
+        _set_case_uids(ds, "KNEE_2025", f"fluoro{i}", study_uid, fluoro_series)
+        ds.save_as(str(p), enforce_file_format=True)
+        rf_files.append(p)
+        phi_boxes[p.name] = _phi_box(mask)
+        series[p.name] = fluoro_series
+
+    for i in range(18):
+        p = rf_dir / f"knee_preop_ct_{i:03d}.dcm"
+        ds = make_phi_dicom_dataset(rows=128, cols=128, seed=2000 + i)
+        ds.InstanceNumber = str(43 + i)
+        ds.StudyDate, ds.StudyTime = "20250101", "140000"
+        ds.PatientBirthDate = "19800102"
+        ds.Modality = "CT"
+        _set_case_uids(ds, "KNEE_2025", f"ct{i}", study_uid, ct_series)
+        ds.save_as(str(p), enforce_file_format=True)
+        rf_files.append(p)
+        series[p.name] = ct_series
+
+    for i in range(5):
+        p = esv_dir / f"knee_arthroscopy_{i:01d}.mp4"
+        make_synthetic_mp4(p, size=64, n_frames=10, seed=3000 + i)
+        esv_files.append(p)
+
+    return {
+        "case_name": "KNEE_2025",
+        "subject_label": "knee_2025_subject",
+        "experiment_label": "knee_2025_experiment",
+        "capture_date": "2025-01-15",
+        "rf_dir": rf_dir,
+        "esv_dir": esv_dir,
+        "rf_files": rf_files,
+        "esv_files": esv_files,
+        "source_files": rf_files + esv_files,
+        "phi_boxes": phi_boxes,
+        "phi_kind": "bright",
+        "series": series,
+        "expected_absent_tags": {},
+        "expected_frames": {},
+        "expected_dispositions": {},
+        "injected_characteristics": {"burned_in_phi": "bright"},
+        "expected_min_file_count": 65,
+        "expected_max_file_count": 65,
+    }
+
+
+def make_hip_2024_case(tmp_dir: Path) -> dict:
+    """
+    HIP_2024 (FR-003): 18 single-frame XA frames with faint burned-in PHI, one
+    8-frame XA instance and one 9-frame US instance, all in ``rf/``. Every
+    third single-frame file lacks InstitutionName; the US instance lacks
+    ReferringPhysicianName. 20 files.
+    """
+    tmp_dir = Path(tmp_dir)
+    rf_dir = tmp_dir / "rf"
+    rf_dir.mkdir(parents=True, exist_ok=True)
+    study_uid = _det_uid("HIP_2024", "study")
+    rf_files, phi_boxes, absent, frames_expected = [], {}, {}, {}
+
+    for i in range(18):
+        p = rf_dir / f"hip_fluoro_faint_{i:03d}.dcm"
+        faint = make_faint_burned_in_phi_pixel_array(
+            "HIP PATIENT 06/20/2024", rows=256, cols=256, dtype=np.uint16
+        )
+        # Per-frame anatomy outside the text keeps every frame's hash distinct.
+        rng = np.random.default_rng(4000 + i)
+        noise = rng.integers(0, 20, size=faint.shape, dtype=np.uint16)
+        text_mask = faint != 60
+        arr = np.where(text_mask, faint, faint + noise).astype(np.uint16)
+        ds = make_phi_dicom_dataset(rows=256, cols=256, seed=4000 + i)
+        ds.PixelData = arr.tobytes()
+        ds.InstanceNumber = str(i + 1)
+        ds.StudyDate, ds.StudyTime = "20240620", "150000"
+        ds.PatientBirthDate = "19700101"
+        ds.Modality = "XA"
+        _set_case_uids(ds, "HIP_2024", f"xa{i}", study_uid, _det_uid("HIP_2024", "series", "xa"))
+        if i % 3 == 0:
+            del ds.InstitutionName
+            absent[p.name] = ["InstitutionName"]
+        ds.save_as(str(p), enforce_file_format=True)
+        rf_files.append(p)
+        phi_boxes[p.name] = _phi_box(text_mask)
+
+    for j, (modality, n_frames) in enumerate((("XA", 8), ("US", 9))):
+        p = rf_dir / f"hip_multiframe_{modality.lower()}.dcm"
+        frames = make_multiframe_phi_case(
+            "HIP PATIENT MRN 00471123", n_frames=n_frames, faint=True,
+            dtype=np.uint16, seed=5000 + j,
+        )
+        ds = make_phi_dicom_dataset(rows=128, cols=256, seed=5000 + j)
+        ds.PixelData = frames.tobytes()
+        ds.NumberOfFrames = n_frames
+        ds.InstanceNumber = str(19 + j)
+        ds.StudyDate, ds.StudyTime = "20240620", "150000"
+        ds.PatientBirthDate = "19700101"
+        ds.Modality = modality
+        _set_case_uids(ds, "HIP_2024", f"mf{modality}", study_uid,
+                       _det_uid("HIP_2024", "series", f"mf{modality}"))
+        if modality == "US":
+            del ds.ReferringPhysicianName
+            absent[p.name] = ["ReferringPhysicianName"]
+        assert len(ds.PixelData) == n_frames * 128 * 256 * 2
+        ds.save_as(str(p), enforce_file_format=True)
+        rf_files.append(p)
+        frames_expected[p.name] = n_frames
+
+    return {
+        "case_name": "HIP_2024",
+        "subject_label": "hip_2024_subject",
+        "experiment_label": "hip_2024_experiment",
+        "capture_date": "2024-06-20",
+        "rf_dir": rf_dir,
+        "esv_dir": None,
+        "rf_files": rf_files,
+        "esv_files": [],
+        "source_files": list(rf_files),
+        "phi_boxes": phi_boxes,
+        "phi_kind": "faint",
+        "series": {},
+        "expected_absent_tags": absent,
+        "expected_frames": frames_expected,
+        "expected_dispositions": {},
+        "injected_characteristics": {
+            "burned_in_phi": "faint",
+            "missing_tags": sorted({t for v in absent.values() for t in v}),
+        },
+        "expected_min_file_count": 20,
+        "expected_max_file_count": 20,
+    }
+
+
+def make_radiofluoro_2026_case(tmp_dir: Path) -> dict:
+    """
+    RADIOFLUORO_2026 (FR-003): exactly 7 RF files in ``rf/``:
+
+    - ``rfl_dup_a.dcm`` / ``rfl_dup_b.dcm``: same SOPInstanceUID, byte-identical
+      pixel content (a true duplicate);
+    - ``rfl_coll_a.dcm`` / ``rfl_coll_b.dcm``: same SOPInstanceUID, different
+      pixel content (a UID collision);
+    - ``rfl_corrupt_header.dcm``: header bytes flipped;
+    - ``rfl_truncated.dcm``: pixel data truncated;
+    - ``rfl_valid.dcm``: valid.
+    """
+    tmp_dir = Path(tmp_dir)
+    rf_dir = tmp_dir / "rf"
+    rf_dir.mkdir(parents=True, exist_ok=True)
+    study_uid = _det_uid("RADIOFLUORO_2026", "study")
+    series_uid = _det_uid("RADIOFLUORO_2026", "series")
+    dup_uid = _det_uid("RADIOFLUORO_2026", "dup")
+    coll_uid = _det_uid("RADIOFLUORO_2026", "coll")
+
+    plan = [
+        ("rfl_dup_a.dcm", 6000, dup_uid),
+        ("rfl_dup_b.dcm", 6000, dup_uid),
+        ("rfl_coll_a.dcm", 6010, coll_uid),
+        ("rfl_coll_b.dcm", 6011, coll_uid),
+        ("rfl_corrupt_header.dcm", 6020, None),
+        ("rfl_truncated.dcm", 6030, None),
+        ("rfl_valid.dcm", 6040, None),
+    ]
+    files = []
+    for n, (name, seed, sop) in enumerate(plan):
+        p = rf_dir / name
+        ds = make_phi_dicom_dataset(rows=256, cols=256, seed=seed)
+        ds.InstanceNumber = str(n + 1)
+        ds.StudyDate, ds.StudyTime = "20260310", "110000"
+        ds.Modality = "RF"
+        _set_case_uids(ds, "RADIOFLUORO_2026", name, study_uid, series_uid, sop_uid=sop)
+        ds.save_as(str(p), enforce_file_format=True)
+        files.append(p)
+
+    corrupt_dicom_file(rf_dir / "rfl_corrupt_header.dcm", mode="corrupt_header")
+    corrupt_dicom_file(rf_dir / "rfl_truncated.dcm", mode="truncate_pixels")
+
+    return {
+        "case_name": "RADIOFLUORO_2026",
+        "subject_label": "radiofluoro_2026_subject",
+        "experiment_label": "radiofluoro_2026_experiment",
+        "capture_date": "2026-03-10",
+        "rf_dir": rf_dir,
+        "esv_dir": None,
+        "rf_files": files,
+        "esv_files": [],
+        "source_files": list(files),
+        "phi_boxes": {},
+        "phi_kind": None,
+        "series": {},
+        "expected_absent_tags": {},
+        "expected_frames": {},
+        "duplicate_pair": ("rfl_dup_a.dcm", "rfl_dup_b.dcm"),
+        "collision_pair": ("rfl_coll_a.dcm", "rfl_coll_b.dcm"),
+        "corrupted_file": "rfl_corrupt_header.dcm",
+        "truncated_file": "rfl_truncated.dcm",
+        "expected_dispositions": {
+            "rfl_corrupt_header.dcm": "rejected",
+            "rfl_truncated.dcm": "failed_recoverable",
+        },
+        "injected_characteristics": {
+            "uid_collision_pairs": [str(rf_dir / "rfl_coll_a.dcm"), str(rf_dir / "rfl_coll_b.dcm")],
+            "duplicate_pairs": [str(rf_dir / "rfl_dup_a.dcm"), str(rf_dir / "rfl_dup_b.dcm")],
+            "corrupted_files": [str(rf_dir / "rfl_corrupt_header.dcm")],
+            "truncated_files": [str(rf_dir / "rfl_truncated.dcm")],
+        },
+        "expected_min_file_count": 7,
+        "expected_max_file_count": 7,
+    }

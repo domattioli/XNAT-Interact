@@ -404,6 +404,26 @@ def config_tables(live_xnat_server):
 
 
 @pytest.fixture(scope="session")
+def knee_rf_published(live_xnat_server, tmp_path_factory):
+    """
+    Publish the KNEE_2025 radiofluoro session once per live run.
+
+    Spec 015's download-manifest module and the spec 014 KNEE module both need
+    this session on the server. Publishing it twice in one run trips the
+    spec 009 duplicate guard, so both modules share this one publish.
+    Returns the case object, its work folder and the publish result.
+    """
+    from tests.integration.live_xnat import helpers as H
+    from tests.integration.live_xnat.cases import build_case
+
+    work = tmp_path_factory.mktemp("knee_2025_shared")
+    case = build_case("KNEE_2025", work / "src")
+    result = H.publish_case_session(live_xnat_server, case, "rf", work)
+    H.record_case_subject(live_xnat_server, "KNEE_2025", result.uid)
+    return {"case": case, "work": work, "rf": result}
+
+
+@pytest.fixture(scope="session")
 def new_session(live_xnat_server):
     """Factory returning a fresh (XNATLogin, XNATConnection) pair (FR-010)."""
     return live_xnat_server["new_session"]
@@ -426,3 +446,30 @@ def pytest_collection_modifyitems(config, items):
     last = [i for i in items if "test_teardown_persistence" in i.nodeid]
     if last:
         items[:] = [i for i in items if i not in last] + last
+
+
+@pytest.fixture
+def downloads_cleanup(live_xnat_server):
+    """
+    Spec 015 (T028): collect DOWNLOADS manifest names a test created on the
+    test project and try to delete them afterwards so reruns start clean.
+
+    Deletion is best effort: the local XNAT image refused admin DELETE in
+    spec 014 (SPEC-ISSUE-15), and manifest names are unique per run, so a
+    leftover never collides.  Any failure is printed as a note, never raised.
+    """
+    created: list = []
+    yield created
+    from src.services import xnat_conventions as conventions
+
+    proj_qs = conventions.project_qs(live_xnat_server["project_name"])
+    try:
+        gw = live_xnat_server["gateway_session"]()
+    except Exception as e:  # noqa: BLE001
+        print(f"Note: could not open a session to clean DOWNLOADS: {type(e).__name__}")
+        return
+    for name in created:
+        try:
+            gw.delete_file(proj_qs, conventions.DOWNLOADS_RESOURCE, name)
+        except Exception as e:  # noqa: BLE001
+            print(f"Note: could not delete DOWNLOADS/{name} ({type(e).__name__}); left in place")

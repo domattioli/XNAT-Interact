@@ -219,3 +219,51 @@ class ResourceLabel:
     CONFIG = 'config'
     BACKUPS = 'backups'
     SEGMENTATION_CONSENSUS = 'SEGMENTATION_CONSENSUS'
+
+
+# ---------------------------------------------------------------------------
+# Spec 015: download manifests stored on the server
+# ---------------------------------------------------------------------------
+
+# Project-level resource that holds one append-only copy of every download
+# manifest (spec 015, FR-018).  Each download adds a new uniquely named file;
+# nothing in this resource is ever overwritten.
+DOWNLOADS_RESOURCE = "DOWNLOADS"
+
+
+def _file_safe(text: str) -> str:
+    """Keep only letters, digits, '_', '.' and '-' so the text is safe in a file name."""
+    import re
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]", "_", str(text or ""))
+    return cleaned.strip("._") or "unknown"
+
+
+def manifest_server_filename(username, subjects, when) -> str:
+    """
+    Build the server file name for a download manifest (spec 015, FR-018).
+
+    The name is ``<username>-<case>-<timestamp>.json``:
+
+    - ``username`` is the logged-in XNAT user (``unknown`` when none is known);
+    - ``case`` is the subject label when the download held one subject, or
+      ``multi<N>`` when it held N different subjects;
+    - ``timestamp`` is the UTC time to the microsecond, ``YYYYMMDDTHHMMSSffffffZ``.
+
+    Args:
+        username: XNAT username, or None.
+        subjects: the subject labels in the download (duplicates are ignored).
+        when: a timezone-aware or UTC ``datetime``.
+
+    Returns:
+        str: a file name made only of letters, digits, '_', '.' and '-'.
+    """
+    from datetime import timezone
+    unique = list(dict.fromkeys(s for s in subjects if s))
+    if len(unique) == 1:
+        case = unique[0]
+    else:
+        case = f"multi{len(unique)}"
+    if when.tzinfo is not None:
+        when = when.astimezone(timezone.utc)
+    stamp = when.strftime("%Y%m%dT%H%M%S%fZ")
+    return f"{_file_safe(username)}-{_file_safe(case)}-{stamp}.json"

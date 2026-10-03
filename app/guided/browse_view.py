@@ -116,33 +116,28 @@ def render_browse(server, project_name: str) -> None:
 
         if st.button(f"📥 Download {selected_subject}", key="btn_download_case", type="primary"):
             with st.spinner(f"Downloading {selected_subject}…"):
-                # Zip must be built INSIDE the tempdir context — the files are
-                # deleted the moment it exits (live-found bug: empty/crashed zip).
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    outcome = download_selection(server, project_name, subject_rows, tmpdir)
-
-                    if outcome.ok and outcome.files_written:
-                        zip_buffer = io.BytesIO()
-                        with _zipfile.ZipFile(zip_buffer, "w", _zipfile.ZIP_DEFLATED) as zf:
-                            base = Path(tmpdir)
-                            for fp in outcome.files_written:
-                                try:
-                                    arcname = fp.relative_to(base)
-                                except ValueError:
-                                    arcname = fp.name
-                                zf.write(fp, arcname)
-                        # Persist across Streamlit reruns so the save button
-                        # survives the click-rerun cycle.
-                        st.session_state["browse_zip_bytes"] = zip_buffer.getvalue()
-                        st.session_state["browse_zip_subject"] = selected_subject
-                        st.session_state["browse_zip_count"] = len(outcome.files_written)
-                    elif outcome.ok and not outcome.files_written:
-                        st.warning("No files found for this subject.")
+                outcome, zip_bytes = prepare_download_zip(
+                    server, project_name, subject_rows,
+                    identity=_manifest_identity(),
+                    uploader=_uploader_for(server),
+                )
+                # Short plain-language notes about the download record
+                # (for example, "the server copy could not be stored").
+                for note in outcome.notes:
+                    st.info(note)
+                if outcome.ok and zip_bytes is not None:
+                    # Persist across Streamlit reruns so the save button
+                    # survives the click-rerun cycle.
+                    st.session_state["browse_zip_bytes"] = zip_bytes
+                    st.session_state["browse_zip_subject"] = selected_subject
+                    st.session_state["browse_zip_count"] = len(outcome.files_written)
+                elif outcome.ok and not outcome.files_written:
+                    st.warning("No files found for this subject.")
+                else:
+                    if outcome.friendly:
+                        components.render_friendly_error(outcome.friendly)
                     else:
-                        if outcome.friendly:
-                            components.render_friendly_error(outcome.friendly)
-                        else:
-                            st.error("Download failed. Contact the Data Librarian.")
+                        st.error("Download failed. Contact the Data Librarian.")
 
         if st.session_state.get("browse_zip_bytes") and st.session_state.get("browse_zip_subject") == selected_subject:
             st.success(f"✅ Ready: {st.session_state['browse_zip_count']} file(s).")
@@ -206,3 +201,76 @@ def _render_annotations_panel(server, project_name: str, row: dict) -> None:
 
         except Exception as e:
             st.info(f"Annotations not available: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Spec 015 (FR-020): download with a download record
+# ---------------------------------------------------------------------------
+
+def prepare_download_zip(server, project_name: str, rows: list[dict], *, identity=None, uploader=None):
+    """
+    Download *rows* and return ``(outcome, zip_bytes)`` for the save button.
+
+    The zip holds the downloaded files and, at the top, the download record
+    ``download_manifest.json`` (spec 015).  ``zip_bytes`` is None when
+    nothing was downloaded.  This function has no Streamlit calls, so it can
+    be tested offline against ``FakeXNAT``.
+    """
+    # Zip must be built INSIDE the tempdir context — the files are
+    # deleted the moment it exits (live-found bug: empty/crashed zip).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        outcome = download_selection(
+            server, project_name, rows, tmpdir, identity=identity, uploader=uploader
+        )
+        if not (outcome.ok and outcome.files_written):
+            return outcome, None
+        zip_buffer = io.BytesIO()
+        base = Path(tmpdir)
+        with _zipfile.ZipFile(zip_buffer, "w", _zipfile.ZIP_DEFLATED) as zf:
+            for fp in outcome.files_written:
+                try:
+                    arcname = fp.relative_to(base)
+                except ValueError:
+                    arcname = fp.name
+                zf.write(fp, arcname)
+            if outcome.manifest_path is not None and Path(outcome.manifest_path).exists():
+                zf.write(outcome.manifest_path, Path(outcome.manifest_path).name)
+        return outcome, zip_buffer.getvalue()
+
+
+def _manifest_identity():
+    """Build the record's identity from the logged-in session and the configuration (never a password)."""
+    from app import state
+    from app.guided import demo
+    from app.logic.download_manifest import ManifestIdentity
+    server_url = None
+    try:
+        if demo.is_demo_mode():
+            server_url = getattr(st.session_state.get("demo_config"), "server_url", None)
+        else:
+            from src.services.config import AppConfig
+            server_url = AppConfig.load().server_url
+    except Exception:  # noqa: BLE001 — a missing address is recorded as null
+        server_url = None
+    return ManifestIdentity(username=state.get_username(), server_url=server_url)
+
+
+def _uploader_for(server):
+    """
+    Return something that can store the record on the server, or None.
+
+    A gateway (or the offline ``FakeXNAT``) is used as is.  A plain pyxnat
+    connection from the login page is wrapped in a ``PyxnatGateway`` that
+    reuses the already-open connection, so no password is needed or kept.
+    """
+    if server is None:
+        return None
+    if hasattr(server, "put_file") and hasattr(server, "list_files"):
+        return server
+    try:
+        from src.services.xnat_gateway import PyxnatGateway
+        gateway = PyxnatGateway.__new__(PyxnatGateway)
+        gateway.server = server
+        return gateway
+    except Exception:  # noqa: BLE001 — without an uploader the record simply stays local
+        return None

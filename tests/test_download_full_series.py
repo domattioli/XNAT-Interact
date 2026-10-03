@@ -538,7 +538,9 @@ class TestZipAssemblyScope:
         assert zip_path.exists(), "Zip file was not created."
 
         with zipfile.ZipFile(zip_path) as zf:
-            names = zf.namelist()
+            # Spec 015 (FR-002) adds the download record at the top of every
+            # zip; it is not a source file, so leave it out of the count.
+            names = [n for n in zf.namelist() if n != "download_manifest.json"]
 
         # All 5 staged source files should be in the zip.
         assert len(names) == 5, (

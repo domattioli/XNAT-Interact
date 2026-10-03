@@ -25,12 +25,12 @@ CASE = "KNEE_2025"
 
 
 @pytest.fixture(scope="module")
-def knee(live_xnat_server, tmp_path_factory):
-    work = tmp_path_factory.mktemp("knee_2025")
-    case = build_case(CASE, work / "src")
+def knee(live_xnat_server, knee_rf_published):
+    # The radiofluoro session is published once per run (shared with the
+    # spec 015 manifest module); only the endoscopy session is published here.
+    case, work = knee_rf_published["case"], knee_rf_published["work"]
     state = {"case": case, "work": work, "dispositions": {}, "counts": {}, "scan_layout": {}, "absent_tags": {}}
-    state["rf"] = H.publish_case_session(live_xnat_server, case, "rf", work)
-    H.record_case_subject(live_xnat_server, CASE, state["rf"].uid)
+    state["rf"] = knee_rf_published["rf"]
     state["esv"] = H.publish_case_session(live_xnat_server, case, "esv", work)
     H.record_case_subject(live_xnat_server, CASE, state["esv"].uid)
     return state

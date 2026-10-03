@@ -33,6 +33,8 @@ from typing import Any, List, Optional, Union
 
 from src.services.errors import FriendlyError
 from app.logic.browse import fetch_data_table, COLUMNS
+from app.logic.download_manifest import FileRecord as _FileRecord
+from app.logic.download_manifest import FileRecord, ManifestIdentity  # noqa: F401  (re-exported for callers)
 
 
 # ---------------------------------------------------------------------------
@@ -78,11 +80,110 @@ class DownloadOutcome:
     ok: bool
     files_written: List[Path] = field(default_factory=list)
     friendly: Optional[FriendlyError] = None
+    # Spec 015: where the download record (download_manifest.json) was saved,
+    # and short plain-language notes for the user (for example "the server
+    # copy of the record could not be stored").  Both default to "nothing".
+    manifest_path: Optional[Path] = None
+    notes: List[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Shared helpers: which scans and which resource labels to fetch.
+# Used by both download_selection and assemble_zip (spec 015, research R3).
+# ---------------------------------------------------------------------------
+
+def _resolve_scans(server: Any, project_name: str, subject: str, experiment: str, row: dict) -> List[str]:
+    """
+    Decide which scans of one selected row to download.
+
+    Order: the row's real scan label (``scan_id``) first, then the older
+    display value (``scan_type``), and when neither is given, every scan of
+    the experiment.  Returns an empty list when nothing can be found.
+    """
+    # Scan resolution: scan_id (real) → scan_type (legacy) → enumerate all
+    scan_id = str(row.get("scan_id", "")).strip() or None
+    scan_type = str(row.get("scan_type", "")).strip() or None
+
+    scans_to_process: List[str] = []
+    if scan_id:
+        scans_to_process = [scan_id]
+    elif scan_type:
+        scans_to_process = [scan_type]
+    else:
+        # Enumerate all scans for this experiment
+        try:
+            exp_qs = (
+                f"/projects/{project_name}/subjects/{subject}"
+                f"/experiments/{experiment}"
+            )
+            exp_sel = server.select(exp_qs)
+            # Try pyxnat-style .scans() method if available
+            if hasattr(exp_sel, "scans") and callable(exp_sel.scans):
+                try:
+                    scans_to_process = list(exp_sel.scans().get()) or []
+                except Exception:
+                    scans_to_process = []
+
+            # Fallback: use list_scans method if available
+            if not scans_to_process and hasattr(server, "list_scans") and callable(server.list_scans):
+                scans_to_process = list(server.list_scans(project_name, subject, experiment)) or []
+        except Exception:
+            scans_to_process = []
+
+    return scans_to_process
+
+
+def _enumerate_resources(server: Any, project_name: str, subject: str, experiment: str, scan: str) -> List[str]:
+    """
+    Return every resource label (SRC, DERIVED, ...) of one scan.
+
+    Falls back to ``["SRC"]`` when the server cannot list the labels, which
+    matches the behavior the folder download has always had.
+    """
+    # Enumerate resource labels for this scan
+    resources_to_process: List[str] = []
+    try:
+        scan_qs = (
+            f"/projects/{project_name}/subjects/{subject}"
+            f"/experiments/{experiment}/scans/{scan}"
+        )
+        scan_sel = server.select(scan_qs)
+
+        # Try pyxnat-style .resources() method if available.
+        # Prefer object-iteration + .label(): on real pyxnat (XNAT 1.9.3),
+        # resources().get() returns NUMERIC resource IDs (e.g. '76') and
+        # selecting .resource('76') silently enumerates ZERO files.
+        # Iterating yields resource objects whose .label() ('SRC') works.
+        if hasattr(scan_sel, "resources") and callable(scan_sel.resources):
+            try:
+                resources_to_process = [
+                    r.label() for r in scan_sel.resources() if hasattr(r, "label")
+                ] or []
+            except Exception:
+                resources_to_process = []
+            if not resources_to_process:
+                # Fallback for test doubles whose resources() only supports .get().
+                try:
+                    resources_to_process = list(scan_sel.resources().get()) or []
+                except Exception:
+                    resources_to_process = []
+
+        # Fallback: use list_resources method if available
+        if not resources_to_process and hasattr(server, "list_resources") and callable(server.list_resources):
+            resources_to_process = list(server.list_resources(project_name, subject, experiment, scan)) or []
+    except Exception:
+        resources_to_process = []
+
+    # Default to SRC if no resources enumerated
+    if not resources_to_process:
+        resources_to_process = ["SRC"]
+
+    return resources_to_process
+
 
 def list_downloadable(
     server: Any,
@@ -122,6 +223,68 @@ def download_selection(
     project_name: str,
     selection: List[dict],
     dest_dir: Union[str, Path],
+    *,
+    identity: Optional["ManifestIdentity"] = None,
+    uploader: Any = None,
+) -> DownloadOutcome:
+    """
+    Download resource files for the chosen rows into *dest_dir* and write a
+    download record (``download_manifest.json``) at the top of *dest_dir*.
+
+    This wraps the original download (see ``_download_selection_core`` for the
+    full behavior) and adds the spec 015 manifest:
+
+    - after a download that wrote at least one file, the manifest lists every
+      file written, where it came from on the server, and its SHA-256;
+    - a download that stopped partway gets a manifest marked incomplete;
+    - when *uploader* (an ``XnatGateway``) is given and the download is
+      complete, a copy is stored on the server in the project resource
+      ``DOWNLOADS``; if that fails the download still succeeds and
+      ``outcome.notes`` explains what happened.
+
+    *identity* carries the logged-in username and the configured server
+    address; when it is missing both are recorded as null.
+    """
+    from app.logic import download_manifest as dm
+
+    records: List["FileRecord"] = []
+    visited_scans: List[str] = []
+    outcome = _download_selection_core(
+        server, project_name, selection, dest_dir, records=records, visited_scans=visited_scans
+    )
+    if not outcome.files_written:
+        return outcome
+
+    dest_path = Path(dest_dir)
+    manifest = dm.build_manifest(
+        path_kind="folder",
+        project=project_name,
+        selection=selection,
+        records=records,
+        root=dest_path,
+        complete=outcome.ok,
+        identity=identity,
+        scope=None,
+        empty_scans=visited_scans,
+    )
+    pending, notes = dm.finalize_server_copy(manifest, uploader, project_name)
+    manifest_path, write_notes = dm.write_manifest(manifest, dest_path / dm.MANIFEST_FILENAME)
+    notes.extend(write_notes)
+    if pending is not None:
+        notes.extend(dm.complete_server_copy(manifest, pending, uploader, project_name, manifest_path))
+    outcome.manifest_path = manifest_path
+    outcome.notes.extend(notes)
+    return outcome
+
+
+def _download_selection_core(
+    server: Any,
+    project_name: str,
+    selection: List[dict],
+    dest_dir: Union[str, Path],
+    *,
+    records: Optional[List["FileRecord"]] = None,
+    visited_scans: Optional[List[str]] = None,
 ) -> DownloadOutcome:
     """
     Download resource files for the chosen rows into *dest_dir*.
@@ -218,35 +381,7 @@ def download_selection(
             )
             return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
 
-        # Scan resolution: scan_id (real) → scan_type (legacy) → enumerate all
-        scan_id = str(row.get("scan_id", "")).strip() or None
-        scan_type = str(row.get("scan_type", "")).strip() or None
-
-        scans_to_process: List[str] = []
-        if scan_id:
-            scans_to_process = [scan_id]
-        elif scan_type:
-            scans_to_process = [scan_type]
-        else:
-            # Enumerate all scans for this experiment
-            try:
-                exp_qs = (
-                    f"/projects/{project_name}/subjects/{subject}"
-                    f"/experiments/{experiment}"
-                )
-                exp_sel = server.select(exp_qs)
-                # Try pyxnat-style .scans() method if available
-                if hasattr(exp_sel, "scans") and callable(exp_sel.scans):
-                    try:
-                        scans_to_process = list(exp_sel.scans().get()) or []
-                    except Exception:
-                        scans_to_process = []
-
-                # Fallback: use list_scans method if available
-                if not scans_to_process and hasattr(server, "list_scans") and callable(server.list_scans):
-                    scans_to_process = list(server.list_scans(project_name, subject, experiment)) or []
-            except Exception:
-                scans_to_process = []
+        scans_to_process = _resolve_scans(server, project_name, subject, experiment, row)
 
         if not scans_to_process:
             # No scans to process — graceful skip
@@ -258,43 +393,13 @@ def download_selection(
             if not scan:
                 continue
 
-            # Enumerate resource labels for this scan
-            resources_to_process: List[str] = []
-            try:
-                scan_qs = (
-                    f"/projects/{project_name}/subjects/{subject}"
-                    f"/experiments/{experiment}/scans/{scan}"
-                )
-                scan_sel = server.select(scan_qs)
-
-                # Try pyxnat-style .resources() method if available.
-                # Prefer object-iteration + .label(): on real pyxnat (XNAT 1.9.3),
-                # resources().get() returns NUMERIC resource IDs (e.g. '76') and
-                # selecting .resource('76') silently enumerates ZERO files.
-                # Iterating yields resource objects whose .label() ('SRC') works.
-                if hasattr(scan_sel, "resources") and callable(scan_sel.resources):
-                    try:
-                        resources_to_process = [
-                            r.label() for r in scan_sel.resources() if hasattr(r, "label")
-                        ] or []
-                    except Exception:
-                        resources_to_process = []
-                    if not resources_to_process:
-                        # Fallback for test doubles whose resources() only supports .get().
-                        try:
-                            resources_to_process = list(scan_sel.resources().get()) or []
-                        except Exception:
-                            resources_to_process = []
-
-                # Fallback: use list_resources method if available
-                if not resources_to_process and hasattr(server, "list_resources") and callable(server.list_resources):
-                    resources_to_process = list(server.list_resources(project_name, subject, experiment, scan)) or []
-            except Exception:
-                resources_to_process = []
-
-            # Default to SRC if no resources enumerated
-            if not resources_to_process:
-                resources_to_process = ["SRC"]
+            resources_to_process = _enumerate_resources(server, project_name, subject, experiment, scan)
+            scan_qs_for_manifest = (
+                f"/projects/{project_name}/subjects/{subject}"
+                f"/experiments/{experiment}/scans/{scan}"
+            )
+            if visited_scans is not None:
+                visited_scans.append(scan_qs_for_manifest)
 
             # Download files from each resource
             for resource_label in resources_to_process:
@@ -402,6 +507,8 @@ def download_selection(
                         else:
                             if _written.exists() and _written.stat().st_size > 0:
                                 files_written.append(_written)
+                                if records is not None:
+                                    records.append(_FileRecord(_written, scan_qs_for_manifest, resource_label, _legacy_fn))
                         continue
 
                 # Count mismatch between enumerated files and server-reported count → FriendlyError.
@@ -498,6 +605,8 @@ def download_selection(
                         return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
 
                     files_written.append(written)
+                    if records is not None:
+                        records.append(_FileRecord(written, scan_qs_for_manifest, resource_label, filename))
 
     return DownloadOutcome(ok=True, files_written=files_written, friendly=None)
 
@@ -506,16 +615,35 @@ def download_selection(
 # T015b (#25): zip assembly with content-scope picker
 # ---------------------------------------------------------------------------
 
+def _zip_labels_for_scope(
+    server: Any, project_name: str, subject: str, experiment: str, scan: str, scope: str
+) -> List[str]:
+    """
+    Return the resource labels a zip download fetches for one scan.
+
+    ``source`` means SRC only, ``derived`` means DERIVED only, and ``all``
+    means every label the scan has (the same set the folder download walks).
+    """
+    if scope == "all":
+        return _enumerate_resources(server, project_name, subject, experiment, scan)
+    if scope == "derived":
+        return ["DERIVED"]
+    return ["SRC"]
+
+
 def assemble_zip(
     server: Any,
     project_name: str,
     selection: List[dict],
     zip_dest: Union[str, Path],
     scope: str = "source",
+    *,
+    identity: Optional[ManifestIdentity] = None,
+    uploader: Any = None,
 ) -> DownloadOutcome:
     """
     Download all enumerated resource files for *selection* and pack them into
-    a single zip at *zip_dest*.
+    a single zip at *zip_dest*, together with a download record.
 
     Parameters
     ----------
@@ -525,9 +653,19 @@ def assemble_zip(
     zip_dest     : Destination zip file path (created; parent must exist).
     scope        : Content scope — one of:
                      "source"   — source images only (SRC resource, default)
-                     "all"      — all scans (same as source for now; future:
-                                  includes DERIVED/other resource labels)
-                     "derived"  — derived data only (placeholder, future)
+                     "all"      — every resource label of each scan (SRC,
+                                  DERIVED and any other), like the folder download
+                     "derived"  — derived data only (DERIVED resource)
+    identity     : logged-in username and configured server address for the
+                   record (spec 015); recorded as null when missing.
+    uploader     : an ``XnatGateway``; when given, a copy of a complete record
+                   is stored in the project resource ``DOWNLOADS``.
+
+    Scans are chosen exactly as in ``download_selection``: the row's
+    ``scan_id`` first, then ``scan_type``, then every scan of the experiment.
+
+    The record (``download_manifest.json``) is written at the top of the zip
+    and also beside it as ``<zip name without .zip>.manifest.json``.
 
     Returns
     -------
@@ -537,87 +675,131 @@ def assemble_zip(
     """
     import zipfile as _zipfile
     import tempfile
+    from app.logic import download_manifest as dm
 
     zip_dest = Path(zip_dest)
     zip_dest.parent.mkdir(parents=True, exist_ok=True)
-
-    # Resolve resource label from scope.
-    resource_label = "SRC" if scope in ("source", "all") else "DERIVED"
+    beside_path = zip_dest.with_name(f"{zip_dest.stem}.manifest.json")
 
     files_written: List[Path] = []
+    records: List[FileRecord] = []
+    visited_scans: List[str] = []
 
     with tempfile.TemporaryDirectory() as _tmpdir:
         tmp_path = Path(_tmpdir)
+        failure: Optional[FriendlyError] = None
 
         for row in selection:
+            if failure is not None:
+                break
             subject = str(row.get("subject", ""))
             experiment = str(row.get("experiment", ""))
-            scan = str(row.get("scan_type", "")) or "SRC"
-
             if not subject or not experiment:
                 continue
 
-            scan_qs = (
-                f"/projects/{project_name}/subjects/{subject}"
-                f"/experiments/{experiment}/scans/{scan}"
-            )
-
-            try:
-                resource = server.select(scan_qs).resource(resource_label)
-            except Exception as exc:  # noqa: BLE001
-                from src.services.errors import handle as _handle
-                fe = _handle(
-                    exc,
-                    title="Could not access scan resource",
-                    message=f"Failed to access resource for subject '{subject}', scan '{scan}'.",
-                    recourse=["Check your VPN connection and retry."],
-                    context=f"assemble_zip, subject={subject}, scan={scan}",
+            for scan in _resolve_scans(server, project_name, subject, experiment, row):
+                if failure is not None:
+                    break
+                scan = str(scan).strip()
+                if not scan:
+                    continue
+                scan_qs = (
+                    f"/projects/{project_name}/subjects/{subject}"
+                    f"/experiments/{experiment}/scans/{scan}"
                 )
-                return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
+                visited_scans.append(scan_qs)
 
-            if hasattr(resource, "list_files"):
-                # Test doubles / gateway surface.
-                real_filenames: List[str] = list(resource.list_files())
-            elif hasattr(resource, "files"):
-                # Real pyxnat: resource.files() yields file objects with .label().
-                real_filenames = [f.label() for f in resource.files()]
-            else:
-                real_filenames = []
-            if not real_filenames:
-                continue  # empty resource — skip
+                for resource_label in _zip_labels_for_scope(server, project_name, subject, experiment, scan, scope):
+                    if failure is not None:
+                        break
+                    try:
+                        resource = server.select(scan_qs).resource(resource_label)
+                    except Exception as exc:  # noqa: BLE001
+                        from src.services.errors import handle as _handle
+                        failure = _handle(
+                            exc,
+                            title="Could not access scan resource",
+                            message=f"Failed to access resource for subject '{subject}', scan '{scan}'.",
+                            recourse=["Check your VPN connection and retry."],
+                            context=f"assemble_zip, subject={subject}, scan={scan}",
+                        )
+                        break
 
-            subj_dir = tmp_path / subject / experiment / scan
-            subj_dir.mkdir(parents=True, exist_ok=True)
+                    if hasattr(resource, "list_files"):
+                        # Test doubles / gateway surface.
+                        real_filenames: List[str] = list(resource.list_files())
+                    elif hasattr(resource, "files"):
+                        # Real pyxnat: resource.files() yields file objects with .label().
+                        real_filenames = [f.label() for f in resource.files()]
+                    else:
+                        real_filenames = []
+                    if not real_filenames:
+                        continue  # empty resource — skip
 
-            for fn in real_filenames:
-                try:
-                    dest_file = _safe_resource_join(subj_dir, fn)
-                except ValueError:
-                    fe = FriendlyError(
-                        title="Unsafe filename from server — zip blocked",
-                        message=(
-                            f"The server returned a file named '{fn}' for subject "
-                            f"'{subject}' that would write outside the staging folder. "
-                            f"Zip assembly was blocked as a safety precaution."
-                        ),
-                        recourse=[
-                            "Contact the Data Librarian — the scan resource may be corrupt.",
-                        ],
-                    )
-                    return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
-                try:
-                    result = resource.file(fn).get_copy(dest_file)
-                    files_written.append(Path(result))
-                except Exception as exc:  # noqa: BLE001
-                    from src.services.errors import handle as _handle
-                    fe = _handle(
-                        exc,
-                        title="Download error during zip assembly",
-                        message=f"Failed to download '{fn}' for subject '{subject}'.",
-                        recourse=["Re-run to resume."],
-                        context=f"assemble_zip, subject={subject}, fn={fn}",
-                    )
-                    return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
+                    # Keep each label in its own folder when a scope can hold
+                    # several labels, so same-named files never collide.
+                    subj_dir = tmp_path / subject / experiment / scan
+                    if scope == "all":
+                        subj_dir = subj_dir / resource_label
+                    subj_dir.mkdir(parents=True, exist_ok=True)
+
+                    for fn in real_filenames:
+                        try:
+                            dest_file = _safe_resource_join(subj_dir, fn)
+                        except ValueError:
+                            failure = FriendlyError(
+                                title="Unsafe filename from server — zip blocked",
+                                message=(
+                                    f"The server returned a file named '{fn}' for subject "
+                                    f"'{subject}' that would write outside the staging folder. "
+                                    f"Zip assembly was blocked as a safety precaution."
+                                ),
+                                recourse=[
+                                    "Contact the Data Librarian — the scan resource may be corrupt.",
+                                ],
+                            )
+                            break
+                        try:
+                            result = Path(resource.file(fn).get_copy(dest_file))
+                        except Exception as exc:  # noqa: BLE001
+                            from src.services.errors import handle as _handle
+                            failure = _handle(
+                                exc,
+                                title="Download error during zip assembly",
+                                message=f"Failed to download '{fn}' for subject '{subject}'.",
+                                recourse=["Re-run to resume."],
+                                context=f"assemble_zip, subject={subject}, fn={fn}",
+                            )
+                            break
+                        files_written.append(result)
+                        records.append(FileRecord(result, scan_qs, resource_label, fn))
+
+        if failure is not None:
+            # Spec 015 FR-008: leave an incomplete record beside the (absent) zip
+            # listing only what was fetched, so nobody mistakes it for complete.
+            if files_written:
+                manifest = dm.build_manifest(
+                    path_kind="zip", project=project_name, selection=selection,
+                    records=records, root=tmp_path, complete=False,
+                    identity=identity, scope=scope, empty_scans=visited_scans,
+                )
+                dm.finalize_server_copy(manifest, None, project_name)
+                path, notes = dm.write_manifest(manifest, beside_path)
+                return DownloadOutcome(ok=False, files_written=files_written, friendly=failure,
+                                       manifest_path=path, notes=notes)
+            return DownloadOutcome(ok=False, files_written=files_written, friendly=failure)
+
+        notes: List[str] = []
+        manifest = None
+        pending = None
+        if files_written:
+            manifest = dm.build_manifest(
+                path_kind="zip", project=project_name, selection=selection,
+                records=records, root=tmp_path, complete=True,
+                identity=identity, scope=scope, empty_scans=visited_scans,
+            )
+            pending, notes = dm.finalize_server_copy(manifest, uploader, project_name)
+            packed_bytes = dm.manifest_bytes(manifest)
 
         # Pack all downloaded files into the zip.
         with _zipfile.ZipFile(zip_dest, "w", _zipfile.ZIP_DEFLATED) as zf:
@@ -625,5 +807,15 @@ def assemble_zip(
                 # Archive name = relative path from tmp_path.
                 arcname = fp.relative_to(tmp_path)
                 zf.write(fp, arcname)
+            if manifest is not None:
+                zf.writestr(dm.MANIFEST_FILENAME, packed_bytes)
 
-    return DownloadOutcome(ok=True, files_written=files_written, friendly=None)
+    manifest_path = None
+    if manifest is not None:
+        manifest_path, write_notes = dm.write_manifest(manifest, beside_path)
+        notes.extend(write_notes)
+        if pending is not None:
+            notes.extend(dm.complete_server_copy(manifest, pending, uploader, project_name, manifest_path))
+
+    return DownloadOutcome(ok=True, files_written=files_written, friendly=None,
+                           manifest_path=manifest_path, notes=notes)

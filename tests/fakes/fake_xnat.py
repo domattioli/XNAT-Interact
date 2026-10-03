@@ -667,9 +667,32 @@ class FakeXNAT(XnatGateway):
         sel = self._selectables.setdefault(
             querystring, FakeSelectable(root=self, querystring=querystring)
         )
+        if self.select._parse_resource_qs(querystring) is None:
+            # Spec 015: project-level (or other non-scan) resources keep their
+            # files so list_files() can confirm an upload.  overwrite=False on
+            # an existing name is refused, like the real server.
+            resource = self._flat_resource(querystring, resource_label)
+            if overwrite is False and filename in resource.list_files():
+                raise FileExistsError(f"{filename} already exists in {resource_label}")
+            resource.file(filename).put(
+                ffn, content=content, format=format, tags=tags, overwrite=overwrite
+            )
+            data = Path(ffn).read_bytes() if Path(str(ffn)).is_file() else b""
+            resource._staged_files = [(n, d) for n, d in resource._staged_files if n != filename]
+            resource._staged_files.append((filename, data))
+            return
         sel.resource(resource_label).file(filename).put(
             ffn, content=content, format=format, tags=tags, overwrite=overwrite
         )
+
+    def _flat_resource(self, querystring: str, resource_label: str) -> "FakeResource":
+        """Return the stored resource for a non-scan query string (spec 015)."""
+        if not hasattr(self, "_flat_resources"):
+            self._flat_resources: Dict[tuple, FakeResource] = {}
+        key = (querystring, resource_label)
+        if key not in self._flat_resources:
+            self._flat_resources[key] = FakeResource(root=self, label=resource_label)
+        return self._flat_resources[key]
 
     def insert_file(
         self,
@@ -725,6 +748,9 @@ class FakeXNAT(XnatGateway):
 
         Returns an empty list when no files have been staged (seed_resource_files).
         """
+        flat = getattr(self, "_flat_resources", {})
+        if (querystring, resource_label) in flat:
+            return flat[(querystring, resource_label)].list_files()
         sel = self._selectables.get(querystring)
         if sel is None:
             return []

@@ -98,3 +98,50 @@ def test_server_filename_for_many_subjects():
     when = datetime(2026, 1, 2, 3, 4, 5, 6, tzinfo=timezone.utc)
     assert manifest_server_filename("student a", ["S1", "S2", "S1"], when) == "student_a-multi2-20260102T030405000006Z.json"
     assert manifest_server_filename(None, ["S1"], when).startswith("unknown-S1-")
+
+
+def test_upload_waits_for_a_lagging_listing(monkeypatch):
+    """Found live 2026-10-03: two concurrent downloads; the listing lagged the upload once."""
+    from app.logic import download_manifest as dm
+
+    monkeypatch.setattr(dm, "_LISTING_DELAY_SECONDS", 0)
+
+    class LaggingUploader:
+        def __init__(self):
+            self.calls = 0
+        def put_file(self, *a, **k):
+            pass
+        def list_files(self, *a, **k):
+            self.calls += 1
+            return ["record.json"] if self.calls >= 3 else []
+
+    up = LaggingUploader()
+    assert dm.upload_manifest(b"{}", "record.json", up, "P") == (dm.STATUS_UPLOADED, None)
+    assert up.calls == 3
+
+    never = LaggingUploader()
+    never.list_files = lambda *a, **k: []
+    status, reason = dm.upload_manifest(b"{}", "record.json", never, "P")
+    assert status == dm.STATUS_FAILED and "did not list" in reason
+
+
+def test_upload_is_sent_again_when_the_server_dropped_it(monkeypatch):
+    """Found live 2026-10-03: a concurrent PUT into DOWNLOADS returned OK but the file was gone."""
+    from app.logic import download_manifest as dm
+
+    monkeypatch.setattr(dm, "_LISTING_DELAY_SECONDS", 0)
+
+    class DroppingUploader:
+        def __init__(self):
+            self.puts = 0
+            self.stored = []
+        def put_file(self, qs, resource, filename, ffn, **k):
+            self.puts += 1
+            if self.puts >= 2:
+                self.stored.append(filename)
+        def list_files(self, *a, **k):
+            return list(self.stored)
+
+    up = DroppingUploader()
+    assert dm.upload_manifest(b"{}", "record.json", up, "P") == (dm.STATUS_UPLOADED, None)
+    assert up.puts == 2

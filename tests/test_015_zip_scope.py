@@ -88,3 +88,25 @@ def test_zip_without_identity_records_nulls(tmp_path):
     m = json.loads(out.manifest_path.read_text(encoding="utf-8"))
     assert m["username"] is None and m["server_url"] is None
     assert m["server_copy"]["status"] == "not_attempted"
+
+
+def test_folder_download_keeps_same_named_files_apart(tmp_path):
+    """Found live 2026-10-03: two analysis versions both ship analysis.json; the
+    flat folder layout overwrote one with the other and the manifest hash no
+    longer matched the server. Non-source resources get their own subfolder."""
+    from app.logic.download import download_selection
+
+    fake = _server()
+    fake.add_files("S1", "E1", "7", "KNEE_FLEXION_ANGLE__v1", [("analysis.json", b"v1")])
+    fake.add_files("S1", "E1", "7", "KNEE_FLEXION_ANGLE__v2", [("analysis.json", b"v2")])
+    out = download_selection(fake, PROJECT, _row(), tmp_path, identity=IDENTITY)
+    assert out.ok, out.friendly
+    entries = json.loads(Path(out.manifest_path).read_text())["files"]
+    by_label = {e["resource_label"]: e for e in entries if e["filename"] == "analysis.json"}
+    assert set(by_label) == {"KNEE_FLEXION_ANGLE__v1", "KNEE_FLEXION_ANGLE__v2"}
+    assert by_label["KNEE_FLEXION_ANGLE__v1"]["relative_path"] != by_label["KNEE_FLEXION_ANGLE__v2"]["relative_path"]
+    for label, body in (("KNEE_FLEXION_ANGLE__v1", b"v1"), ("KNEE_FLEXION_ANGLE__v2", b"v2")):
+        assert (tmp_path / by_label[label]["relative_path"]).read_bytes() == body
+        assert by_label[label]["sha256"] == hashlib.sha256(body).hexdigest()
+    src = [e for e in entries if e["resource_label"] == "SRC"]
+    assert src and all("/" not in e["relative_path"].split("S1/E1/")[-1] for e in src)

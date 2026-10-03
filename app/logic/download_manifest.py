@@ -27,6 +27,7 @@ import hashlib
 import json
 import os
 import re
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -318,6 +319,21 @@ def choose_server_filename(manifest: Dict[str, Any], uploader: Any, project: str
     return name
 
 
+_UPLOAD_ATTEMPTS = 2
+_LISTING_ATTEMPTS = 4
+_LISTING_DELAY_SECONDS = 0.5
+
+
+def _listed_eventually(uploader: Any, qs: str, resource: str, filename: str) -> bool:
+    """True when the server lists *filename*, allowing its index a moment to catch up."""
+    for attempt in range(_LISTING_ATTEMPTS):
+        if filename in (uploader.list_files(qs, resource) or []):
+            return True
+        if attempt < _LISTING_ATTEMPTS - 1:
+            time.sleep(_LISTING_DELAY_SECONDS)
+    return False
+
+
 def upload_manifest(data: bytes, filename: str, uploader: Any, project: str) -> Tuple[str, Optional[str]]:
     """
     Upload manifest bytes to ``DOWNLOADS`` under *filename* and confirm it arrived.
@@ -333,12 +349,17 @@ def upload_manifest(data: bytes, filename: str, uploader: Any, project: str) -> 
         with tempfile.TemporaryDirectory() as td:
             local = Path(td) / filename
             local.write_bytes(data)
-            uploader.put_file(qs, DOWNLOADS_RESOURCE, filename, str(local),
-                              content="DOWNLOAD_MANIFEST", format="JSON", overwrite=False)
-        listed = uploader.list_files(qs, DOWNLOADS_RESOURCE) or []
-        if filename not in listed:
-            return STATUS_FAILED, "The server did not list the download record after the upload."
-        return STATUS_UPLOADED, None
+            # When two people download at the same moment, XNAT can accept both
+            # uploads into the shared DOWNLOADS resource yet keep only one of
+            # them (seen live, 2026-10-03: the PUT returned OK, the file was
+            # gone). So the upload is confirmed by listing, and sent again
+            # once when the record is missing.
+            for upload_attempt in range(_UPLOAD_ATTEMPTS):
+                uploader.put_file(qs, DOWNLOADS_RESOURCE, filename, str(local),
+                                  content="DOWNLOAD_MANIFEST", format="JSON", overwrite=False)
+                if _listed_eventually(uploader, qs, DOWNLOADS_RESOURCE, filename):
+                    return STATUS_UPLOADED, None
+        return STATUS_FAILED, "The server did not list the download record after the upload."
     except Exception as exc:  # noqa: BLE001 — upload is best effort; the local record is authoritative
         from src.services.errors import handle as _handle
         _handle(

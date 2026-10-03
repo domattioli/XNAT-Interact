@@ -528,10 +528,16 @@ def _download_selection_core(
                     )
                     return DownloadOutcome(ok=False, files_written=files_written, friendly=fe)
 
-                # Download each real file.
+                # Download each real file. Source files stay flat in the subject
+                # folder; every other resource (analysis versions, DERIVED, ...)
+                # gets its own subfolder so same-named files such as
+                # analysis.json never overwrite each other (found live, spec 016).
+                resource_dir = subject_dir if resource_label == "SRC" else subject_dir / resource_label
                 for filename in real_filenames:
                     try:
-                        dest_file = _safe_resource_join(subject_dir, filename)
+                        if resource_dir is not subject_dir:
+                            resource_dir.mkdir(parents=True, exist_ok=True)
+                        dest_file = _safe_resource_join(resource_dir, filename)
                     except ValueError as _trav:
                         fe = FriendlyError(
                             title="Unsafe filename from server — download blocked",

@@ -101,6 +101,7 @@ class PublishResult:
     experiment_label: Optional[str] = None
     scan_uri: Optional[str] = None
     files_uri: Optional[str] = None
+    resource_label: Optional[str] = None
     published_files: Dict[str, Path] = field(default_factory=dict)  # NEW_FN to local de-identified copy
     source_to_new: Dict[str, str] = field(default_factory=dict)  # source file name to NEW_FN
     rejections: Dict[str, str] = field(default_factory=dict)
@@ -237,6 +238,7 @@ def _publish(case, kind, workdir, result, login, conn, config) -> PublishResult:
     result.experiment_label = exp_qs.rstrip("/").split("/")[-1]
     result.scan_uri = scan_qs
     result.files_uri = files_qs
+    result.resource_label = res_label
 
     out = Path(workdir) / f"{case.name}_{kind}_published"
     out.mkdir(parents=True, exist_ok=True)
@@ -408,10 +410,16 @@ def validate_summary(path: Path) -> None:
 def scan_layout(live: Dict[str, Any], result: PublishResult) -> Dict[str, int]:
     """Scan id to file count for the experiment holding ``result``."""
     exp_uri = data_uri(result.scan_uri).rstrip("/").rsplit("/scans/", 1)[0]
+    # Only the source resource counts. Analysis results (spec 016) land on the
+    # same scan as extra resources and add a version on every run, so counting
+    # them would make the repeat-run comparison (SC-008) drift by design.
+    source_label = result.resource_label or "SRC"
     layout = {}
     for row in get_json(live, f"{exp_uri}/scans?format=json")["ResultSet"]["Result"]:
         sid = row["ID"]
         files = get_json(live, f"{exp_uri}/scans/{sid}/files?format=json")["ResultSet"]["Result"]
+        if source_label:
+            files = [f for f in files if f.get("collection") == source_label]
         layout[f"{result.experiment_label}/{sid}"] = len(files)
     return layout
 

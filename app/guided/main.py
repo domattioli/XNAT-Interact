@@ -14,7 +14,7 @@ import streamlit as st
 from app import state
 from app.guided import components, demo, home, wizard_state
 from app.guided.wizard_upload import render_upload_wizard
-from app.logic.auth import attempt_login
+from app.logic.auth import attempt_login, build_config_tables
 
 
 def _ensure_sys_path() -> None:
@@ -36,7 +36,8 @@ def _render_login() -> None:
         )
         result = demo.demo_login()
         if result.ok:
-            state.set_authenticated(result.username, result.server)
+            # Demo mode has no catalog connection (spec 017, FR-023).
+            state.set_authenticated(result.username, result.server, config_tables=None)
             # Store demo config in session state for use in upload wizard
             st.session_state["demo_config"] = demo.DemoConfig()
             st.rerun()
@@ -63,7 +64,17 @@ def _render_login() -> None:
     if submit:
         result = attempt_login(username, password)
         if result.ok:
-            state.set_authenticated(result.username, result.server)
+            # Build the catalog connection now, while the password is in hand
+            # (spec 017, FR-023).  Only the resulting object is kept; the
+            # password is never stored.  None means "no catalog connection".
+            try:
+                from src.services.config import AppConfig
+                config_tables = build_config_tables(AppConfig.load().server_url, username, password)
+            except Exception:  # noqa: BLE001 — a missing catalog connection never blocks login
+                config_tables = None
+            state.set_authenticated(result.username, result.server, config_tables=config_tables)
+            # Drop the typed password from the form's session state too.
+            st.session_state.pop("login_password", None)
             st.rerun()
         else:
             if result.friendly:
@@ -148,6 +159,9 @@ def _render_authenticated() -> None:
 
         from app.guided.browse_view import render_browse
         render_browse(server, project_name)
+    elif current_task == "share":
+        from app.guided.wizard_share import render_share_wizard
+        render_share_wizard(server)
     elif current_task == "annotations":
         st.info("🏷️ Annotations feature coming soon — use Advanced tools for now.")
         if st.button("← Home"):

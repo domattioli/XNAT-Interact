@@ -119,7 +119,7 @@ def render_browse(server, project_name: str) -> None:
                 outcome, zip_bytes = prepare_download_zip(
                     server, project_name, subject_rows,
                     identity=_manifest_identity(),
-                    uploader=_uploader_for(server),
+                    uploader=uploader_for(server),
                 )
                 # Short plain-language notes about the download record
                 # (for example, "the server copy could not be stored").
@@ -255,7 +255,7 @@ def _manifest_identity():
     return ManifestIdentity(username=state.get_username(), server_url=server_url)
 
 
-def _uploader_for(server):
+def uploader_for(server):
     """
     Return something that can store the record on the server, or None.
 
@@ -274,3 +274,7 @@ def _uploader_for(server):
         return gateway
     except Exception:  # noqa: BLE001 — without an uploader the record simply stays local
         return None
+
+
+# The old private name, kept so existing callers keep working (spec 017).
+_uploader_for = uploader_for

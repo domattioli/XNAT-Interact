@@ -1,7 +1,7 @@
 """
 app/guided/home — Task-first home screen (landing page).
 
-Three plain-language task cards: Upload, Download, Annotations.
+Four plain-language task cards: Upload, Download, Annotations, Share a result.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def render_home() -> None:
     st.markdown("")
 
     # Task cards as columns
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         with st.container(border=True):
@@ -54,6 +54,17 @@ def render_home() -> None:
             )
             if st.button("Start", key="btn_annotations", use_container_width=True):
                 wizard_state.set_task("annotations")
+                wizard_state.set_step(0)
+                st.rerun()
+
+    with col4:
+        with st.container(border=True):
+            st.markdown("### 📤 Share a result")
+            st.markdown(
+                "Put a finished analysis result on XNAT, checked step by step."
+            )
+            if st.button("Start", key="btn_share", use_container_width=True):
+                wizard_state.set_task("share")
                 wizard_state.set_step(0)
                 st.rerun()
 

@@ -15,11 +15,23 @@ import streamlit as st
 # Session-state key constants (guided_* prefix for namespacing)
 # ---------------------------------------------------------------------------
 
-_KEY_CURRENT_TASK = "guided_current_task"     # None | 'upload' | 'download' | 'annotations'
+_KEY_CURRENT_TASK = "guided_current_task"     # None | 'upload' | 'download' | 'annotations' | 'share'
 _KEY_WIZARD_STEP = "guided_wizard_step"       # int, current step number
 _KEY_FORM_VALUES = "guided_form_values"       # dict, accumulated form data
 _KEY_UPLOADED = "guided_uploaded"             # bool, whether current task completed
 _KEY_PRIVACY_AFFIRMED = "guided_privacy_affirmed"  # bool, privacy-check gate
+
+# Keys of the "Share a result" page (spec 017).  reset_wizard clears all of
+# them.  The list of recent folders ("guided_share_recent") is left out on
+# purpose: it is a convenience that lasts for the whole browser session.
+SHARE_KEYS = (
+    "guided_share_folder",
+    "guided_share_type",
+    "guided_share_form",
+    "guided_share_pixel_ok",
+    "guided_share_dry_run",
+    "guided_share_result",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +135,7 @@ def reset_wizard() -> None:
         _KEY_FORM_VALUES,
         _KEY_UPLOADED,
         _KEY_PRIVACY_AFFIRMED,
+        *SHARE_KEYS,
     ):
         if key in st.session_state:
             del st.session_state[key]

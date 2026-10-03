@@ -23,6 +23,7 @@ _KEY_AUTHENTICATED   = "xnat_authenticated"
 _KEY_USERNAME        = "xnat_username"
 _KEY_SERVER          = "xnat_server_handle"
 _KEY_CURRENT_PAGE    = "xnat_current_page"
+_KEY_CONFIG_TABLES   = "xnat_config_tables"  # catalog connection object or None (spec 017)
 
 # Valid page names used by the router
 PAGE_LOGIN        = "login"
@@ -56,7 +57,7 @@ def is_authenticated() -> bool:
     return bool(_get(_KEY_AUTHENTICATED, False))
 
 
-def set_authenticated(username: str, server_handle: Any) -> None:
+def set_authenticated(username: str, server_handle: Any, config_tables: Any = None) -> None:
     """
     Mark the session as authenticated.
 
@@ -65,16 +66,20 @@ def set_authenticated(username: str, server_handle: Any) -> None:
     username      : Authenticated XNAT username (stored for display only).
     server_handle : Live server object (pyxnat.Interface or FakeXNAT in tests).
                     PHI-free — the handle itself is not PHI.
+    config_tables : The catalog connection (``ConfigTables``) built at login,
+                    or None when it could not be built or in demo mode.
+                    Only this object is stored, never the password.
     """
     _set(_KEY_AUTHENTICATED, True)
     _set(_KEY_USERNAME, username)
     _set(_KEY_SERVER, server_handle)
+    _set(_KEY_CONFIG_TABLES, config_tables)
     _set(_KEY_CURRENT_PAGE, PAGE_BROWSE)
 
 
 def clear_auth() -> None:
     """Log out: wipe auth state and cached server data.  Redirects to login."""
-    for key in (_KEY_AUTHENTICATED, _KEY_USERNAME, _KEY_SERVER):
+    for key in (_KEY_AUTHENTICATED, _KEY_USERNAME, _KEY_SERVER, _KEY_CONFIG_TABLES):
         if key in st.session_state:
             del st.session_state[key]
     _set(_KEY_CURRENT_PAGE, PAGE_LOGIN)
@@ -88,6 +93,11 @@ def get_username() -> Optional[str]:
 def get_server() -> Optional[Any]:
     """Return the live server handle, or None if not authenticated."""
     return _get(_KEY_SERVER)
+
+
+def get_config_tables() -> Optional[Any]:
+    """Return the catalog connection built at login, or None if there is none."""
+    return _get(_KEY_CONFIG_TABLES)
 
 
 # ---------------------------------------------------------------------------

@@ -158,3 +158,32 @@ def attempt_login(
     # All checks passed.
     # ------------------------------------------------------------------
     return LoginResult(ok=True, friendly=None, server=server, username=username)
+
+
+# ---------------------------------------------------------------------------
+# Catalog connection for the "Share a result" page (spec 017, FR-023)
+# ---------------------------------------------------------------------------
+
+def build_config_tables(url: str, username: str, password: str) -> Any:
+    """
+    Build the production ``ConfigTables`` (the catalog connection), or return None.
+
+    The guided login calls this once, right after a successful login, while
+    the typed password is still in hand.  It builds the same three objects as
+    ``try_login_and_connection`` in ``main.py``: an ``XNATLogin``, an open
+    ``XNATConnection`` and the ``ConfigTables`` on top of them.  Only the
+    returned object is kept by the caller; the password is not kept anywhere.
+
+    Any problem (wrong address, no network, failed check) gives None, so the
+    login page never shows an error because of this step.  The share page then
+    reports that the catalog row could not be added.
+    """
+    try:
+        from src.utilities import ConfigTables, XNATConnection, XNATLogin  # noqa: PLC0415
+        login = XNATLogin({"Username": username, "Password": password, "Url": url}, verbose=False)
+        connection = XNATConnection(login_info=login, stay_connected=True, verbose=False)
+        if not (connection.is_verified and connection.is_open):
+            return None
+        return ConfigTables(login, connection, verbose=False)
+    except Exception:  # noqa: BLE001 — no catalog connection is a soft failure (Principle II)
+        return None

@@ -1,0 +1,15 @@
+{
+  "type_name": "training_dataset",
+  "type_version": 1,
+  "description": "A list of frames from several cases, with the split each frame belongs to. Holds no images.",
+  "inputs": ["source_frames", "annotations"],
+  "outputs": [
+    {"pattern": "dataset_manifest.json", "format": "json", "schema": "schemas/training_dataset.manifest.schema.json"},
+    {"pattern": "splits.json", "format": "json", "schema": "schemas/training_dataset.splits.schema.json"}
+  ],
+  "placement": "project_resource",
+  "resource_label": "TRAINING_DATASETS",
+  "label_template": "{case_uid}",
+  "phi_policy": ["no_pixels", "text_scan"],
+  "multi_case": true
+}

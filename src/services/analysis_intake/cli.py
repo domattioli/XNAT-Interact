@@ -4,6 +4,10 @@ Command line for the analysis intake (spec 016, FR-021).
     main.py publish-analysis <folder> [--manifest FILE] [--inputs FOLDER] [--dry-run]
     main.py publish-analysis --init <type_name> <folder>
     main.py publish-analysis --list-types
+    main.py assemble-dataset <folder> --name NAME --manifest FILE [--manifest FILE ...]
+                             [--split-rule every_nth:3:validation] [--label-source none]
+
+assemble-dataset (spec 018) works offline and never contacts the server.
 
 There is deliberately no password or server option: a real publish logs in
 through the normal XNAT-Interact login prompt.  Exit codes: 0 done or dry run
@@ -17,6 +21,7 @@ from typing import Callable, List, Optional
 
 from src.services.errors import render
 from src.services.analysis_intake import IntakeRefusal, load_types, run_intake, write_descriptor_template
+from src.services.analysis_intake.dataset import DEFAULT_SPLIT_RULE, assemble_dataset
 
 
 class _Parser(argparse.ArgumentParser):
@@ -93,3 +98,51 @@ def main(argv: List[str], *, connect: Optional[Callable] = None, out: Callable[[
         return 0
     out(render(result.friendly))
     return 1 if result.status == "refused" else 2
+
+
+class _DatasetParser(_Parser):
+    def error(self, message: str) -> None:
+        raise IntakeRefusal(__import__("src.services.errors", fromlist=["FriendlyError"]).FriendlyError(
+            title="Command not understood", message=message,
+            recourse=["Run 'assemble-dataset --help' to see the options."]))
+
+
+def build_dataset_parser() -> argparse.ArgumentParser:
+    """Arguments of ``main.py assemble-dataset`` (spec 018).  No password or server option on purpose."""
+    parser = _DatasetParser(prog="main.py assemble-dataset",
+                            description="Build a training dataset folder from download records. Works offline.")
+    parser.add_argument("folder", help="the folder to write the dataset into (created if missing)")
+    parser.add_argument("--name", required=True, help="the dataset name, for example knee_hip_2025")
+    parser.add_argument("--manifest", action="append", required=True,
+                        help="a download_manifest.json; repeat for every downloaded case")
+    parser.add_argument("--split-rule", default=DEFAULT_SPLIT_RULE,
+                        help="every_nth:<n>:<split>; default every third frame to validation, the rest to training")
+    parser.add_argument("--label-source", default="none", help="short text written to every row (default: none)")
+    return parser
+
+
+def assemble_dataset_main(argv: List[str], *, out: Callable[[str], None] = print) -> int:
+    """Run ``assemble-dataset``.  Exit code 0 when the folder was written, 1 when refused."""
+    try:
+        args = build_dataset_parser().parse_args(argv)
+        summary = assemble_dataset(args.name, [Path(m) for m in args.manifest], Path(args.folder),
+                                   split_rule=args.split_rule, label_source=args.label_source)
+    except IntakeRefusal as exc:
+        out(render(exc.friendly))
+        return 1
+    except SystemExit as exc:  # --help
+        return int(exc.code or 0)
+    except Exception as exc:  # noqa: BLE001 - never show a traceback (Principle II)
+        from src.services.errors import handle
+        out(render(handle(exc, title="assemble-dataset stopped unexpectedly",
+                          message="Something went wrong that the tool did not expect. The dataset folder may be incomplete.",
+                          recourse=["Choose a new, empty folder and try again.",
+                                    "If it happens again, send the diagnostic log named below to the Data Librarian."],
+                          context="operation=assemble_dataset")))
+        return 1
+    counts = ", ".join(f"{n} {split}" for split, n in summary.counts.items())
+    out(f"Wrote dataset '{summary.name}' to {summary.folder}: {summary.rows} frames from "
+        f"{len(summary.cases)} cases in project {summary.project} ({counts}).")
+    out(f"Next: check it with 'python main.py publish-analysis {summary.folder} --dry-run', "
+        "then publish it by running the same command without --dry-run.")
+    return 0

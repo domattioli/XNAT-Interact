@@ -23,7 +23,7 @@ from src.services.analysis_intake.errors import refuse
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ANALYSIS_TYPES_DIR = REPO_ROOT / "analysis_types"
 
-PLACEMENTS = ("assessor", "scan_resource")
+PLACEMENTS = ("assessor", "scan_resource", "project_resource")
 PHI_POLICIES = ("no_pixels", "pixels_from_source_only", "text_scan")
 OUTPUT_FORMATS = ("csv", "json", "txt", "md", "npz", "rle", "png", "dcm")
 
@@ -35,7 +35,7 @@ _SCHEMA_REF_RE = re.compile(r"^schemas/[A-Za-z0-9_.-]+\.json$")
 
 _TOP_KEYS = {
     "type_name", "type_version", "description", "inputs", "outputs", "placement",
-    "resource_label", "phi_policy", "publish_via_intake", "label_template",
+    "resource_label", "phi_policy", "publish_via_intake", "label_template", "multi_case",
 }
 _REQUIRED = ("type_name", "type_version", "description", "inputs", "outputs",
              "placement", "resource_label", "phi_policy")
@@ -66,6 +66,10 @@ class AnalysisType:
     publish_via_intake: bool = True
     label_template: str = "{type_name}"
     folder: Path = field(default=ANALYSIS_TYPES_DIR, compare=False)
+    # Spec 018: True when one result is built from several cases (a training
+    # dataset).  Such a result lives on the project, so only the
+    # project_resource placement may set it.
+    multi_case: bool = False
 
     def base_label(self, case_uid: str) -> str:
         """The un-versioned label, from ``label_template`` (FR-015)."""
@@ -153,8 +157,13 @@ def check_type_data(data: Any, path: Path) -> AnalysisType:
         template.format(type_name="x", case_uid="y")
     except (KeyError, IndexError, ValueError):
         raise _bad(path, "label_template", "only the placeholders {type_name} and {case_uid} are allowed.")
+    multi_case = data.get("multi_case", False)
+    if not isinstance(multi_case, bool):
+        raise _bad(path, "multi_case", "it must be true or false.")
+    if multi_case and placement != "project_resource":
+        raise _bad(path, "multi_case", "only a type with placement project_resource can span several cases.")
     return AnalysisType(name, version, desc, tuple(inputs), tuple(outputs), placement, label,
-                        tuple(policy), via, template, path.parent)
+                        tuple(policy), via, template, path.parent, multi_case)
 
 
 def load_type_file(path: Path) -> AnalysisType:

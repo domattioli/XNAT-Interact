@@ -26,16 +26,19 @@ from src.services.analysis_intake.types import ANALYSIS_TYPES_DIR, AnalysisType,
 from src.services.analysis_intake.descriptor import (
     check_descriptor, load_descriptor, write_descriptor, write_descriptor_template,
 )
-from src.services.analysis_intake.provenance import MANIFEST_FILENAME, fill_provenance
+from src.services.analysis_intake.provenance import MANIFEST_FILENAME, fill_provenance, to_pyxnat_qs
 from src.services.analysis_intake.gates import check_declared_outputs, phi_gate, validate_outputs
 from src.services.analysis_intake.publish import PublishOutcome, publish_analysis, verify_published
 from src.services.analysis_intake.catalog import ANALYSES_TABLE, record_in_catalog
+from src.services.analysis_intake.dataset import DatasetSummary, assemble_dataset
+from src.services.analysis_intake.derived import DerivedItem, DerivedReport, find_derived
 
 __all__ = [
     "ANALYSIS_TYPES_DIR", "ANALYSES_TABLE", "AnalysisType", "IntakeRefusal", "IntakeResult", "PublishOutcome",
     "check_declared_outputs", "fill_provenance", "load_descriptor", "load_types", "phi_gate",
     "publish_analysis", "record_in_catalog", "run_intake", "validate_outputs", "verify_published",
     "write_descriptor_template",
+    "DatasetSummary", "DerivedItem", "DerivedReport", "assemble_dataset", "find_derived",
 ]
 
 
@@ -50,10 +53,21 @@ class IntakeResult:
     outcome: Optional[PublishOutcome] = None
 
 
-def _outcome_from_descriptor(descriptor: Dict[str, Any]) -> PublishOutcome:
+def _outcome_from_descriptor(descriptor: Dict[str, Any], atype: Optional[AnalysisType] = None) -> PublishOutcome:
+    """Rebuild where an already published result lives, for the catalog retry path (spec 018, R8)."""
     run = descriptor["run"]
-    return PublishOutcome(label=run["label"], placement_used=run.get("placement_used", ""), query_string="",
-                          resource_label="", descriptor=descriptor, verified=True)
+    label = run["label"]
+    placement = run.get("placement_used", "")
+    query_string, resource_label = "", ""
+    if placement == "project_resource":
+        query_string, resource_label = run.get("project_query_string") or "", label
+    elif placement == "assessor" and run.get("experiment_query_string"):
+        query_string = f"{run['experiment_query_string']}/assessor/{label}"
+        resource_label = atype.resource_label if atype is not None else ""
+    elif placement == "scan_resource" and run.get("input_refs"):
+        query_string, resource_label = to_pyxnat_qs(run["input_refs"][0]), label
+    return PublishOutcome(label=label, placement_used=placement, query_string=query_string,
+                          resource_label=resource_label, descriptor=descriptor, verified=True)
 
 
 def run_intake(output_folder: Path, *, gateway=None, config_tables=None, username: Optional[str] = None,
@@ -78,7 +92,7 @@ def run_intake(output_folder: Path, *, gateway=None, config_tables=None, usernam
             if config_tables is None:
                 raise refuse("Catalog not available", "This result is already published; the catalog could not be opened.",
                              ["Log in and run the command again."])
-            record_in_catalog(_outcome_from_descriptor(descriptor), descriptor, config_tables)
+            record_in_catalog(_outcome_from_descriptor(descriptor, atype), descriptor, config_tables)
             return IntakeResult("done", run["label"], warnings=["This result was already published; the catalog is now up to date."],
                                 descriptor=descriptor)
 
@@ -90,7 +104,8 @@ def run_intake(output_folder: Path, *, gateway=None, config_tables=None, usernam
         files = check_declared_outputs(atype, folder)
         if manifest is None and inputs is None and (folder / MANIFEST_FILENAME).is_file():
             manifest = folder / MANIFEST_FILENAME
-        descriptor, more = fill_provenance(descriptor, manifest=manifest, inputs=inputs, username=username)
+        descriptor, more = fill_provenance(descriptor, manifest=manifest, inputs=inputs, username=username,
+                                           atype=atype, folder=folder)
         warnings.extend(more)
         validate_outputs(atype, descriptor, folder, files)
         descriptor["run"]["pixel_confirmation"] = phi_gate(atype, descriptor, folder, files,

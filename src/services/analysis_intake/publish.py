@@ -128,6 +128,8 @@ def publish_analysis(descriptor: Dict[str, Any], folder: Path, gateway, *, atype
         from src.services.analysis_intake.gates import check_declared_outputs
         files = check_declared_outputs(atype, folder)
     run = descriptor["run"]
+    if atype.placement == "project_resource":
+        return _publish_project_resource(descriptor, folder, gateway, atype, files, verify)
     exp_qs = run.get("experiment_query_string")
     if not exp_qs:
         raise refuse("Unknown XNAT session",
@@ -193,6 +195,50 @@ def publish_analysis(descriptor: Dict[str, Any], folder: Path, gateway, *, atype
                     raise _gateway_refusal(exc, f"store '{name}'")
             outcome = PublishOutcome(label, "scan_resource", scan_qs, label, fallback_reason=fallback_reason)
 
+        outcome.files = {name: sha256_of_file(Path(path)) for name, path in local.items()}
+        outcome.descriptor = final
+        if verify:
+            outcome.problems = verify_published(outcome, gateway)
+            outcome.verified = not outcome.problems
+        return outcome
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
+def _publish_project_resource(descriptor: Dict[str, Any], folder: Path, gateway, atype: AnalysisType,
+                              files: List[str], verify: bool) -> PublishOutcome:
+    """
+    Publish a result that lives on the project, such as a training dataset (spec 018, FR-007 to FR-009).
+
+    Each version is its own project resource labelled ``<name>__v<n>``.  Files
+    are written with ``overwrite=False``, so an existing version can never be
+    replaced, and nothing is ever deleted.
+    """
+    run = descriptor["run"]
+    project_qs = run.get("project_query_string")
+    if not project_qs:
+        raise refuse("Unknown XNAT project",
+                     "The intake could not tell which XNAT project this dataset belongs to.",
+                     ["Build the dataset folder with 'main.py assemble-dataset' so the merged download record is there."])
+    sup = run.get("supersedes")
+    if sup and not _scan_label_taken(gateway, project_qs, sup):
+        raise refuse("Replaced version not found",
+                     f"analysis.json says this dataset replaces '{sup}', but that label does not exist on this project.",
+                     ["Check the label in 'supersedes', or leave it empty."])
+    staging = Path(tempfile.mkdtemp(prefix="xnat_intake_"))
+    try:
+        final = copy.deepcopy(descriptor)
+        local: Dict[str, Path] = {rel: folder / rel for rel in files}
+        label = _next_scan_label(gateway, project_qs, atype.base_label(run["case_uid"]))
+        final["run"].update({"label": label, "placement_used": "project_resource", "fallback_reason": None})
+        local[DESCRIPTOR_NAME] = _write_final_descriptor(final, staging)
+        for name, path in local.items():
+            try:
+                gateway.put_file(project_qs, label, name, str(path), content=atype.resource_label,
+                                 format=Path(name).suffix.lstrip(".").upper(), overwrite=False)
+            except Exception as exc:  # noqa: BLE001
+                raise _gateway_refusal(exc, f"store '{name}'")
+        outcome = PublishOutcome(label, "project_resource", project_qs, label)
         outcome.files = {name: sha256_of_file(Path(path)) for name, path in local.items()}
         outcome.descriptor = final
         if verify:

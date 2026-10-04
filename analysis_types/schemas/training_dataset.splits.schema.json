@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "training_dataset.splits.schema.json",
+  "title": "Training dataset splits",
+  "description": "splits.json of a training_dataset result (spec 018): the split rule and the number of rows in each split.",
+  "type": "object",
+  "required": ["rule", "counts"],
+  "additionalProperties": false,
+  "properties": {
+    "rule": {"type": "string", "minLength": 1},
+    "counts": {
+      "type": "object",
+      "required": ["training", "validation", "test"],
+      "additionalProperties": false,
+      "properties": {
+        "training": {"type": "integer", "minimum": 0},
+        "validation": {"type": "integer", "minimum": 0},
+        "test": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

@@ -680,9 +680,21 @@ class FakeXNAT(XnatGateway):
             resource = self._flat_resource(querystring, resource_label)
             if overwrite is False and filename in resource.list_files():
                 raise FileExistsError(f"{filename} already exists in {resource_label}")
+            # Spec 018: FakeFile.put also stores the bytes in the root-level
+            # canned-content map keyed by file name only, which get_copy reads
+            # first.  Two project resources (or a project resource and an
+            # assessor) holding the same file name, such as analysis.json,
+            # would then read back each other's bytes.  Keep that map as it was
+            # so project-level files are read back from their own resource.
+            had_canned = filename in self._file_contents
+            canned = self._file_contents.get(filename)
             resource.file(filename).put(
                 ffn, content=content, format=format, tags=tags, overwrite=overwrite
             )
+            if had_canned:
+                self._file_contents[filename] = canned
+            else:
+                self._file_contents.pop(filename, None)
             data = Path(ffn).read_bytes() if Path(str(ffn)).is_file() else b""
             resource._staged_files = [(n, d) for n, d in resource._staged_files if n != filename]
             resource._staged_files.append((filename, data))

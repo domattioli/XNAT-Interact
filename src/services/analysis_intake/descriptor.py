@@ -22,11 +22,13 @@ DESCRIPTOR_JSON = "analysis.json"
 DESCRIPTOR_YAML = "analysis.yaml"
 DESCRIPTOR_VERSION = "1"
 
-_ANALYST_RUN_KEYS = {"case_uid", "code_ref", "parameters", "notes", "supersedes"}
+# "cases" is written by assemble-dataset (spec 018) and allowed only for a
+# type that spans several cases.
+_ANALYST_RUN_KEYS = {"case_uid", "code_ref", "parameters", "notes", "supersedes", "cases"}
 _TOOL_RUN_KEYS = {
     "source_hashes", "input_refs", "manifest_run_id", "provenance", "producer",
     "experiment_query_string", "label", "placement_used", "fallback_reason",
-    "pixel_confirmation", "intake_started_at", "tool_version",
+    "pixel_confirmation", "intake_started_at", "tool_version", "project_query_string",
 }
 _LABEL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.\-]*__v[0-9]+$")
 
@@ -120,6 +122,15 @@ def check_descriptor(descriptor: Dict[str, Any], types: Dict[str, AnalysisType])
         raise _field_problem("run.parameters", "must be a set of name and value pairs ({}).")
     if "notes" in run and not isinstance(run["notes"], str):
         raise _field_problem("run.notes", "must be text.")
+    if "cases" in run:
+        if not atype.multi_case:
+            raise refuse("Descriptor has a list of cases",
+                         f"analysis.json lists several cases in 'run.cases', but a '{name}' result belongs to one case only.",
+                         ["Remove 'cases' from analysis.json and keep the single case in 'case_uid'."])
+        cases = run["cases"]
+        if (not isinstance(cases, list) or not cases or len(set(map(str, cases))) != len(cases)
+                or not all(isinstance(c, str) and c.strip() for c in cases)):
+            raise _field_problem("run.cases", "must be a list of different case names, at least one.")
     sup = run.get("supersedes")
     if sup not in (None, "") and (not isinstance(sup, str) or not _LABEL_RE.match(sup)):
         raise _field_problem("run.supersedes", "must be a published label such as knee_flexion_angle__v1, or empty.")

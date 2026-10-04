@@ -1,7 +1,10 @@
 """
 The ANALYSES catalog (spec 016, FR-019).
 
-One row per confirmed publish, stored in the project configuration tables
+One row per confirmed publish, named ``<case_uid>:<label>`` (spec 018, FR-020)
+so the same versioned label on two cases gives two rows.  The QUERY_STRING and
+RESOURCE_LABEL columns say where the published ``analysis.json`` lives
+(spec 018, FR-010).  Rows are stored in the project configuration tables
 beside SUBJECTS and IMAGE_HASHES and pushed through the same path.  That path
 refuses to overwrite a configuration someone else changed meanwhile; in that
 case the catalog pulls a fresh copy, adds the row again and retries once.
@@ -14,7 +17,7 @@ from src.services.analysis_intake.errors import refuse
 
 ANALYSES_TABLE = "ANALYSES"
 CATALOG_COLUMNS = ["TYPE_NAME", "TYPE_VERSION", "CASE_UID", "PLACEMENT_USED", "PRODUCER",
-                   "SOURCE_HASH_COUNT", "SUPERSEDES"]
+                   "SOURCE_HASH_COUNT", "SUPERSEDES", "QUERY_STRING", "RESOURCE_LABEL"]
 _DEFAULT_COLUMNS = {"NAME", "UID", "CREATED_DATE_TIME", "CREATED_BY"}
 
 
@@ -38,19 +41,40 @@ def catalog_values(outcome, descriptor: Dict[str, Any]) -> Dict[str, str]:
         "PRODUCER": str(run.get("producer") or ""),
         "SOURCE_HASH_COUNT": str(len(run.get("source_hashes") or [])),
         "SUPERSEDES": str(run.get("supersedes") or ""),
+        "QUERY_STRING": str(getattr(outcome, "query_string", "") or ""),
+        "RESOURCE_LABEL": str(getattr(outcome, "resource_label", "") or ""),
     }
 
 
-def _add_row(config_tables, label: str, values: Dict[str, str]) -> bool:
+def row_name(case_uid: str, label: str) -> str:
+    """The catalog row name of one published item: ``<case_uid>:<label>`` (FR-020)."""
+    return f"{case_uid}:{label}"
+
+
+def _add_missing_columns(config_tables) -> None:
+    """Add any catalog column an older ANALYSES table lacks, before a row is added (FR-010)."""
+    table = config_tables.tables[ANALYSES_TABLE]
+    present = {str(c).upper() for c in table.columns}
+    for column in CATALOG_COLUMNS:
+        if column in present:
+            continue
+        if isinstance(table.columns, list):   # the offline test double keeps a plain list
+            table.columns.append(column)
+        else:                                 # the real table is a pandas DataFrame
+            table[column] = None
+
+
+def _add_row(config_tables, name: str, values: Dict[str, str]) -> bool:
     """Add the row locally.  Returns False when the row was already there."""
     try:
         if not config_tables.table_exists(ANALYSES_TABLE):
             config_tables.add_new_table(ANALYSES_TABLE, list(CATALOG_COLUMNS), verbose=False)
-        if config_tables.item_exists(ANALYSES_TABLE, label):
+        _add_missing_columns(config_tables)
+        if config_tables.item_exists(ANALYSES_TABLE, name):
             return False
         columns = [c for c in config_tables.tables[ANALYSES_TABLE].columns if c.upper() not in _DEFAULT_COLUMNS]
         ordered = {c: values.get(c.upper(), "") for c in columns}
-        ok, _msg = config_tables.add_new_item(ANALYSES_TABLE, label, extra_columns_values=ordered, verbose=False)
+        ok, _msg = config_tables.add_new_item(ANALYSES_TABLE, name, extra_columns_values=ordered, verbose=False)
         return bool(ok)
     except AssertionError:
         raise refuse("Catalog not updated",
@@ -60,13 +84,13 @@ def _add_row(config_tables, label: str, values: Dict[str, str]) -> bool:
 
 def record_in_catalog(outcome, descriptor: Dict[str, Any], config_tables) -> bool:
     """Add and push the catalog row.  Returns False when the row was already there."""
-    label = outcome.label
     values = catalog_values(outcome, descriptor)
+    name = row_name(values["CASE_UID"], outcome.label)
     added = False
     for attempt in (1, 2):
         # The row may already be present locally from an earlier attempt whose
         # push failed, so the push always runs; pushing an unchanged table is harmless.
-        added = _add_row(config_tables, label, values) or added
+        added = _add_row(config_tables, name, values) or added
         try:
             pushed = config_tables.push_to_xnat(verbose=False)
         except Exception as exc:  # noqa: BLE001

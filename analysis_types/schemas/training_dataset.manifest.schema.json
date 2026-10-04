@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "training_dataset.manifest.schema.json",
+  "title": "Training dataset manifest",
+  "description": "dataset_manifest.json of a training_dataset result (spec 018): one row per frame, no images.",
+  "type": "object",
+  "required": ["dataset_name", "rows"],
+  "additionalProperties": false,
+  "properties": {
+    "dataset_name": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"},
+    "rows": {"type": "array", "minItems": 1, "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sha256", "image_identity_hash", "case_uid", "scan_query_string", "relative_path", "label_source", "split"],
+      "properties": {
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "image_identity_hash": {"type": ["string", "null"]},
+        "case_uid": {"type": "string", "minLength": 1},
+        "scan_query_string": {"type": "string", "pattern": "^/"},
+        "relative_path": {"type": "string"},
+        "label_source": {"type": "string", "maxLength": 100},
+        "split": {"enum": ["training", "validation", "test"]}
+      }}}
+  }
+}

@@ -532,6 +532,10 @@ def main():
         # Spec 016: the analysis intake has its own command line.
         from src.services.analysis_intake.cli import main as _publish_analysis_main
         sys.exit(_publish_analysis_main(sys.argv[2:]))
+    if len(sys.argv) > 1 and sys.argv[1] == 'assemble-dataset':
+        # Spec 018: build a training dataset folder from download records (offline).
+        from src.services.analysis_intake.cli import assemble_dataset_main as _assemble_dataset_main
+        sys.exit(_assemble_dataset_main(sys.argv[2:]))
     header_footer_print( header_or_footer='header' )
     username, verbose = parse_args()
     assert ask_user_to_confirm_that_they_are_on_the_uiowa_network(), 'You must be on the UIowa network to use this application.'

@@ -24,12 +24,28 @@ def test_type_files_match_meta_schema():
         jsonschema.validate(json.loads(path.read_text()), meta)
 
 
-def test_contract_schemas_copied_byte_for_byte():
+def _keys_everywhere(node, prefix=""):
+    """Every property path and every required name in a JSON Schema tree."""
+    found = set()
+    if isinstance(node, dict):
+        for name in node.get("properties", {}):
+            found.add(prefix + name)
+            found |= _keys_everywhere(node["properties"][name], prefix + name + ".")
+        for name in node.get("required", []):
+            found.add(prefix + name)
+    return found
+
+
+def test_contract_schemas_still_hold_every_016_field():
+    """The live schemas may grow after spec 016 (spec 018 adds fields), but must keep every 016 field."""
     contracts = Path(__file__).resolve().parents[1] / "specs" / "016-analysis-intake" / "contracts"
     if not contracts.is_dir():
         pytest.skip("spec folder moved to DomI")
     for name in ("analysis-type.schema.json", "analysis-descriptor.schema.json"):
-        assert (contracts / name).read_bytes() == (ANALYSIS_TYPES_DIR / "schemas" / name).read_bytes()
+        contract = json.loads((contracts / name).read_text())
+        live = json.loads((ANALYSIS_TYPES_DIR / "schemas" / name).read_text())
+        missing = _keys_everywhere(contract) - _keys_everywhere(live)
+        assert not missing, f"{name} lost fields from the 016 contract: {sorted(missing)}"
 
 
 def _copy_types(tmp_path):

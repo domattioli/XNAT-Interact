@@ -84,7 +84,8 @@
     "placement": {
       "enum": [
         "assessor",
-        "scan_resource"
+        "scan_resource",
+        "project_resource"
       ]
     },
     "resource_label": {
@@ -112,6 +113,11 @@
       "minLength": 1,
       "pattern": "^[A-Za-z0-9_\\-{}]+$",
       "description": "Base label for the published item. Placeholders {type_name} and {case_uid}. Defaults to {type_name}."
+    },
+    "multi_case": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when one result spans several cases (spec 018). Only project_resource types may set it."
     }
   },
   "allOf": [

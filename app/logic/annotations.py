@@ -34,12 +34,15 @@ list_aggregator_names()
 from __future__ import annotations
 
 import tempfile
+from pathlib import Path
 from typing import Any, List, Optional, Union
 
 from src.services.errors import FriendlyError, handle as _handle
 from src.annotations.model import Annotation, AnnotationSet, ConsensusResult
 from src.annotations.io_xnat import (
+    ANNOTATIONS_LABEL,
     download_annotation_set,
+    list_annotation_resources,
     upload_annotation_set,
     UploadResult,
 )
@@ -60,6 +63,57 @@ def list_aggregator_names() -> List[str]:
 # list_image_annotations
 # ---------------------------------------------------------------------------
 
+def load_annotation_sets(
+    server: Any,
+    image_ref: str,
+    dest_dir: Optional[Any] = None,
+) -> Union[AnnotationSet, FriendlyError]:
+    """
+    Download every annotation set on *image_ref* and merge them into one (spec 019, FR-019).
+
+    People's annotations live in the shared ``ANNOTATIONS`` resource; each model
+    version's predictions live in their own ``ANNOTATIONS_<annotator>`` resource.
+    Review and consensus need all of them, so every annotation resource on the
+    scan is downloaded and the annotations are put into one ``AnnotationSet``.
+
+    When the scan's resources cannot be listed (an older server object or test
+    double), only the default ``ANNOTATIONS`` resource is read, as before.
+    A resource that cannot be read is skipped as long as another one could be
+    read; when none can be read, the first problem is returned.
+
+    Returns
+    -------
+    AnnotationSet on success; FriendlyError on any failure (never raises).
+    """
+    try:
+        labels = list_annotation_resources(server, image_ref)
+    except Exception:  # noqa: BLE001 - no listing means "read the default resource"
+        labels = []
+    if not labels:
+        labels = [ANNOTATIONS_LABEL]
+
+    merged: Optional[AnnotationSet] = None
+    first_problem: Optional[FriendlyError] = None
+    with tempfile.TemporaryDirectory() as _tmp:
+        for label in labels:
+            if dest_dir is None:
+                target: Any = Path(_tmp) / label
+            else:
+                # Keep the default resource where callers have always found it;
+                # other resources get a subfolder so same-named files stay apart.
+                target = Path(dest_dir) if label == ANNOTATIONS_LABEL else Path(dest_dir) / label
+            result = download_annotation_set(server, image_ref, target, resource_label=label)
+            if not result.ok or result.annotation_set is None:
+                first_problem = first_problem or result.friendly
+                continue
+            if merged is None:
+                merged = AnnotationSet(image_ref=result.annotation_set.image_ref)
+            merged.annotations.extend(result.annotation_set.annotations)
+    if merged is None:
+        return first_problem  # type: ignore[return-value]
+    return merged
+
+
 def list_image_annotations(
     server: Any,
     image_ref: str,
@@ -67,6 +121,9 @@ def list_image_annotations(
 ) -> Union[AnnotationSet, FriendlyError]:
     """
     Download the AnnotationSet for *image_ref* from *server*.
+
+    Since spec 019 this gathers every annotation resource on the scan (people's
+    and each model's) through ``load_annotation_sets``.
 
     Parameters
     ----------
@@ -78,16 +135,7 @@ def list_image_annotations(
     -------
     AnnotationSet on success; FriendlyError on any failure (never raises).
     """
-    if dest_dir is None:
-        # Use a temporary directory; caller gets the AnnotationSet, not the files.
-        with tempfile.TemporaryDirectory() as _tmp:
-            result = download_annotation_set(server, image_ref, _tmp)
-    else:
-        result = download_annotation_set(server, image_ref, dest_dir)
-
-    if not result.ok:
-        return result.friendly  # type: ignore[return-value]
-    return result.annotation_set  # type: ignore[return-value]
+    return load_annotation_sets(server, image_ref, dest_dir)
 
 
 # ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ passed, 1 refused, 2 published but not confirmed or not cataloged.
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from typing import Callable, List, Optional
 
@@ -66,6 +67,9 @@ def main(argv: List[str], *, connect: Optional[Callable] = None, out: Callable[[
         if args.init:
             path = write_descriptor_template(args.init, Path(args.folder))
             out(f"Wrote {path}. Fill in case_uid and code_ref (and parameters and notes if you like), then run the command on the folder.")
+            if "model" in json.loads(Path(path).read_text(encoding="utf-8")).get("run", {}):
+                out("Also fill in run.model: the model name and version (letters, digits and hyphens) and "
+                    "dataset_query_string, copied from the training dataset's catalog row.")
             return 0
         manifest = Path(args.manifest) if args.manifest else None
         inputs = Path(args.inputs) if args.inputs else None

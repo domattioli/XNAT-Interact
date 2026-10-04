@@ -1,0 +1,13 @@
+{
+  "type_name": "model_predictions",
+  "type_version": 1,
+  "description": "A trained model's predictions for one case, stored as one more annotator.",
+  "inputs": ["source_frames"],
+  "outputs": [
+    {"pattern": "predictions.json", "format": "json", "schema": "schemas/model_predictions.predictions.schema.json"}
+  ],
+  "placement": "annotation_set",
+  "resource_label": "ANNOTATIONS",
+  "phi_policy": ["no_pixels", "text_scan"],
+  "publish_via_intake": true
+}

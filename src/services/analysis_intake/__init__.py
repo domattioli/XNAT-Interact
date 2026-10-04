@@ -64,7 +64,8 @@ def _outcome_from_descriptor(descriptor: Dict[str, Any], atype: Optional[Analysi
     elif placement == "assessor" and run.get("experiment_query_string"):
         query_string = f"{run['experiment_query_string']}/assessor/{label}"
         resource_label = atype.resource_label if atype is not None else ""
-    elif placement == "scan_resource" and run.get("input_refs"):
+    elif placement in ("scan_resource", "annotation_set") and run.get("input_refs"):
+        # Spec 019: an annotation set lives in its own resource on the scan, named by its label.
         query_string, resource_label = to_pyxnat_qs(run["input_refs"][0]), label
     return PublishOutcome(label=label, placement_used=placement, query_string=query_string,
                           resource_label=resource_label, descriptor=descriptor, verified=True)
@@ -108,6 +109,12 @@ def run_intake(output_folder: Path, *, gateway=None, config_tables=None, usernam
                                            atype=atype, folder=folder)
         warnings.extend(more)
         validate_outputs(atype, descriptor, folder, files)
+        if atype.placement == "annotation_set":
+            # Spec 019: the model must be named and every prediction entry usable
+            # before the PHI gate and before anything is written.
+            from src.services.analysis_intake.predictions import check_entries, check_model_fields, load_entries
+            check_model_fields(descriptor)
+            check_entries(load_entries(folder), descriptor["run"].get("source_hashes") or [])
         descriptor["run"]["pixel_confirmation"] = phi_gate(atype, descriptor, folder, files,
                                                           classifier=classifier, confirmer=confirmer)
         if dry_run:

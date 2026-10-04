@@ -41,11 +41,22 @@
         "experiment_query_string": {"type": "string", "pattern": "^/"},
         "project_query_string": {"type": "string", "pattern": "^/project/[^/]+$"},
         "label": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.\\-]*__v[0-9]+$"},
-        "placement_used": {"enum": ["assessor", "scan_resource", "project_resource"]},
+        "placement_used": {"enum": ["assessor", "scan_resource", "project_resource", "annotation_set"]},
         "fallback_reason": {"type": ["string", "null"], "maxLength": 300},
         "pixel_confirmation": {"enum": ["not_required", "confirmed"]},
         "intake_started_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"},
-        "tool_version": {"type": "string"}
+        "tool_version": {"type": "string"},
+        "model": {
+          "type": "object",
+          "description": "The trained model whose predictions these are (spec 019). Required by the intake for model_predictions.",
+          "additionalProperties": false,
+          "required": ["name", "version", "dataset_query_string"],
+          "properties": {
+            "name": {"type": "string", "pattern": "^[A-Za-z0-9-]{1,64}$"},
+            "version": {"type": "string", "pattern": "^[A-Za-z0-9-]{1,32}$"},
+            "dataset_query_string": {"type": "string", "minLength": 1}
+          }
+        }
       }
     }
   }

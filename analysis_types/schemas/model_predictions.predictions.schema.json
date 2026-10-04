@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "model_predictions.predictions.schema.json",
+  "title": "Model predictions for one case (spec 019)",
+  "description": "predictions.json: one entry per annotation type. Masks are written as {\"shape\": [rows, cols], \"runs\": [[value, length], ...]}.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["entries"],
+  "properties": {
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["image_identity_hash", "annotation_type", "payload"],
+        "properties": {
+          "image_identity_hash": {"type": "string", "minLength": 1},
+          "annotation_type": {"type": "string", "minLength": 1},
+          "payload": {}
+        }
+      }
+    }
+  }
+}

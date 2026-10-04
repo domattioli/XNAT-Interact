@@ -24,7 +24,9 @@ DESCRIPTOR_VERSION = "1"
 
 # "cases" is written by assemble-dataset (spec 018) and allowed only for a
 # type that spans several cases.
-_ANALYST_RUN_KEYS = {"case_uid", "code_ref", "parameters", "notes", "supersedes", "cases"}
+# "model" names the trained model of a model_predictions result (spec 019); it
+# is checked by the intake for that type and ignored on every other type.
+_ANALYST_RUN_KEYS = {"case_uid", "code_ref", "parameters", "notes", "supersedes", "cases", "model"}
 _TOOL_RUN_KEYS = {
     "source_hashes", "input_refs", "manifest_run_id", "provenance", "producer",
     "experiment_query_string", "label", "placement_used", "fallback_reason",
@@ -155,11 +157,15 @@ def write_descriptor(descriptor: Dict[str, Any], output_folder: Path) -> Path:
 
 def descriptor_template(atype: AnalysisType) -> Dict[str, Any]:
     """The skeleton a student fills in."""
+    run: Dict[str, Any] = {"case_uid": "", "code_ref": "", "parameters": {}, "notes": "", "supersedes": None}
+    if atype.placement == "annotation_set":
+        # Spec 019: a model's predictions also name the model and its training dataset.
+        run["model"] = {"name": "", "version": "", "dataset_query_string": ""}
     return {
         "descriptor_version": DESCRIPTOR_VERSION,
         "type_name": atype.type_name,
         "type_version": atype.type_version,
-        "run": {"case_uid": "", "code_ref": "", "parameters": {}, "notes": "", "supersedes": None},
+        "run": run,
     }
 
 

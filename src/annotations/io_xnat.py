@@ -9,6 +9,9 @@ upload_annotation_set(server, image_ref, annotation_set, *, project_name, resour
 download_annotation_set(server, image_ref, dest_dir, *, project_name, resource_label)
     -> DownloadResult
 
+list_annotation_resources(server, image_ref, *, project_name)
+    -> list[str]   (read-only; spec 019, FR-019)
+
 Design constraints
 ------------------
 - Data-efficient: blobs encoded via each type's registered codec (RLE for masks).
@@ -319,6 +322,41 @@ def upload_annotation_set(
         files_written.append(MANIFEST_FILENAME)
 
     return UploadResult(ok=True, files_written=files_written, friendly=None)
+
+
+# ---------------------------------------------------------------------------
+# Resource listing (spec 019, FR-019)
+# ---------------------------------------------------------------------------
+
+ANNOTATIONS_LABEL = "ANNOTATIONS"
+
+
+def list_annotation_resources(
+    server: Any,
+    image_ref: str,
+    *,
+    project_name: Optional[str] = None,
+) -> List[str]:
+    """
+    Return the labels of every annotation resource on a scan.  Read-only.
+
+    An annotation resource is labelled ``ANNOTATIONS`` (the shared default) or
+    starts with ``ANNOTATIONS_`` (for example one model version's predictions,
+    ``ANNOTATIONS_model__knee-seg__v3``).  The default comes first; the rest
+    are sorted by name.
+
+    The scan's resources are listed the way pyxnat does: iterating
+    ``server.select(<scan>).resources()`` gives objects whose ``label()`` is
+    the resource label.  Errors from the server are passed on to the caller.
+    """
+    qs = _image_qs(image_ref, project_name)
+    labels = set()
+    for res in server.select(qs).resources():
+        label_of = getattr(res, "label", None)
+        name = label_of() if callable(label_of) else str(res)
+        if name == ANNOTATIONS_LABEL or str(name).startswith(ANNOTATIONS_LABEL + "_"):
+            labels.add(str(name))
+    return sorted(labels, key=lambda n: (n != ANNOTATIONS_LABEL, n))
 
 
 # ---------------------------------------------------------------------------

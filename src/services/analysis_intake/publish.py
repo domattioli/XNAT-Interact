@@ -130,6 +130,8 @@ def publish_analysis(descriptor: Dict[str, Any], folder: Path, gateway, *, atype
     run = descriptor["run"]
     if atype.placement == "project_resource":
         return _publish_project_resource(descriptor, folder, gateway, atype, files, verify)
+    if atype.placement == "annotation_set":
+        return _publish_annotation_set(descriptor, folder, gateway, verify)
     exp_qs = run.get("experiment_query_string")
     if not exp_qs:
         raise refuse("Unknown XNAT session",
@@ -243,6 +245,62 @@ def _publish_project_resource(descriptor: Dict[str, Any], folder: Path, gateway,
         outcome.descriptor = final
         if verify:
             outcome.problems = verify_published(outcome, gateway)
+            outcome.verified = not outcome.problems
+        return outcome
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
+def _publish_annotation_set(descriptor: Dict[str, Any], folder: Path, gateway, verify: bool) -> PublishOutcome:
+    """
+    Publish a model's predictions as one more annotator on the scan (spec 019, FR-006, FR-008 to FR-011).
+
+    The predictions become an ``AnnotationSet`` that the annotation engine's own
+    ``upload_annotation_set`` writes into ``ANNOTATIONS_<annotator name>``, one
+    resource per model version.  Then ``analysis.json`` is added to the same
+    resource with ``overwrite=False``.  Nothing is ever deleted or overwritten:
+    a version that is already there is refused before any write.
+    """
+    from src.annotations.io_xnat import upload_annotation_set
+    from src.annotations.model_identity import model_annotator_id
+    from src.services.analysis_intake import predictions
+
+    run = descriptor["run"]
+    refs = run.get("input_refs") or []
+    if not refs:
+        raise refuse("Unknown scan", "The intake could not tell which scan these predictions belong to.",
+                     ["Use the download record (--manifest) of the download that holds this case."])
+    scan_qs = to_pyxnat_qs(refs[0])
+    model = predictions.check_model_fields(descriptor)
+    # FR-006: the training dataset must be on the server before anything is written.
+    predictions.check_dataset_link(gateway, model["dataset_query_string"])
+    annotator = model_annotator_id(model["name"], model["version"])
+    label = f"ANNOTATIONS_{annotator}"
+    if _scan_label_taken(gateway, scan_qs, label):      # FR-009
+        raise refuse("This model version is already published",
+                     f"Predictions of model '{model['name']}' version '{model['version']}' are already on this case "
+                     f"('{label}'). Nothing was uploaded and nothing was changed.",
+                     ["raise the model version in analysis.json (run.model.version), then run the command again."])
+    entries = predictions.load_entries(folder)
+    aset = predictions.build_annotation_set(scan_qs, run, entries)
+    result = upload_annotation_set(gateway, scan_qs, aset, resource_label=label)
+    if not result.ok:
+        raise IntakeRefusal(result.friendly)
+    staging = Path(tempfile.mkdtemp(prefix="xnat_intake_"))
+    try:
+        final = copy.deepcopy(descriptor)
+        final["run"].update({"label": label, "placement_used": "annotation_set", "fallback_reason": None})
+        path = _write_final_descriptor(final, staging)
+        try:
+            gateway.put_file(scan_qs, label, DESCRIPTOR_NAME, str(path), content="ANALYSIS", format="JSON",
+                             overwrite=False)
+        except Exception as exc:  # noqa: BLE001
+            raise _gateway_refusal(exc, f"store '{DESCRIPTOR_NAME}'")
+        outcome = PublishOutcome(label, "annotation_set", scan_qs, label)
+        outcome.files = {DESCRIPTOR_NAME: sha256_of_file(path)}
+        outcome.descriptor = final
+        if verify:
+            outcome.problems = predictions.verify_annotation_set(outcome, gateway, entries)
             outcome.verified = not outcome.problems
         return outcome
     finally:

@@ -85,7 +85,8 @@
       "enum": [
         "assessor",
         "scan_resource",
-        "project_resource"
+        "project_resource",
+        "annotation_set"
       ]
     },
     "resource_label": {

@@ -23,7 +23,7 @@ from src.services.analysis_intake.errors import refuse
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ANALYSIS_TYPES_DIR = REPO_ROOT / "analysis_types"
 
-PLACEMENTS = ("assessor", "scan_resource", "project_resource")
+PLACEMENTS = ("assessor", "scan_resource", "project_resource", "annotation_set")
 PHI_POLICIES = ("no_pixels", "pixels_from_source_only", "text_scan")
 OUTPUT_FORMATS = ("csv", "json", "txt", "md", "npz", "rle", "png", "dcm")
 
@@ -162,6 +162,10 @@ def check_type_data(data: Any, path: Path) -> AnalysisType:
         raise _bad(path, "multi_case", "it must be true or false.")
     if multi_case and placement != "project_resource":
         raise _bad(path, "multi_case", "only a type with placement project_resource can span several cases.")
+    if placement == "annotation_set" and label != "ANNOTATIONS":
+        # Spec 019: annotation sets are written by the annotation engine, which
+        # keeps them in ANNOTATIONS resources on the scan.
+        raise _bad(path, "resource_label", "a type with placement annotation_set must use the label ANNOTATIONS.")
     return AnalysisType(name, version, desc, tuple(inputs), tuple(outputs), placement, label,
                         tuple(policy), via, template, path.parent, multi_case)
 

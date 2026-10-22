@@ -37,6 +37,9 @@ def deidentify_dataset(ds, redacted_string: str):
       - Overlay data (0x6000–0x60FF, 0x3000) → deleted
       - AccessionNumber                   → "REDACTED 4 XNAT"
       - StudyID                           → "REDACTED 4 XNAT"
+      - PatientID, InstitutionName, InstitutionAddress, StationName,
+        DeviceSerialNumber, OtherPatientIDs → "REDACTED 4 XNAT"
+      - PatientBirthDate                  → "" (empty)
 
     Pixels are NOT touched.  See module docstring for why that matters.
 
@@ -79,6 +82,14 @@ def deidentify_dataset(ds, redacted_string: str):
     # catch it.  Redact it explicitly so no patient identifier survives ingest.
     if hasattr(ds, "PatientID"):
         ds.PatientID = "REDACTED 4 XNAT"
+
+    # Site, device and birth-date identifiers are not PN-VR either.
+    for keyword in ("InstitutionName", "InstitutionAddress", "StationName",
+                    "DeviceSerialNumber", "OtherPatientIDs"):
+        if hasattr(ds, keyword):
+            setattr(ds, keyword, "REDACTED 4 XNAT")
+    if hasattr(ds, "PatientBirthDate"):
+        ds.PatientBirthDate = ""
 
     return ds
 

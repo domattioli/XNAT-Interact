@@ -45,9 +45,9 @@ INVENTED_DATES = [D_STUDY, D_CONTENT, D_BIRTH, D_ICD]
 
 # Contract tags the pipeline must redact vs. known gaps outside the contract.
 REDACTED_PN = ("PatientName", "ReferringPhysicianName", "PerformingPhysicianName", "OperatorsName")
-REDACTED_OTHER = ("PatientID", "AccessionNumber", "StudyID")
-GAP_TAGS = ("InstitutionName", "PatientBirthDate", "StationName", "DeviceSerialNumber",
-            "InstitutionAddress", "OtherPatientIDs")
+REDACTED_OTHER = ("PatientID", "AccessionNumber", "StudyID", "InstitutionName", "PatientBirthDate",
+                  "StationName", "DeviceSerialNumber", "InstitutionAddress", "OtherPatientIDs")
+GAP_TAGS = ()  # every planted header item must be redacted
 PRIVATE_CREATOR_TAG = (0x0009, 0x0010)
 PRIVATE_VALUE_TAG = (0x0009, 0x1001)
 PRIVATE_KEYWORD = "Private_0009_1001"

@@ -1,0 +1,8 @@
+{
+  "device_id": "ge_healthcare_surgery_esp_21_cm_fpd_super-c",
+  "description": "SYNTHETIC twin profile (spec 020). Boxes cover the twin banner plants only; not measured on any real device.",
+  "boxes": [
+    [0, 4, 150, 22]
+  ],
+  "tolerance": 8
+}

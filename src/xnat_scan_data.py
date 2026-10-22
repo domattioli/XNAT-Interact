@@ -15,7 +15,11 @@ from src.services.deidentify import deidentify_dataset
 
 
 # Define list for allowable imports from this module -- do not want to import _local_variables.
-__all__ = ['ScanFile', 'SourceDicomDeIdentified', 'MTurkSemanticSegmentation', 'ArthroDiagnosticImage', 'ArthroVideo']
+__all__ = ['MissingAcquisitionDateError', 'ScanFile', 'SourceDicomDeIdentified', 'MTurkSemanticSegmentation', 'ArthroDiagnosticImage', 'ArthroVideo']
+
+
+class MissingAcquisitionDateError( ValueError ):
+    '''Raised when a source DICOM has no usable date in any of the tags the upload reads.'''
 
 
 #--------------------------------------------------------------------------------------------------------------------------
@@ -256,6 +260,9 @@ class SourceDicomDeIdentified( ScanFile ):
         assert isinstance( self.image, ImageHash ), f'BUG: cannot be validate because the object.image data is not in ImageHash format.'
         self._is_valid = not self.image.in_img_hash_metatable and not self.is_similar_to_template_image()
 
+    _DATE_TIME_FALLBACK = ( ('ContentDate', 'ContentTime'), ('InstanceCreationDate', 'InstanceCreationTime'), ('AcquisitionDate', 'AcquisitionTime'),
+                            ('SeriesDate', 'SeriesTime'), ('StudyDate', 'StudyTime') )
+
     def _parse_for_derived_metadata( self ) -> None:
         # Look for acquisition site info in the metadata:
         acq_site_str = ''
@@ -270,13 +277,17 @@ class SourceDicomDeIdentified( ScanFile ):
         # Group info: # to-do: use an ml classifier?
         # self._derived_metadata['GROUP'] = ''
         
-        # Date and time info:
+        # Date and time info: first non-empty date wins; its matching time tag is used (empty time allowed).
         dt_str = ''
-        if 'ContentDate' in self.metadata:
-            if len( self.metadata.ContentDate ) > 0:
-                dt_str = self.metadata.ContentDate + ' ' + self.metadata.ContentTime
-        elif  'InstanceCreationDate' in self.metadata and len( dt_str ) == 0:
-            dt_str = self.metadata.InstanceCreationDate + ' ' + self.metadata.InstanceCreationTime
+        for date_kw, time_kw in self._DATE_TIME_FALLBACK:
+            date_val = str( getattr( self.metadata, date_kw, '' ) or '' ).strip()
+            if len( date_val ) > 0:
+                dt_str = date_val + ' ' + str( getattr( self.metadata, time_kw, '' ) or '' ).strip()
+                break
+        if len( dt_str ) == 0:
+            raise MissingAcquisitionDateError(
+                'This DICOM file has no acquisition date (ContentDate, InstanceCreationDate, AcquisitionDate, SeriesDate and StudyDate are all empty). '
+                'Next step: check the source file in the viewer, then remove it from the upload folder or fill in its date and try again.' )
         self._derived_metadata['DATETIME'] = str( USCentralDateTime( dt_str.strip() ) )
         
         # Also check for ContentTime, SeriesTime, and StudyTime.

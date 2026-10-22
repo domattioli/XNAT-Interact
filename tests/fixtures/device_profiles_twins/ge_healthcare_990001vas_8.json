@@ -1,0 +1,9 @@
+{
+  "device_id": "ge_healthcare_990001vas_8",
+  "description": "SYNTHETIC twin profile (spec 020). Boxes cover the twin banner plants only; not measured on any real device.",
+  "boxes": [
+    [8, 100, 120, 120],
+    [200, 4, 250, 18]
+  ],
+  "tolerance": 8
+}

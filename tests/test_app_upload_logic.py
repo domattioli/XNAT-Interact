@@ -101,10 +101,13 @@ class _MinimalSession(ExperimentData):
 
 
 def _make_zip(tmp_path: Path) -> dict:
-    """Create a minimal zip on disk; return zipped_data dict for publish_to_xnat."""
+    """Zip one real synthetic DICOM (REDACT rewrites its pixels); return zipped_data dict for publish_to_xnat."""
+    from tests.synthetic_twins import make_twin_case
+
+    m = make_twin_case(tmp_path / "twins", "086")
     zip_path = tmp_path / "dicom_files.zip"
     with zipfile.ZipFile(str(zip_path), "w") as zf:
-        zf.writestr("placeholder.dcm", b"FAKE_DCM")
+        zf.write(Path(m["folder"]) / "rf_single.dcm", "rf_single.dcm")
     return {str(zip_path): {"CONTENT": "IMAGE", "FORMAT": "DICOM", "TAG": "INTRA_OP"}}
 
 

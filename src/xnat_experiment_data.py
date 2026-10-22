@@ -241,6 +241,35 @@ class _StaticConn:
         return _StaticCursor( [] )
 
 
+def _redact_dicom_zip( zip_ffn: Path, boxes ) -> int:
+    """Zero ``boxes`` ((x, y, w, h)) in every frame of every DICOM inside ``zip_ffn``; rewrite the zip in place. Returns files masked."""
+    import zipfile
+    with tempfile.TemporaryDirectory() as work_dir:
+        with zipfile.ZipFile( zip_ffn ) as zf:
+            names = zf.namelist()
+            zf.extractall( work_dir )
+        n_masked = 0
+        for name in names:
+            ffn = os.path.join( work_dir, name )
+            if os.path.isdir( ffn ):    continue
+            ds = dcmread( ffn )
+            if 'PixelData' not in ds:   continue
+            if ds.file_meta.TransferSyntaxUID.is_compressed:
+                ds.decompress()
+            arr = ds.pixel_array
+            frames = arr if int( getattr( ds, 'NumberOfFrames', 1 ) or 1 ) > 1 else arr[None]
+            masked = np.stack( [ apply_redaction( f, boxes ) for f in frames ] ).reshape( arr.shape ).astype( arr.dtype )
+            ds.PixelData = masked.tobytes()
+            dcmwrite( ffn, ds )
+            n_masked += 1
+        tmp_zip = str( zip_ffn ) + '.redacting'
+        with zipfile.ZipFile( tmp_zip, 'w', zipfile.ZIP_DEFLATED ) as zf:
+            for name in names:
+                zf.write( os.path.join( work_dir, name ), name )
+        os.replace( tmp_zip, zip_ffn )
+    return n_masked
+
+
 def _interactive_pixel_review_confirmer(context: str) -> Tuple[ReviewDecision, _List[_Tuple[int, int, int, int]]]:
     """
     Default (production) confirmer — asks the operator at the terminal.
@@ -347,7 +376,8 @@ def make_automated_pixel_confirmer(
             return ReviewDecision.CONFIRMED, []
 
         if assessment.verdict == Verdict.REDACTED:
-            return ReviewDecision.REDACT, assessment.regions
+            # verdict regions are (x0, y0, x1, y1); the REDACT contract is apply_redaction's (x, y, w, h).
+            return ReviewDecision.REDACT, [ (int(x0), int(y0), int(x1) - int(x0), int(y1) - int(y0)) for x0, y0, x1, y1 in assessment.regions ]
 
         # Verdict.QUARANTINE — persist evidence then signal the gate.
         if _qstore is not None and _case_id is not None:
@@ -567,16 +597,29 @@ class ExperimentData():
             )
 
         if decision == ReviewDecision.REDACT:
-            # Apply redaction boxes to pixel arrays before upload.
-            # (Zip files are already written; this modifies the arrays in-memory
-            #  via apply_redaction — callers that need pixel-level redaction
-            #  should patch the pixel arrays before calling write(), or supply
-            #  REDACT decision with boxes here for the confirmer to act on.)
-            if redact_boxes and verbose:
-                print( f'\t[PHI GATE] Redaction boxes supplied — apply_redaction called before upload.' )
-            # Note: pixel data inside the zip cannot be patched post-zip without
-            # re-writing. REDACT is provided so test scenarios can verify the
-            # apply_redaction path; production workflows should redact before write().
+            # Burn the boxes into every frame of every DICOM in the zips before any put_zip.
+            # Fail closed: no boxes, or pixels that cannot be rewritten, means nothing is sent.
+            if not redact_boxes:
+                raise UploadError(
+                    FriendlyError(
+                        title="Upload stopped — no redaction areas given",
+                        message="Upload stopped — the review asked for redaction but gave no areas to mask, so no pixel data was sent.",
+                        recourse=[ "Re-run the pixel review and mark the areas that hold patient text." ],
+                    )
+                )
+            for zip_ffn, value_dict in zipped_data.items():
+                if value_dict.get( 'FORMAT' ) != 'DICOM':   continue
+                try:
+                    n_masked = _redact_dicom_zip( Path( zip_ffn ), redact_boxes )
+                except Exception as e:
+                    raise UploadError(
+                        FriendlyError(
+                            title="Upload stopped — redaction could not be applied",
+                            message=f"Upload stopped — the redaction areas could not be written into the image pixels ({type( e ).__name__}), so no pixel data was sent.",
+                            recourse=[ "Check that the images are uncompressed DICOM, or redact them by hand, then try again." ],
+                        )
+                    ) from e
+                if verbose:     print( f'\t[PHI GATE] Redaction applied to {n_masked} DICOM file(s) in {os.path.basename( zip_ffn )}.' )
 
         if verbose:             print( f'\t...Pushing {self.schema_prefix_str} Session Data to XNAT...' )
 
@@ -1013,7 +1056,7 @@ class SourceRFSession( ExperimentData ):
             failure_lines = []
             for failed_fn, exc in failures[:3]:  # Limit to first 3 files for readability
                 # Extract key error message (first line or short snippet)
-                exc_str = str( exc ).split( '\n' )[0][:100]
+                exc_str = str( exc ).split( '\n' )[0]
                 failure_lines.append( f"  • {failed_fn}: {exc_str}" )
             if len( failures ) > 3:
                 failure_lines.append( f"  • ... and {len( failures ) - 3} more file(s)" )

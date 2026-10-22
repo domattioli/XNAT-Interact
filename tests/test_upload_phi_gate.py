@@ -242,9 +242,79 @@ def test_redact_decision_calls_apply_redaction():
     assert arr.max() == 1000, "apply_redaction must not modify the original array"
 
 
-def test_redact_confirmer_path_does_not_block_upload(session_and_fake, fake_zip):
+@pytest.fixture()
+def twin_zip(tmp_path: Path):
+    """Zip the spec-020 twin case 086 (single + multiframe RF); return (zipped_data, manifest)."""
+    from tests.synthetic_twins import make_twin_case
+
+    m = make_twin_case(tmp_path / "twins", "086")
+    zip_path = tmp_path / "dicom_files.zip"
+    with zipfile.ZipFile(str(zip_path), "w") as zf:
+        for f in m["files"]:
+            zf.write(os.path.join(m["folder"], f["path"]), f["path"])
+    return {str(zip_path): {"CONTENT": "IMAGE", "FORMAT": "DICOM", "TAG": "INTRA_OP"}}, m
+
+
+def _corners_to_xywh(box):
+    x0, y0, x1, y1 = box
+    return (x0, y0, x1 - x0, y1 - y0)
+
+
+def test_redact_burns_boxes_into_uploaded_pixels(session_and_fake, twin_zip, tmp_path):
+    """REDACT: every planted box is zero in every frame of the zip handed to put_zip; nothing else changes."""
+    import pydicom
+
+    session, fake_server, fake_conn, fake_login = session_and_fake
+    zipped_data, m = twin_zip
+    boxes = sorted({_corners_to_xywh(tuple(p["box"])) for p in m["pixel_plants"]})
+
+    session.publish_to_xnat(
+        xnat_connection=fake_conn, validated_login=fake_login, zipped_data=zipped_data,
+        delete_zip=False, verbose=False,
+        pixel_review_confirmer=lambda ctx: (ReviewDecision.REDACT, boxes),
+    )
+
+    assert [c for c in fake_server.calls if c["op"] == "resource.put_zip"]
+    out_dir = tmp_path / "sent"
+    with zipfile.ZipFile(next(iter(zipped_data))) as zf:
+        zf.extractall(out_dir)
+    for f in m["files"]:
+        src = pydicom.dcmread(os.path.join(m["folder"], f["path"])).pixel_array
+        sent = pydicom.dcmread(out_dir / f["path"]).pixel_array
+        src, sent = (src[None], sent[None]) if src.ndim == 2 else (src, sent)
+        keep = np.ones(src.shape[1:], bool)
+        for x, y, w, h in boxes:
+            assert sent[:, y:y + h, x:x + w].max() == 0, (f["path"], (x, y, w, h))
+            keep[y:y + h, x:x + w] = False
+        assert (sent[:, keep] == src[:, keep]).all(), f["path"]
+
+
+def test_redact_without_boxes_sends_nothing(session_and_fake, twin_zip):
+    session, fake_server, fake_conn, fake_login = session_and_fake
+    with pytest.raises(UploadError):
+        session.publish_to_xnat(
+            xnat_connection=fake_conn, validated_login=fake_login, zipped_data=twin_zip[0],
+            delete_zip=False, verbose=False,
+            pixel_review_confirmer=lambda ctx: (ReviewDecision.REDACT, []),
+        )
+    assert not [c for c in fake_server.calls if c["op"] == "resource.put_zip"]
+
+
+def test_redact_unreadable_dicom_sends_nothing(session_and_fake, fake_zip):
+    session, fake_server, fake_conn, fake_login = session_and_fake
+    with pytest.raises(UploadError):
+        session.publish_to_xnat(
+            xnat_connection=fake_conn, validated_login=fake_login, zipped_data=fake_zip,
+            delete_zip=False, verbose=False,
+            pixel_review_confirmer=lambda ctx: (ReviewDecision.REDACT, [(0, 0, 4, 4)]),
+        )
+    assert not [c for c in fake_server.calls if c["op"] == "resource.put_zip"]
+
+
+def test_redact_confirmer_path_does_not_block_upload(session_and_fake, twin_zip):
     """When confirmer returns REDACT, upload proceeds (put_zip is called)."""
     session, fake_server, fake_conn, fake_login = session_and_fake
+    fake_zip = twin_zip[0]
 
     boxes = [(0, 0, 4, 4)]
 

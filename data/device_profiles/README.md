@@ -43,6 +43,9 @@ Each profile is a JSON file with the following structure:
    - Often a fixed banner at the top-left or bottom of the frame.
    - May include corner overlays, crosshairs, or technical readouts.
 4. **Write the JSON**: Create `{device_id}.json` in this directory with the measured box(es).
+   The easiest way is `python scripts/measure_device_profile.py <folder of one machine's DICOM files>`:
+   it shows each image, you drag a box over the burned-in text and press `a`, then `q` to save.
+   It writes only the device key and the box coordinates, never header values or pixels.
 5. **Test**: Write a synthetic fixture (or grab a real anonymized sample) with that device identity and verify the profile boxes cover the PHI region.
 
 ## Example Devices

@@ -531,6 +531,25 @@ class LostUpdateError( ValueError ):
 
 
 #--------------------------------------------------------------------------------------------------------------------------
+## Raised when the person logged in is not yet in the REGISTERED_USERS table (fail softly, Principle II).
+class UnregisteredUserError( ValueError ):
+    """Carries a FriendlyError (plain message + next step) for a user missing from REGISTERED_USERS."""
+
+    def __init__( self, username: str ) -> None:
+        from src.services.errors import FriendlyError
+        self.friendly = FriendlyError(
+            title="You are not registered in this project yet",
+            message=( f"The username '{username}' is not on the project's list of registered users, "
+                      "so XNAT-Interact cannot record your work." ),
+            recourse=[
+                "Ask the Data Librarian to register your username in the project config.",
+                "Run the command again after they confirm.",
+            ],
+        )
+        super().__init__( f"{self.friendly.title}: {self.friendly.message} Next step: {' '.join( self.friendly.recourse )}" )
+
+
+#--------------------------------------------------------------------------------------------------------------------------
 ## Class for cataloging all seen data and user info.
 class ConfigTables( UIDandMetaInfo ):
     '''
@@ -709,7 +728,10 @@ class ConfigTables( UIDandMetaInfo ):
     @property
     def accessor_username( self )   -> str:             return self.login_info.validated_username
     @property
-    def accessor_uid( self )        -> str:             return self.get_uid( 'REGISTERED_USERS', self.accessor_username )
+    def accessor_uid( self )        -> str:
+        if not self.item_exists( 'REGISTERED_USERS', self.accessor_username ):
+            raise UnregisteredUserError( self.accessor_username )
+        return self.get_uid( 'REGISTERED_USERS', self.accessor_username )
 
 
     #==========================================================PRIVATE METHODS==========================================================

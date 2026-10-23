@@ -90,10 +90,13 @@ def image_variants(img: np.ndarray) -> dict[str, np.ndarray]:
 # Tesseract sparse-word detector
 # ---------------------------------------------------------------------------
 
+_MIN_WORD_CONF = 30
+
+
 def tesseract_boxes(
     img: np.ndarray,
     *,
-    min_conf: int = 30,
+    min_conf: int = _MIN_WORD_CONF,
     timeout: float = 15.0,
 ) -> list[tuple[int, int, int, int]]:
     """
@@ -135,6 +138,19 @@ def tesseract_boxes(
     -------
     list of (x0, y0, x1, y1) tuples (integers, pixel coordinates).
     """
+    words = _tesseract_words(img, timeout=timeout)
+    return [w["box"] for w in words if w["conf"] >= min_conf]
+
+
+def _tesseract_words(img: np.ndarray, *, timeout: float = 15.0) -> list[dict]:
+    """
+    One ``--psm 3`` Tesseract pass; return every non-empty word as a dict
+    ``{"box": (x0, y0, x1, y1), "conf": int, "line": (block, par, line)}``.
+
+    Low-confidence words are included (callers filter).  The ``line`` key is
+    Tesseract's own layout grouping from ``image_to_data``; it is only
+    meaningful within one call.  Any error degrades to ``[]`` (FN-safe).
+    """
     try:
         import pytesseract  # lazy import
         from pytesseract import Output
@@ -146,23 +162,24 @@ def tesseract_boxes(
             timeout=timeout,
         )
     except Exception:
-        # timeout / missing binary / decode error → graceful degrade (FN-safe)
+        # timeout / missing binary / decode error -> graceful degrade (FN-safe)
         return []
 
-    boxes: list[tuple[int, int, int, int]] = []
+    words: list[dict] = []
     for i, text in enumerate(data["text"]):
         if not text.strip():
             continue
-        conf = int(data["conf"][i])
-        if conf < min_conf:
-            continue
+        try:
+            conf = int(float(data["conf"][i]))
+        except (TypeError, ValueError):
+            conf = -1
         x = int(data["left"][i])
         y = int(data["top"][i])
         w = int(data["width"][i])
         h = int(data["height"][i])
-        boxes.append((x, y, x + w, y + h))
-
-    return boxes
+        line = (int(data["block_num"][i]), int(data["par_num"][i]), int(data["line_num"][i]))
+        words.append({"box": (x, y, x + w, y + h), "conf": conf, "line": line})
+    return words
 
 
 # ---------------------------------------------------------------------------
@@ -350,6 +367,7 @@ def multipass_detect(
     *,
     model_dir: str = "models/craft",
     margin: int = 4,
+    lines_out: Optional[list] = None,
 ) -> list[tuple]:
     """
     Stage-1 entry-point: run the full multipass text detection pipeline and
@@ -379,19 +397,34 @@ def multipass_detect(
     margin:
         Dilation margin in pixels, forwarded to :func:`union_dilate`.
 
+    lines_out:
+        Optional list.  When given, Tesseract's text lines are appended to
+        it: one entry per (variant, block, paragraph, line) group from
+        ``image_to_data``, each the list of ALL that line's word boxes,
+        low-confidence words included.  The verdict engine uses these to mask
+        a whole line when any word on it is PHI (line-level masking).
+
     Returns
     -------
     list of (x0, y0, x1, y1) tuples — the merged, dilated text-region boxes.
     Returns ``[]`` only when no text is detected by any tier.
     """
     all_boxes: list[tuple] = []
+    lines: list[list[tuple]] = []
 
     # Tier 1: Tesseract multipass over all preprocessing variants.
     for _name, variant in image_variants(img).items():
-        all_boxes.extend(tesseract_boxes(variant))
+        words = _tesseract_words(variant)
+        all_boxes.extend(w["box"] for w in words if w["conf"] >= _MIN_WORD_CONF)
+        grouped: dict[tuple, list[tuple]] = {}
+        for w in words:
+            grouped.setdefault(w["line"], []).append(w["box"])
+        lines.extend(grouped.values())
 
     # Tier 2: Learned ONNX detector (optional / degrades gracefully).
     all_boxes.extend(detect_text_regions(img, model_dir=model_dir))
 
     h, w = img.shape[:2]
+    if lines_out is not None:
+        lines_out.extend(lines)
     return union_dilate(all_boxes, margin=margin, shape=(h, w))

@@ -591,12 +591,8 @@ def _covered(phi_box, xywh_boxes) -> bool:
 
 
 @requires_tesseract
-@pytest.mark.xfail(strict=True, reason=(
-    "OPEN LEAK: on the OCR-only twin the gate returns REDACT with a box over only part of "
-    "the planted MRN text (only the word Tesseract crop-reads as PHI is kept); the rest would "
-    "upload unmasked. See the xfail below for the cause."))
 def test_ocr_only_twin_gate_never_passes_clean(tmp_path):
-    """Today's gate on the OCR-only twin: fails closed (QUARANTINE), never CONFIRMED, never a partial REDACT."""
+    """OCR-only twin: never CONFIRMED, and a REDACT covers all the planted PHI (no partial REDACT)."""
     from app.logic.upload import automated_pixel_review
     from tests.synthetic_twins import make_ocr_only_case
 
@@ -610,12 +606,6 @@ def test_ocr_only_twin_gate_never_passes_clean(tmp_path):
 
 
 @requires_tesseract
-@pytest.mark.xfail(strict=True, reason=(
-    "OCR gap: _ocr_crop crops exactly on Tesseract's word box, clipping glyph edges, so "
-    "'0990001' reads as garbage, is classed benign and dropped; the case quarantines instead "
-    "of redacting. A 2 px crop margin fixes the read but then drops benign words on the same "
-    "line as PHI (partial-line redaction, test_010_holdout_fn0 cell 3) -- needs line-level "
-    "grouping; operator decision."))
 def test_ocr_only_twin_gate_redacts_and_upload_is_masked(session_and_fake, tmp_path):
     import pydicom
     from app.logic.upload import automated_pixel_review
@@ -665,3 +655,55 @@ def test_ocr_only_twin_without_glyphs_is_not_redacted(tmp_path):
     ds.save_as(path)
     decision, boxes = automated_pixel_review(m["folder"], profiles_dir=TWIN_PROFILES_DIR)
     assert decision == ReviewDecision.QUARANTINE and boxes == []
+
+
+# ---------------------------------------------------------------------------
+# Line-level masking: a PHI word masks its whole Tesseract line, and only that line.
+# ---------------------------------------------------------------------------
+
+def _two_line_frame():
+    """Crisp 128x256 frame: line 1 'MRN 00471123' (invented), line 2 'LEFT VIEW' (benign)."""
+    import cv2
+
+    f = np.zeros((128, 256), np.uint8)
+    cv2.putText(f, "MRN 00471123", (6, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, 255, 1, cv2.LINE_AA)
+    cv2.putText(f, "LEFT VIEW", (6, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, 255, 1, cv2.LINE_AA)
+    return f
+
+
+def _assess_two_line(tmp_path):
+    from src.services.pixel_deid.verdict import assess_case
+    from tests.synthetic_data import make_unprofiled_device_dataset
+
+    no_craft = tmp_path / "no_craft"
+    no_craft.mkdir()
+    f = _two_line_frame()
+    return f, assess_case([f], make_unprofiled_device_dataset(), model_dir=str(no_craft))
+
+
+@requires_tesseract
+def test_benign_word_on_phi_line_is_masked(tmp_path):
+    """'MRN' reads benign on its own, but it shares a line with the PHI number, so it is masked too."""
+    from src.services.pixel_deid.verdict import Verdict, _ocr_crop, classify_text
+
+    f, a = _assess_two_line(tmp_path)
+    mrn_word = (6, 28, 40, 42)  # 'MRN' glyphs, left of the number on line 1
+    assert f[28:42, 6:40].max() > 200  # the glyphs are there
+    assert classify_text(_ocr_crop([f], (8, 29, 39, 41)))[0] is False  # benign alone
+    assert a.verdict == Verdict.REDACTED, a.reason
+    x0, y0, x1, y1 = mrn_word
+    assert a.masked_frames[0][y0:y1, x0:x1].max() == 0
+    assert a.masked_frames[0][28:42, 40:130].max() == 0  # and the number itself
+
+
+@requires_tesseract
+def test_benign_line_without_phi_is_not_masked(tmp_path):
+    """A benign line with no PHI word keeps its pixels (FR-009), even when another line is masked."""
+    from src.services.pixel_deid import detect
+    from src.services.pixel_deid.verdict import Verdict
+
+    f, a = _assess_two_line(tmp_path)
+    # Precondition: Tesseract does see line 2, so keeping it is a decision, not a miss.
+    assert any(b[1] >= 85 for b in detect.tesseract_boxes(f))
+    assert a.verdict == Verdict.REDACTED, a.reason
+    assert np.array_equal(a.masked_frames[0][80:110, :], f[80:110, :])

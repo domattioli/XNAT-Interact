@@ -353,9 +353,12 @@ def assess_case(
     # Tier 3: Multipass detector + PHI classification per frame
     # ------------------------------------------------------------------
     detector_boxes_all: list[tuple] = []
+    text_lines: list[list[tuple]] = []  # Tesseract lines, all frames/variants
     for frame in frames:
         try:
-            boxes = detect.multipass_detect(frame, model_dir=model_dir, margin=0)
+            boxes = detect.multipass_detect(
+                frame, model_dir=model_dir, margin=0, lines_out=text_lines
+            )
             detector_boxes_all.extend(boxes)
         except Exception as exc:
             logger.warning("Detector failed on frame: %s", exc)
@@ -375,6 +378,11 @@ def assess_case(
         is_phi, cats = classify_text(crop_text)
         if is_phi:
             kept_detector_boxes.append(box)
+            # Line-level masking: a PHI word masks every OCR word on its
+            # Tesseract line, so misread neighbours (benign or not) on that
+            # line are never left unmasked. Over-masking benign words on a
+            # PHI line is accepted (operator decision).
+            kept_detector_boxes.extend(_lines_touching(box, text_lines))
             for c in cats:
                 if c not in phi_categories_all:
                     phi_categories_all.append(c)
@@ -406,10 +414,25 @@ def assess_case(
     phi_outside_mask = _check_phi_outside_mask(frames, mask_union, phi_categories_all)
 
     # ------------------------------------------------------------------
+    # Faint-text guard: on an unprofiled device with no learned (CRAFT)
+    # detector and no cross-frame consensus, low-contrast text is not
+    # trustworthy evidence. OCR on faint glyphs can read part of a line and
+    # miss the rest, so a REDACT built from it is not proof of coverage.
+    # Such cases always QUARANTINE, whatever OCR read.
+    # ------------------------------------------------------------------
+    faint_unconfirmed = (
+        not is_profiled
+        and not consensus_boxes
+        and not _craft_model_present(model_dir)
+        and _has_faint_text(frames, text_lines)
+    )
+
+    # ------------------------------------------------------------------
     # Verdict routing (T014)
     # ------------------------------------------------------------------
     verdict, reason = _route_verdict(
         is_profiled=is_profiled,
+        faint_unconfirmed=faint_unconfirmed,
         mask_union=mask_union,
         phi_outside_mask=phi_outside_mask,
         profile_boxes=profile_boxes,
@@ -458,6 +481,50 @@ def assess_case(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+_OCR_CROP_CONTEXT_PX = 2
+_FAINT_CONTRAST = 64  # p99 - p1 grey levels inside a text line below this = faint
+
+
+def _line_extent(line: list[tuple]) -> tuple:
+    """(x0, y0, x1, y1) union of one Tesseract line's word boxes."""
+    return (
+        min(b[0] for b in line),
+        min(b[1] for b in line),
+        max(b[2] for b in line),
+        max(b[3] for b in line),
+    )
+
+
+def _lines_touching(box: tuple, text_lines: list[list[tuple]]) -> list[tuple]:
+    """Extents of every Tesseract line with at least one word overlapping *box*."""
+    return [_line_extent(line) for line in text_lines if line and _any_overlap(box, line)]
+
+
+def _craft_model_present(model_dir: str) -> bool:
+    try:
+        from pathlib import Path
+        return any(Path(model_dir).glob("*.onnx"))
+    except Exception:
+        return False
+
+
+def _has_faint_text(frames: list[np.ndarray], text_lines: list[list[tuple]]) -> bool:
+    """True if any Tesseract line, on any frame, has low glyph/background contrast."""
+    for line in text_lines:
+        if not line:
+            continue
+        x0, y0, x1, y1 = _line_extent(line)
+        m = _OCR_CROP_CONTEXT_PX
+        for frame in frames:
+            crop = _crop_box(frame, (x0 - m, y0 - m, x1 + m, y1 + m))
+            if crop.size == 0:
+                continue
+            lo, hi = np.percentile(crop, [1, 99])
+            if hi - lo < _FAINT_CONTRAST:
+                return True
+    return False
+
+
 def _ocr_crop(frames: list[np.ndarray], box: tuple) -> str:
     """
     OCR the sub-image defined by *box* across all frames; return concatenated text.
@@ -471,8 +538,15 @@ def _ocr_crop(frames: list[np.ndarray], box: tuple) -> str:
     except ImportError:
         return ""
 
+    # Tesseract word boxes hug the glyphs; cropping exactly on them clips
+    # stroke edges and --psm 7 misreads the word (e.g. '0990001' read as
+    # 'ocieleen', classed benign, dropped). A small context margin, clamped to
+    # the frame by _crop_box, fixes the read.
+    x0, y0, x1, y1 = box
+    m = _OCR_CROP_CONTEXT_PX
+    padded = (x0 - m, y0 - m, x1 + m, y1 + m)
     for frame in frames:
-        crop = _crop_box(frame, box)
+        crop = _crop_box(frame, padded)
         if crop.size == 0:
             continue
         try:
@@ -525,6 +599,7 @@ def _route_verdict(
     is_profiled: bool,
     mask_union: list[tuple],
     phi_outside_mask: bool,
+    faint_unconfirmed: bool = False,
     profile_boxes: list[tuple],
     kept_detector_boxes: list[tuple],
     loaded_profiles: dict,
@@ -547,6 +622,12 @@ def _route_verdict(
     """
     if phi_outside_mask:
         return Verdict.QUARANTINE, "phi-text outside maskable region"
+
+    if faint_unconfirmed:
+        return (
+            Verdict.QUARANTINE,
+            "unprofiled device, faint text with no learned detector; needs manual review",
+        )
 
     if not is_profiled:
         if mask_union:

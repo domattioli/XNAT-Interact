@@ -426,7 +426,8 @@ def test_prepare_and_upload_redact_boxes_passed_to_confirmer(tmp_path: Path):
     assert decision == ReviewDecision.REDACT, (
         f"Confirmer must return REDACT decision; got {decision}"
     )
-    assert returned_boxes == boxes, (
+    # The automated pixel review may add its own boxes; the human's boxes must survive.
+    assert set(boxes) <= set(returned_boxes), (
         f"Confirmer must pass boxes through; got {returned_boxes}"
     )
 

@@ -8,15 +8,23 @@ Public API
 dropdown_options(config)            -> dict[str, list[str]]
 validate_intake(form_values)        -> list[str]
 upload_preview(form_values, n)      -> dict
+automated_pixel_review(image_dir)   -> (ReviewDecision, boxes) | None
 prepare_and_upload(...)             -> UploadOutcome
 """
 from __future__ import annotations
 
+import io
+import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from src.services.errors import FriendlyError
 from src.xnat_experiment_data import ReviewDecision, UploadError
+
+_log = logging.getLogger(__name__)
+_REPO = Path(__file__).resolve().parents[2]
+DEFAULT_PROFILES_DIR = str(_REPO / "data" / "device_profiles")
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +161,114 @@ def upload_preview(form_values: Dict[str, Any], image_count: int) -> Dict[str, A
     }
 
 
+
+# ---------------------------------------------------------------------------
+# Automated pixel review (gates every UI before upload)
+# ---------------------------------------------------------------------------
+
+def _to_gray_uint8(arr: Any) -> Any:
+    import numpy as np  # noqa: PLC0415
+
+    a = np.asarray(arr)
+    if a.ndim == 3 and a.shape[-1] in (3, 4):
+        a = a[..., :3].mean(axis=-1)
+    if a.dtype != np.uint8:
+        a = a.astype(np.float64)
+        lo, hi = float(a.min()), float(a.max())
+        a = np.zeros(a.shape, np.uint8) if hi <= lo else ((a - lo) * (255.0 / (hi - lo))).astype(np.uint8)
+    return a
+
+
+def _frames_of(ds: Any) -> List[Any]:
+    arr = ds.pixel_array
+    n = int(getattr(ds, "NumberOfFrames", 1) or 1)
+    frames = list(arr) if n > 1 else [arr]
+    return [_to_gray_uint8(f) for f in frames]
+
+
+def _iter_dicom_sources(image_dir: Any) -> List[Any]:
+    """Return readable sources (paths or BytesIO) for every candidate DICOM in *image_dir*.
+
+    Accepts a folder path, a list of paths, or a list of uploaded file objects
+    (anything with ``getvalue()``).  Same file filter as SourceRFSession
+    (``.dcm`` or no extension).
+    """
+    if image_dir is None or image_dir == "":
+        return []
+    if isinstance(image_dir, (str, Path)):
+        root = Path(image_dir)
+        if not root.is_dir():
+            return []
+        return sorted(f for f in root.rglob("*") if f.is_file() and (f.suffix.lower() == ".dcm" or f.suffix == ""))
+    out: List[Any] = []
+    try:
+        items = list(image_dir)
+    except TypeError:
+        return []
+    for item in items:
+        if hasattr(item, "getvalue"):
+            name = str(getattr(item, "name", ""))
+            if Path(name).suffix.lower() in (".dcm", ""):
+                out.append(io.BytesIO(item.getvalue()))
+        elif isinstance(item, (str, Path)) and Path(item).is_file():
+            p = Path(item)
+            if p.suffix.lower() == ".dcm" or p.suffix == "":
+                out.append(p)
+    return out
+
+
+def automated_pixel_review(
+    image_dir: Any,
+    *,
+    profiles_dir: str = DEFAULT_PROFILES_DIR,
+    quarantine_store: Any = None,
+    case_id: Optional[str] = None,
+) -> Optional[Tuple[ReviewDecision, List[Tuple[int, int, int, int]]]]:
+    """Run the automated pixel review (Tesseract + device profile + consensus) on one case.
+
+    Returns ``None`` when *image_dir* holds no DICOM images (nothing to review),
+    else ``(decision, boxes)`` from :func:`make_automated_pixel_confirmer`:
+    CONFIRMED (clean), REDACT with (x, y, w, h) boxes, or QUARANTINE.
+    The CRAFT model is not required; an empty ``models/craft`` is not an error.
+    Raises on unreadable pixels so the caller can fail closed.
+    """
+    import pydicom  # noqa: PLC0415
+    from src.xnat_experiment_data import make_automated_pixel_confirmer  # noqa: PLC0415
+
+    frames: List[Any] = []
+    first_ds = None
+    for src in _iter_dicom_sources(image_dir):
+        try:
+            ds = pydicom.dcmread(src)
+        except Exception:  # noqa: BLE001 — not a DICOM (stray file); the session builder reports it
+            continue
+        if "PixelData" not in ds:
+            continue
+        frames.extend(_frames_of(ds))
+        first_ds = first_ds if first_ds is not None else ds
+    if not frames:
+        return None
+    confirmer = make_automated_pixel_confirmer(
+        frames, first_ds, profiles_dir=profiles_dir,
+        quarantine_store=quarantine_store, case_id=case_id,
+    )
+    return confirmer("automated pixel review")
+
+
+def _quarantine_error() -> FriendlyError:
+    return FriendlyError(
+        title="Upload stopped — images held for privacy review",
+        message=(
+            "The automatic image check could not prove these images are free of "
+            "burned-in patient details, so nothing was sent to XNAT."
+        ),
+        recourse=[
+            "Ask the Data Librarian to review the held case.",
+            "If this imaging machine is new, ask the Data Librarian to add its "
+            "device profile (scripts/measure_device_profile.py), then retry.",
+        ],
+    )
+
 # ---------------------------------------------------------------------------
 # Core orchestration
 # ---------------------------------------------------------------------------
@@ -165,6 +281,7 @@ def prepare_and_upload(
     review_decision: ReviewDecision,
     redaction_boxes: Optional[List[Tuple[int, int, int, int]]] = None,
     publish_fn: Optional[Callable[..., None]] = None,
+    pixel_review: Optional[Callable[[Any], Any]] = automated_pixel_review,
 ) -> UploadOutcome:
     """
     Orchestrate a single-case upload.
@@ -187,6 +304,11 @@ def prepare_and_upload(
                         Defaults to None (tests supply their own).
                         When None and review_decision is CONFIRMED/REDACT,
                         a FriendlyError is returned (no real upload in logic layer).
+    pixel_review      : Automated pixel review run on image_dir before upload
+                        (default automated_pixel_review).  CLEAN keeps the
+                        caller's decision; REDACT adds its boxes and uploads
+                        masked without asking a human; QUARANTINE stops with a
+                        FriendlyError.  Returning None means no DICOM images.
 
     Returns
     -------
@@ -245,6 +367,39 @@ def prepare_and_upload(
                 recourse=problems,
             ),
         )
+
+    # ------------------------------------------------------------------
+    # Automated pixel review: gates every UI.  Fail closed on any error.
+    # ------------------------------------------------------------------
+    redaction_boxes = list(redaction_boxes or [])
+    if pixel_review is not None:
+        try:
+            auto = pixel_review(image_dir)
+        except Exception as exc:  # noqa: BLE001
+            from src.services.errors import handle as _handle
+            fe = _handle(
+                exc,
+                title="Upload stopped — automatic image check failed",
+                message=(
+                    "The automatic check for burned-in patient details could not "
+                    "run on these images, so nothing was sent to XNAT."
+                ),
+                recourse=[
+                    "Check that every file in the folder is an image from the scanner.",
+                    "Contact the Data Librarian and share the diagnostic log.",
+                ],
+                context="automated_pixel_review",
+            )
+            return UploadOutcome(ok=False, friendly=fe)
+        if auto is not None:
+            auto_decision, auto_boxes = auto
+            if auto_decision == ReviewDecision.QUARANTINE:
+                return UploadOutcome(ok=False, friendly=_quarantine_error())
+            if auto_decision == ReviewDecision.REDACT:
+                review_decision = ReviewDecision.REDACT
+                redaction_boxes = list(auto_boxes or []) + redaction_boxes
+            elif auto_decision != ReviewDecision.CONFIRMED:
+                return UploadOutcome(ok=False, friendly=_quarantine_error())
 
     # ------------------------------------------------------------------
     # Build pixel_review_confirmer from the pre-decided review_decision.

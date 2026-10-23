@@ -242,8 +242,9 @@ def _render_phi_confirm() -> None:
     st.warning(
         "**REQUIRED:** Before uploading, you must confirm that none of the images "
         "show a visible patient name, date-of-birth, or medical record number "
-        "burned into the pixel data. DICOM metadata will be automatically redacted, "
-        "but pixel data cannot be automatically inspected.",
+        "burned into the pixel data. DICOM metadata will be automatically redacted. "
+        "An automatic image check also runs before upload: text it finds is masked "
+        "and uploaded, and a case it cannot clear is held for the Data Librarian.",
         icon="⚠️",
     )
 
@@ -325,7 +326,9 @@ def _run_upload(
         st.rerun()
         return
 
-    with st.spinner("Uploading to XNAT — please keep this tab open…"):
+    # prepare_and_upload runs the automated pixel review before any upload
+    # (CLEAN uploads, REDACT masks + uploads, QUARANTINE stops with a next step).
+    with st.spinner("Checking images for burned-in patient details, then uploading — please keep this tab open…"):
         outcome: UploadOutcome = prepare_and_upload(
             form_values=form_values,
             image_dir=uploaded_files,

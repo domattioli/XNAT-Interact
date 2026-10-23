@@ -314,8 +314,9 @@ def _render_privacy_check_step(config: Any) -> None:
         "**REQUIRED:** Before uploading, you must confirm that NONE of the images "
         "show a visible patient name, date of birth, or medical record number "
         "burned into the pixel data.  \n\n"
-        "DICOM metadata tags (name, DOB, MRN) will be automatically redacted, "
-        "but you must still verify the pixel data.",
+        "DICOM metadata tags (name, DOB, MRN) will be automatically redacted. "
+        "An automatic image check also runs before upload: text it finds is masked "
+        "and uploaded, and a case it cannot clear is held for the Data Librarian.",
         icon="⚠️",
     )
 
@@ -471,10 +472,12 @@ def _execute_upload(server: Any) -> None:
             st.markdown(f"- {problem}")
         return
 
-    # Get review decision (privacy affirmed earlier, so this is CONFIRMED)
+    # The user did not abort.  prepare_and_upload runs the automated pixel
+    # review on every case: CLEAN uploads, REDACT masks then uploads with no
+    # further approval, QUARANTINE stops with a next step.
     review_decision = ReviewDecision.CONFIRMED
 
-    with st.spinner("Uploading to XNAT — please keep this tab open…"):
+    with st.spinner("Checking images for burned-in patient details, then uploading — please keep this tab open…"):
         outcome: UploadOutcome = prepare_and_upload(
             form_values=form,
             image_dir=image_dir,

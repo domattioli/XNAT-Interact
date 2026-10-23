@@ -125,8 +125,8 @@ def device_id_for(dataset) -> str | None:
     Resolve device identity from a pydicom Dataset.
 
     Tries (in order):
-      1. Private 0x0019 block (manufacturer's proprietary device profile tag).
-      2. Combination of Manufacturer and ManufacturerModelName tags.
+      1. Combination of Manufacturer and ManufacturerModelName tags.
+      2. Manufacturer alone.
       3. Modality (fallback, low-confidence).
       Returns None if none of the above are present.
 
@@ -140,16 +140,11 @@ def device_id_for(dataset) -> str | None:
     str | None
         Stable device identity key, or None if the device cannot be identified.
     """
-    # Try 0x0019 private block first (manufacturer-specific profile)
-    if 0x0019 in dataset:
-        try:
-            # The private block at 0x0019 is often used for device-specific profiles.
-            # We encode its presence/structure as a key.
-            private_block = dataset[0x0019]
-            device_id = f"private_0x0019_{id(private_block) & 0xFFFF:04x}"
-            return device_id
-        except Exception:
-            pass
+    # No private-group branch. An earlier "0x0019 in dataset" test looked up tag
+    # (0000,0019), which no file dataset carries, so it never ran; and keyed on
+    # id(), which changes every run. Checking group 0x0019 properly would be
+    # wrong too: GE files and every file XNAT-Interact has de-identified (our
+    # own 0x0019 stash tags) carry that group, so it would not name a device.
 
     # Try Manufacturer + ManufacturerModelName
     mfr = getattr(dataset, "Manufacturer", None)

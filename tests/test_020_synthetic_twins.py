@@ -194,7 +194,8 @@ def test_pixel_recall_and_precision_with_twin_profiles(twins, stub_detectors):
             for p in plants:
                 x0, y0, x1, y1 = p["box"]
                 for i, mf in enumerate(a.masked_frames):
-                    assert frames[i][y0:y1, x0:x1].min() == tw.PLANT_VALUE  # plant really present
+                    assert (frames[i][y0:y1, x0:x1] == tw.PLANT_VALUE).any()  # glyphs really present
+                    assert frames[i][y0:y1, x0:x1].min() == tw.TEXT_BG  # on the dark text background
                     assert (mf[y0:y1, x0:x1] == 0).all(), (f["path"], i, p["box"])
             outside = np.ones(frames[0].shape, dtype=bool)
             for x0, y0, x1, y1 in a.regions:
@@ -209,9 +210,19 @@ def test_consensus_alone_covers_multiframe_plants(twins, stub_detectors):
 
     m = twins["086"]
     boxes = consensus.variance_consensus_mask(_frames(m, "rf_multi.dcm"))
+    frame = _frames(m, "rf_multi.dcm")[0]
+    from src.services.pixel_deid.detect import union_dilate
+
+    covered = np.zeros(frame.shape, bool)
+    # same union + 6 px dilation assess_case applies (tiny glyph fragments < 4 px are merged in)
+    for bx0, by0, bx1, by1 in union_dilate(boxes, margin=6, shape=frame.shape):
+        covered[by0:by1, bx0:bx1] = True
     for p in (p for p in m["pixel_plants"] if p["file"] == "rf_multi.dcm"):
         x0, y0, x1, y1 = p["box"]
-        assert any(b[0] <= x0 and b[1] <= y0 and b[2] >= x1 and b[3] >= y1 for b in boxes), p
+        glyphs = frame[y0:y1, x0:x1] == tw.PLANT_VALUE
+        assert glyphs.any(), p
+        # every rendered glyph pixel lies inside a consensus box
+        assert covered[y0:y1, x0:x1][glyphs].all(), p
 
 
 def test_shrunk_profile_box_is_caught(twins, stub_detectors, tmp_path):
@@ -397,3 +408,43 @@ def test_ingest_sets_every_date_tag_to_operation_date(twins, monkeypatch):
             assert any("CaseDateHash" in v for v in values), (m["case_id"], f["path"])
             checked += 1
     assert checked >= 6
+
+
+# B2 ------------------------------------------------------------------------
+def _has_tesseract():
+    import shutil
+    try:
+        import pytesseract  # noqa: F401
+    except ImportError:
+        return False
+    return shutil.which("tesseract") is not None
+
+
+@pytest.mark.skipif(not _has_tesseract(), reason="tesseract OCR not installed")
+def test_twin_pixel_plants_are_legible_text(twins):
+    """Every twin box holds rendered glyphs that real Tesseract reads back (not a solid block)."""
+    import re
+
+    from src.services.pixel_deid.verdict import _ocr_crop
+
+    def norm(s):
+        return re.sub(r"[^A-Z0-9]", "", s.upper())
+
+    checked = 0
+    for m in twins.values():
+        for p in m["pixel_plants"]:
+            frame = _frames(m, p["file"])[0]
+            x0, y0, x1, y1 = p["box"]
+            block = frame[y0:y1, x0:x1]
+            assert block.min() == tw.TEXT_BG and block.max() == tw.PLANT_VALUE
+            assert 0.03 < (block == tw.PLANT_VALUE).mean() < 0.6, (m["case_id"], p)
+            if y1 - y0 < 18:
+                # 14 px boxes force a 10 px font, below what Tesseract reads reliably
+                # (Z/2, D/P swaps); profile + consensus tiers own those boxes.
+                continue
+            read = norm(_ocr_crop([frame], tuple(p["box"])))
+            checked += 1
+            want = norm(p["text"])
+            # allow one misread glyph at the ends (font edge at small sizes)
+            assert want[:-1] in read or want[1:] in read, (m["case_id"], p["file"], p["text"], read)
+    assert checked >= 8

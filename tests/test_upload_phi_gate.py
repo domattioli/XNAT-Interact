@@ -560,3 +560,83 @@ def test_connection_drop_message_mentions_partial_upload(session_and_fake, fake_
     assert "partial" in msg_lower or "re-run" in msg_lower or "resume" in msg_lower, (
         "T028 FriendlyError message must mention partial upload or re-run/resume"
     )
+
+
+# ---------------------------------------------------------------------------
+# Spec 020 B2 — OCR-only twin: single frame, unprofiled device, real glyphs.
+# Neither the profile nor the cross-frame consensus tier can see this text;
+# only real Tesseract can. Skipped when tesseract is not installed.
+# ---------------------------------------------------------------------------
+
+def _tesseract_available() -> bool:
+    import shutil
+    try:
+        import pytesseract  # noqa: F401
+    except ImportError:
+        return False
+    return shutil.which("tesseract") is not None
+
+
+requires_tesseract = pytest.mark.skipif(not _tesseract_available(), reason="tesseract OCR not installed")
+TWIN_PROFILES_DIR = str(Path(__file__).resolve().parent / "fixtures" / "device_profiles_twins")
+
+
+def _covered(phi_box, xywh_boxes) -> bool:
+    """True when every pixel of phi_box (x0, y0, x1, y1) lies inside the union of xywh_boxes."""
+    x0, y0, x1, y1 = phi_box
+    grid = np.zeros((y1, x1), bool)
+    for x, y, w, h in xywh_boxes:
+        grid[max(0, y):y + h, max(0, x):x + w] = True
+    return bool(grid[y0:y1, x0:x1].all())
+
+
+@requires_tesseract
+def test_ocr_only_twin_gate_redacts_and_upload_is_masked(session_and_fake, tmp_path):
+    import pydicom
+    from app.logic.upload import automated_pixel_review
+    from tests.synthetic_twins import make_ocr_only_case
+
+    m = make_ocr_only_case(tmp_path / "twins")
+    plant = m["pixel_plants"][0]
+    assert m["files"][0]["n_frames"] == 1  # consensus needs >1 frame, so it cannot fire
+
+    decision, boxes = automated_pixel_review(m["folder"], profiles_dir=TWIN_PROFILES_DIR)
+    assert decision == ReviewDecision.REDACT, decision
+    assert boxes and _covered(plant["phi_box"], boxes), (boxes, plant["phi_box"])
+
+    session, fake_server, fake_conn, fake_login = session_and_fake
+    zip_path = tmp_path / "dicom_files.zip"
+    with zipfile.ZipFile(str(zip_path), "w") as zf:
+        zf.write(os.path.join(m["folder"], plant["file"]), plant["file"])
+    zipped = {str(zip_path): {"CONTENT": "IMAGE", "FORMAT": "DICOM", "TAG": "INTRA_OP"}}
+    session.publish_to_xnat(
+        xnat_connection=fake_conn, validated_login=fake_login, zipped_data=zipped,
+        delete_zip=False, verbose=False, pixel_review_confirmer=lambda ctx: (decision, boxes),
+    )
+    assert [c for c in fake_server.calls if c["op"] == "resource.put_zip"]
+    with zipfile.ZipFile(str(zip_path)) as zf:
+        zf.extractall(tmp_path / "sent")
+    src = pydicom.dcmread(os.path.join(m["folder"], plant["file"])).pixel_array
+    sent = pydicom.dcmread(tmp_path / "sent" / plant["file"]).pixel_array
+    x0, y0, x1, y1 = plant["phi_box"]
+    assert src[y0:y1, x0:x1].max() == 255  # the glyphs were there
+    assert sent[y0:y1, x0:x1].max() == 0   # and are gone from what was sent
+
+
+@requires_tesseract
+def test_ocr_only_twin_without_glyphs_is_not_redacted(tmp_path):
+    """Control: same unprofiled single frame with no text -> no REDACT boxes (fail closed to QUARANTINE)."""
+    import pydicom
+    from app.logic.upload import automated_pixel_review
+    from tests.synthetic_twins import make_ocr_only_case
+
+    m = make_ocr_only_case(tmp_path / "twins")
+    path = os.path.join(m["folder"], m["files"][0]["path"])
+    ds = pydicom.dcmread(path)
+    arr = ds.pixel_array.copy()
+    x0, y0, x1, y1 = m["pixel_plants"][0]["box"]
+    arr[y0:y1, x0:x1] = 40
+    ds.PixelData = arr.tobytes()
+    ds.save_as(path)
+    decision, boxes = automated_pixel_review(m["folder"], profiles_dir=TWIN_PROFILES_DIR)
+    assert decision == ReviewDecision.QUARANTINE and boxes == []

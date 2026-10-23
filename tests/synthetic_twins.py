@@ -25,6 +25,12 @@ MODEL_SUPERC = "Surgery ESP 21 cm FPD Super-C"
 MODEL_VAS = "990001VAS 8"
 KEY_SUPERC = "ge_healthcare_surgery_esp_21_cm_fpd_super-c"
 KEY_VAS = "ge_healthcare_990001vas_8"
+# OCR-only twin: a device with NO profile, one single-frame file, so neither the
+# profile nor the cross-frame consensus tier can find its text; only OCR can.
+MODEL_OCR = "ZZTWIN OCR Unit"
+KEY_OCR = "ge_healthcare_zztwin_ocr_unit"
+OCR_CASE_ID = "099"
+OCR_BOX = (40, 56, 210, 76)
 
 RF_SOP = "1.2.840.10008.5.1.4.1.1.12.2"  # X-Ray Radiofluoroscopic Image Storage
 SC_SOP = "1.2.840.10008.5.1.4.1.1.7"     # Secondary Capture Image Storage
@@ -56,21 +62,59 @@ PRIVATE_KEYWORD = "Private_0009_1001"
 
 
 def _device(key: str) -> str:
-    return MODEL_VAS if key == KEY_VAS else MODEL_SUPERC
+    return {KEY_VAS: MODEL_VAS, KEY_OCR: MODEL_OCR}.get(key, MODEL_SUPERC)
 
 
-def _pixels(case_id: str, name: str, device_key: str, n_frames: int) -> np.ndarray:
-    """uint8 frames: seeded noise 20-80 (fresh per frame) plus static 255 plant blocks."""
+# Fake burned-in text (all invented, ZZTWIN-marked). The 7-digit run reads as an
+# MRN to the classifier, so OCR-found text is always treated as PHI.
+TEXT_BG = 8  # dark but non-zero, so a masked (0) box is told apart from the background
+
+
+def box_text(case_id: str, box_index: int) -> str:
+    """Invented PHI-like banner text for box ``box_index`` of a twin case."""
+    return (f"ZZTWIN {case_id}0001", f"ZZ{case_id}")[min(box_index, 1)]
+
+
+def _font(height: int):
+    from PIL import ImageFont
+
+    return ImageFont.load_default(size=max(8, min(14, height - 4)))
+
+
+def render_text_block(frame: np.ndarray, box, text: str) -> None:
+    """Draw ``text`` bright (PLANT_VALUE) on dark (TEXT_BG) inside ``box`` (x0, y0, x1, y1), in place.
+
+    Uses Pillow's bundled font so the glyphs are the same on every machine and
+    real Tesseract can read them (spec 020 B2: the old solid blocks never
+    exercised OCR).
+    """
+    from PIL import Image, ImageDraw
+
+    x0, y0, x1, y1 = box
+    tile = Image.new("L", (x1 - x0, y1 - y0), 0)
+    ImageDraw.Draw(tile).text((3, 1), text, fill=255, font=_font(y1 - y0))
+    # Binarise the anti-aliased glyphs: every text pixel is exactly PLANT_VALUE.
+    frame[y0:y1, x0:x1] = np.where(np.asarray(tile) >= 128, PLANT_VALUE, TEXT_BG).astype(np.uint8)
+
+
+def _pixels(case_id: str, name: str, device_key: str, n_frames: int, extra_text=()) -> np.ndarray:
+    """uint8 frames: seeded noise 20-80 (fresh per frame) plus static bright-on-dark text plants.
+
+    ``extra_text``: ((x0, y0, x1, y1), text) pairs drawn outside any device profile box.
+    """
     seed = int(case_id) * 1000 + sum(ord(c) for c in name)
     rng = np.random.default_rng(seed)
     out = rng.integers(20, 81, size=(n_frames, ROWS, COLS), dtype=np.uint8)
-    for x0, y0, x1, y1 in BOXES[device_key]:
-        out[:, y0:y1, x0:x1] = PLANT_VALUE
+    blocks = [(box, box_text(case_id, i)) for i, box in enumerate(BOXES.get(device_key, []))]
+    blocks += list(extra_text)
+    for frame in out:
+        for box, text in blocks:
+            render_text_block(frame, box, text)
     return out
 
 
 def _build_dataset(case_id: str, name: str, *, device_key: str, modality: str, sop_class: str,
-                   n_frames: int, instance: int, dates: str):
+                   n_frames: int, instance: int, dates: str, extra_text=()):
     """dates: 'full' | 'none' | 'icd' (only InstanceCreationDate)."""
     from pydicom.dataset import FileDataset, FileMetaDataset
     from pydicom.uid import ExplicitVRLittleEndian
@@ -127,7 +171,7 @@ def _build_dataset(case_id: str, name: str, *, device_key: str, modality: str, s
     ds.PixelRepresentation = 0
     if n_frames > 1:
         ds.NumberOfFrames = str(n_frames)
-    ds.PixelData = _pixels(case_id, name, device_key, n_frames).tobytes()
+    ds.PixelData = _pixels(case_id, name, device_key, n_frames, extra_text).tobytes()
     return ds
 
 
@@ -216,8 +260,8 @@ def make_twin_case(tmp_dir, case_id: str) -> dict:
             controls.append(dict(file=name, tag=kw, value=val))
         if n_frames > 1:
             controls.append(dict(file=name, tag="NumberOfFrames", value=str(n_frames)))
-        for box in BOXES[device_key]:
-            pixel_plants.append(dict(file=name, frame="all", box=list(box)))
+        for i, box in enumerate(BOXES.get(device_key, [])):
+            pixel_plants.append(dict(file=name, frame="all", box=list(box), text=box_text(case_id, i)))
 
     return dict(
         case_id=case_id, folder=str(folder), device_key=device_key, invented_dates=list(INVENTED_DATES),
@@ -253,3 +297,38 @@ def _expected_value(case_id: str, kw: str, inst: int) -> str:
 def make_all_twins(tmp_dir) -> Dict[str, dict]:
     """Build all three twin cases; returns {case_id: manifest}."""
     return {cid: make_twin_case(tmp_dir, cid) for cid in CASE_IDS}
+
+
+def make_ocr_only_case(tmp_dir) -> dict:
+    """One single-frame RF file on an unprofiled device with burned-in text.
+
+    Not in CASE_IDS: it exists to prove the OCR tier alone catches burned-in
+    text. Returns a small manifest with the text box and the planted string.
+    """
+    folder = Path(tmp_dir) / f"twin_{OCR_CASE_ID}"
+    folder.mkdir(parents=True, exist_ok=True)
+    name = "rf_ocr_only.dcm"
+    label, phi = "MRN ", f"{OCR_CASE_ID}0001 {OCR_CASE_ID}0002"  # two invented MRN-shaped IDs
+    text = label + phi
+    ds = _build_dataset(OCR_CASE_ID, name, device_key=KEY_OCR, modality="RF", sop_class=RF_SOP,
+                        n_frames=1, instance=1, dates="full", extra_text=((OCR_BOX, text),))
+    ds.save_as(str(folder / name), enforce_file_format=True)
+    return dict(case_id=OCR_CASE_ID, folder=str(folder), device_key=KEY_OCR,
+                files=[dict(path=name, role="dicom", n_frames=1, device_key=KEY_OCR)],
+                pixel_plants=[dict(file=name, frame="all", box=list(OCR_BOX), text=text,
+                                   phi_text=phi, phi_box=_text_extent(OCR_BOX, text, label))])
+
+
+def _text_extent(box, text: str, prefix: str):
+    """(x0, y0, x1, y1) frame pixels of ``text`` minus its leading ``prefix``, as render_text_block draws it."""
+    from PIL import Image, ImageDraw
+
+    bx0, by0, bx1, by1 = box
+    font = _font(by1 - by0)
+    tile = Image.new("L", (bx1 - bx0, by1 - by0), 0)
+    ImageDraw.Draw(tile).text((3, 1), text, fill=255, font=font)
+    ys, xs = np.nonzero(np.asarray(tile) >= 128)
+    start = 3 + int(font.getlength(prefix))
+    xs_phi = xs[xs >= start]
+    ys_phi = ys[xs >= start]
+    return [bx0 + int(xs_phi.min()), by0 + int(ys_phi.min()), bx0 + int(xs_phi.max()) + 1, by0 + int(ys_phi.max()) + 1]

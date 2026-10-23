@@ -442,7 +442,7 @@ def test_twin_pixel_plants_are_legible_text(twins):
                 # 14 px boxes force a 10 px font, below what Tesseract reads reliably
                 # (Z/2, D/P swaps); profile + consensus tiers own those boxes.
                 continue
-            read = norm(_ocr_crop([frame], tuple(p["box"])))
+            read = norm(_ocr_crop([frame], tuple(p["box"])))  # whole-box crop has natural margin
             checked += 1
             want = norm(p["text"])
             # allow one misread glyph at the ends (font edge at small sizes)

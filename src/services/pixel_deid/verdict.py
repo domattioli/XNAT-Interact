@@ -458,9 +458,6 @@ def assess_case(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-_OCR_CROP_CONTEXT_PX = 2
-
-
 def _ocr_crop(frames: list[np.ndarray], box: tuple) -> str:
     """
     OCR the sub-image defined by *box* across all frames; return concatenated text.
@@ -474,15 +471,8 @@ def _ocr_crop(frames: list[np.ndarray], box: tuple) -> str:
     except ImportError:
         return ""
 
-    # Tesseract word boxes hug the glyphs; cropping exactly on them clips the
-    # stroke edges and --psm 7 then misreads the word (e.g. '0990001' came
-    # back as 'ocieleen', so PHI was classed benign and dropped). A small
-    # context margin, clamped to the frame by _crop_box, fixes the read.
-    x0, y0, x1, y1 = box
-    m = _OCR_CROP_CONTEXT_PX
-    padded = (x0 - m, y0 - m, x1 + m, y1 + m)
     for frame in frames:
-        crop = _crop_box(frame, padded)
+        crop = _crop_box(frame, box)
         if crop.size == 0:
             continue
         try:

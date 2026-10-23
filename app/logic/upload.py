@@ -223,6 +223,7 @@ def automated_pixel_review(
     profiles_dir: str = DEFAULT_PROFILES_DIR,
     quarantine_store: Any = None,
     case_id: Optional[str] = None,
+    assessment_sink: Optional[List[Any]] = None,
 ) -> Optional[Tuple[ReviewDecision, List[Tuple[int, int, int, int]]]]:
     """Run the automated pixel review (Tesseract + device profile + consensus) on one case.
 
@@ -231,6 +232,7 @@ def automated_pixel_review(
     CONFIRMED (clean), REDACT with (x, y, w, h) boxes, or QUARANTINE.
     The CRAFT model is not required; an empty ``models/craft`` is not an error.
     Raises on unreadable pixels so the caller can fail closed.
+    When *assessment_sink* is a list, the full CaseAssessment (tiers, reason) is appended to it.
     """
     import pydicom  # noqa: PLC0415
     from src.xnat_experiment_data import make_automated_pixel_confirmer  # noqa: PLC0415
@@ -252,7 +254,10 @@ def automated_pixel_review(
         frames, first_ds, profiles_dir=profiles_dir,
         quarantine_store=quarantine_store, case_id=case_id,
     )
-    return confirmer("automated pixel review")
+    result = confirmer("automated pixel review")
+    if assessment_sink is not None:
+        assessment_sink.append(getattr(confirmer, "last_assessment", None))
+    return result
 
 
 def _quarantine_error() -> FriendlyError:

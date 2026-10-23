@@ -372,6 +372,7 @@ def make_automated_pixel_confirmer(
             model_dir=_model_dir,
             profiles_dir=_profiles_dir,
         )
+        _automated_confirmer.last_assessment = assessment  # read-only view for reports (tiers, reason)
 
         if assessment.verdict == Verdict.CLEAN:
             return ReviewDecision.CONFIRMED, []
@@ -397,6 +398,7 @@ def make_automated_pixel_confirmer(
 
         return ReviewDecision.QUARANTINE, []
 
+    _automated_confirmer.last_assessment = None
     return _automated_confirmer
 
 

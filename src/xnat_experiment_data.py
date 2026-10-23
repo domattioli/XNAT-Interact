@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 from typing import Callable, Optional as Opt, Tuple, Union
 import numpy as np
 import pandas as pd
@@ -983,6 +984,20 @@ class ExperimentData():
     
 #--------------------------------------------------------------------------------------------------------------------------
 ## Class for all radio fluoroscopic (source image) sessions.
+#: Every DICOM date tag set to the intake operation date on upload (ADR 0001).
+_UPLOAD_DATE_KEYWORDS = ( 'StudyDate', 'SeriesDate', 'ContentDate', 'AcquisitionDate', 'InstanceCreationDate' )
+
+
+def _operation_date_as_dicom_da( operation_date ) -> str:
+    """Return the intake operation date as a DICOM DA string (YYYYMMDD), or '' if it has no 8 digits."""
+    if operation_date is None:
+        return ''
+    if hasattr( operation_date, 'strftime' ):
+        return operation_date.strftime( '%Y%m%d' )
+    digits = re.sub( r'\D', '', str( operation_date ) )
+    return digits[:8] if len( digits ) >= 8 else ''
+
+
 class SourceRFSession( ExperimentData ):
     """
     A class representing the XNAT Experiment for Radio Fluoroscopic (RF) Source Images. Inherits from ExperimentData. Intended for structuring trauma cases with fluoroscopic image sequences.
@@ -1099,24 +1114,32 @@ class SourceRFSession( ExperimentData ):
             self._df.at[idx, 'InstanceNumber']  = dicom_obj.InstanceNumber  if hasattr( dicom_obj, 'InstanceNumber' )   else None
             
             # Pull date and UID info and write as new private-tag pair so we can overwrite it with standardized info.
-            # FR-003: capture original StudyDate/StudyTime as a dedup hash — never store readable date on upload.
-            if hasattr( dicom_obj, 'StudyDate' ):
-                _orig_date = dicom_obj.StudyDate
-                _orig_time = dicom_obj.StudyTime if hasattr( dicom_obj, 'StudyTime' ) else ''
-                _device    = getattr( dicom_obj, 'Manufacturer', '' ) or getattr( dicom_obj, 'ManufacturerModelName', '' )
+            # FR-003 (ADR 0001): the machine's own StudyDate/StudyTime is kept only as a dedup hash; every DICOM
+            # date tag on the uploaded file is set to the intake operation date (Limited Data Set server).
+            _meta = getattr( dicom_obj, 'metadata', None )
+            _orig_date = str( getattr( _meta, 'StudyDate', '' ) or getattr( dicom_obj, 'StudyDate', '' ) or '' )
+            if not _orig_date:  # StudyDate blank: hash the first machine date found, so dedup still works
+                _orig_date = next( ( str( getattr( _meta, _kw, '' ) or '' ) for _kw in _UPLOAD_DATE_KEYWORDS if getattr( _meta, _kw, '' ) ), '' )
+            if _orig_date:
+                _orig_time = str( getattr( _meta, 'StudyTime', '' ) or getattr( dicom_obj, 'StudyTime', '' ) or '' )
+                _device    = ( getattr( _meta, 'Manufacturer', '' ) or getattr( _meta, 'ManufacturerModelName', '' )
+                               or getattr( dicom_obj, 'Manufacturer', '' ) or getattr( dicom_obj, 'ManufacturerModelName', '' ) )
                 try:
                     from src.services.identity import case_date_hash, load_identity_salt
                     _salt      = load_identity_salt()
                     _date_hash = case_date_hash( _orig_date, _orig_time, _device, _salt )
                     dicom_obj.metadata.add_new((0x0019, 0x1001), 'LT', f'CaseDateHash: {_date_hash}' )
                 except Exception:
-                    # Salt not configured or other failure: skip hash, still strip readable date.
+                    # Salt not configured or other failure: skip hash; machine date is still replaced below.
                     pass
-                # Do NOT stash readable Old_StudyDate — HIPAA identifier must not persist on upload.
+                # Do NOT stash readable Old_StudyDate — the machine date is replaced, not kept.
             dicom_obj.StudyDate = self.intake_form.operation_date # Provided by intake form
-            if hasattr( dicom_obj, 'StudyTime' ):
-                # Old_StudyTime also not stashed — stripping alongside StudyDate (FR-003).
-                pass
+            # ADR 0001: every DICOM date tag on the written file (the pydicom Dataset in .metadata) takes the
+            # intake operation date, so no machine-clock date survives and all files in the case agree.
+            _op_da = _operation_date_as_dicom_da( self.intake_form.operation_date )
+            if _meta is not None and _op_da:
+                for _kw in _UPLOAD_DATE_KEYWORDS:
+                    setattr( _meta, _kw, _op_da )
             dicom_obj.StudyTime = self.intake_form.epic_start_time # Provided by intake form
             if hasattr( dicom_obj, 'StudyInstanceUID' ):
                 dicom_obj.metadata.add_new((0x0019, 0x1003), 'LT', 'Old_StudyInstanceUID: ' + dicom_obj.StudyInstanceUID)
@@ -1141,11 +1164,13 @@ class SourceRFSession( ExperimentData ):
                 dicom_obj.metadata.add_new( (0x0019, 0x1007), 'LT', 'This shot was flagged by the XNAT-Interact software as a potential duplicate (within-performance).' )
             
             # Walk through each key-value pair in the _derived_metadata dict and add_new to the DICOM object as a long length text tag.
+            # DATETIME is the machine-clock date; it is never written (ADR 0001: operation date only).
             for key, value in dicom_obj._derived_metadata.items():
+                if key == 'DATETIME':   continue
                 dicom_obj.metadata.add_new( (0x0019, 0x1000), 'LT', f'{key}: {value}' )
              
-            # Create a private long length text tag to explain what this function did.
-            dicom_obj.metadata.add_new( (0x0019, 0x1008), 'LT', f'Metadata de-identified & standardized by XNAT-Interact script on {dicom_obj._derived_metadata["DATETIME"]}.' )
+            # Create a private long length text tag to explain what this function did (dated by the operation date, ADR 0001).
+            dicom_obj.metadata.add_new( (0x0019, 0x1008), 'LT', f'Metadata de-identified & standardized by XNAT-Interact script; operation date {_op_da or self.intake_form.operation_date}.' )
 
             # Save the modified DICOM object back to the DataFrame; Generate a new file name for each shot in the session given its instance number, then overwrite metadata to ensure consistency throughout all shots.
             # Guard metadata.InstanceNumber like its sibling tags above (#30, FR-009):
@@ -1301,6 +1326,12 @@ class SourceESVSession( ExperimentData ):
                     # self._df.loc[idx, 'NEW_FN'] = file_obj_rep.generate_source_image_file_name( '000', file_obj_rep.uid_info['Video_UID'] ) 
                     # self._df.loc[idx, 'NEW_FN'] = self.df.loc[idx, 'OBJECT'].uid_info['Video_UID']
                 elif isinstance( self.df.loc[idx, 'OBJECT'], ArthroDiagnosticImage ):
+                    # ADR 0001: the built DICOM takes the intake operation date in every date tag (no file/clock date).
+                    _op_da = _operation_date_as_dicom_da( self.intake_form.operation_date )
+                    _meta  = getattr( file_obj_rep, 'metadata', None )
+                    if _op_da and _meta is not None:
+                        for _kw in _UPLOAD_DATE_KEYWORDS:
+                            setattr( _meta, _kw, _op_da )
                     self._df.loc[idx, 'NEW_FN'] = file_obj_rep.generate_source_image_file_name( file_obj_rep.still_num, self.intake_form.uid ) # type: ignore
                     # self._df.loc[idx, 'NEW_FN'] = file_obj_rep.generate_source_image_file_name( file_obj_rep.still_num, file_obj_rep.uid_info['Still_UID'] ) # type: ignore
                 else:

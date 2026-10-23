@@ -346,3 +346,54 @@ def test_two_distinct_unprofiled_devices_across_twins(twins):
             assert row["profiled"] is False
             digests.add(row["device_digest"])
     assert len(digests) == 2
+
+
+# ADR 0001 ---------------------------------------------------------------
+OPERATION_DATE = "2031-07-04"  # intake form format; invented, not a real case date
+OPERATION_DA = "20310704"
+
+
+def _ingest_metadata(m, name, monkeypatch):
+    """Run the real de-id + RF session date mining on one twin file; return the written Dataset."""
+    from types import MethodType, SimpleNamespace
+
+    import pandas as pd
+
+    import src.xnat_experiment_data as xed
+    from src.services.deidentify import deidentify_dataset
+    from src.xnat_scan_data import SourceDicomDeIdentified
+
+    monkeypatch.setenv("XNAT_IDENTITY_SALT", "ab" * 32)
+    obj = object.__new__(SourceDicomDeIdentified)
+    obj._metadata, obj._derived_metadata, obj._image = _read(m, name), {}, object()
+    obj._parse_for_derived_metadata()
+    deidentify_dataset(obj._metadata, REDACT)
+    session = SimpleNamespace(
+        _df=pd.DataFrame([{"FN": name, "OBJECT": obj, "IS_VALID": True, "IS_QUESTIONABLE": False,
+                           "NEW_FN": "", "ContentTime": None, "InstanceNumber": None}]),
+        intake_form=SimpleNamespace(uid="TWINCASE", operation_date=OPERATION_DATE, epic_start_time="000000"),
+    )
+    session.df = session._df
+    MethodType(xed.SourceRFSession._mine_session_metadata, session)()
+    return session._df.iloc[0]["OBJECT"].metadata
+
+
+def test_ingest_sets_every_date_tag_to_operation_date(twins, monkeypatch):
+    checked = 0
+    for m in twins.values():
+        rule = m["ingest_date_rule"]
+        assert rule["expected"] == "operation_date"
+        for f in _dicom_files(m):
+            if f["path"] in m["expected_parse_error"]:
+                continue
+            ds = _ingest_metadata(m, f["path"], monkeypatch)
+            for kw in rule["tags"]:
+                assert str(getattr(ds, kw, "")) == OPERATION_DA, (m["case_id"], f["path"], kw)
+            values = _all_values(ds)
+            for d in m["invented_dates"]:
+                # machine dates in any spelling (19000101 or 1900-01-01) must be gone, private tags included
+                spelled = (d, f"{d[:4]}-{d[4:6]}-{d[6:]}")
+                assert not any(s in v for s in spelled for v in values), (m["case_id"], f["path"], d)
+            assert any("CaseDateHash" in v for v in values), (m["case_id"], f["path"])
+            checked += 1
+    assert checked >= 6

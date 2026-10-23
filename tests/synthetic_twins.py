@@ -42,6 +42,8 @@ BOXES = {
 # Invented dates (19000101 range), listed here and in every manifest.
 D_STUDY, D_CONTENT, D_BIRTH, D_ICD = "19000101", "19000102", "19000103", "19000104"
 INVENTED_DATES = [D_STUDY, D_CONTENT, D_BIRTH, D_ICD]
+# Date tags that ingest sets to the intake operation date (ADR 0001).
+INGEST_DATE_TAGS = ("StudyDate", "SeriesDate", "ContentDate", "AcquisitionDate", "InstanceCreationDate")
 
 # Contract tags the pipeline must redact vs. known gaps outside the contract.
 REDACTED_PN = ("PatientName", "ReferringPhysicianName", "PerformingPhysicianName", "OperatorsName")
@@ -221,6 +223,8 @@ def make_twin_case(tmp_dir, case_id: str) -> dict:
         case_id=case_id, folder=str(folder), device_key=device_key, invented_dates=list(INVENTED_DATES),
         files=files, header_plants=plants, control_tags=controls, pixel_plants=pixel_plants,
         expected_census=dict(counts), expected_parse_error=parse_errors,
+        # ADR 0001: after ingest every date tag equals the intake operation date; no invented date survives.
+        ingest_date_rule=dict(tags=list(INGEST_DATE_TAGS), expected="operation_date"),
     )
 
 

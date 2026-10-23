@@ -115,9 +115,11 @@ def case_date_hash(date: str, time: str, device: str, salt: bytes) -> str:
 
     ``HMAC-SHA256(salt, "{date}|{time}|{device}".encode('utf-8'))``
 
-    The exact surgery date is a HIPAA identifier and MUST NOT be stored in
-    readable form on uploaded objects or in the registry.  This hash is the
-    only persistent record of the date (DATA_MODEL §3.3, FR-003).
+    FR-003 (reworded per ADR 0001, docs/adr/0001-operation-date-kept-on-uploads.md):
+    the XNAT server is an IRB Limited Data Set, so uploaded objects carry the
+    intake operation date in every DICOM date tag and in the session DATE
+    field.  The imaging machine's own date/time is NOT kept in readable form;
+    this hash of it is used only for duplicate detection (DATA_MODEL §3.3).
 
     Parameters
     ----------

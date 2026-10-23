@@ -22,15 +22,24 @@ from typing import Any
 # Shared helpers (mirror test_session_metadata_guard.py shape)
 # ---------------------------------------------------------------------------
 
-class _FakeMetadata:
-    """Mimics a pydicom FileDataset with list-based private tag storage."""
+from pydicom.dataset import Dataset
+
+
+class _FakeMetadata(Dataset):
+    """A real pydicom Dataset (what the written file holds) that also logs private add_new calls.
+
+    Using a real Dataset matters: the code under test must write UIDs/times to
+    the Dataset, not to the wrapper object, or they never reach the file.
+    """
 
     def __init__(self, *, instance_number: str = "1") -> None:
+        super().__init__()
         self.InstanceNumber = instance_number
         self._private_tags: list = []
 
     def add_new(self, tag: Any, vr: str, value: Any) -> None:
-        self._private_tags.append((tag, vr, value))
+        self._private_tags.append((tuple(tag), vr, value))
+        super().add_new(tag, vr, value)
 
 
 def _make_dicom_obj(
@@ -44,15 +53,15 @@ def _make_dicom_obj(
     study_uid: str = "9.8.7",
 ) -> SimpleNamespace:
     meta = _FakeMetadata(instance_number=str(idx + 1))
+    meta.StudyDate = study_date
+    meta.StudyTime = study_time
+    meta.StudyInstanceUID = study_uid
+    meta.SeriesInstanceUID = series_uid
+    meta.SOPInstanceUID = sop_uid
     obj = SimpleNamespace(
         metadata=meta,
         ContentTime="120000",
         InstanceNumber=str(idx + 1),
-        StudyDate=study_date,
-        StudyTime=study_time,
-        StudyInstanceUID=study_uid,
-        SeriesInstanceUID=series_uid,
-        SOPInstanceUID=sop_uid,
         _derived_metadata={"DATETIME": "2024-01-01 12:00:00"},
         image=SimpleNamespace(hash_str=f"hash{idx:04d}"),
     )
@@ -114,7 +123,7 @@ class TestUniqueSOPInstanceUID:
 
     def _collect_sop_uids(self, session: _MultiFrameRFSession) -> list[str]:
         session._run()
-        return [row["OBJECT"].SOPInstanceUID for _, row in session._df.iterrows()]
+        return [row["OBJECT"].metadata.SOPInstanceUID for _, row in session._df.iterrows()]
 
     def test_single_frame_has_sop_uid(self) -> None:
         """1-frame session: SOPInstanceUID is set and non-empty."""
@@ -148,12 +157,12 @@ class TestUniqueSOPInstanceUID:
         obj_a = _make_dicom_obj(idx=0, uid="2.4.4")
         session_a = _MultiFrameRFSession([obj_a], uid="2.4.4")
         session_a._run()
-        uid_a = session_a._df.iloc[0]["OBJECT"].SOPInstanceUID
+        uid_a = session_a._df.iloc[0]["OBJECT"].metadata.SOPInstanceUID
 
         obj_b = _make_dicom_obj(idx=0, uid="2.4.4")
         session_b = _MultiFrameRFSession([obj_b], uid="2.4.4")
         session_b._run()
-        uid_b = session_b._df.iloc[0]["OBJECT"].SOPInstanceUID
+        uid_b = session_b._df.iloc[0]["OBJECT"].metadata.SOPInstanceUID
 
         assert uid_a == uid_b, "Same inputs must produce same SOPInstanceUID (deterministic)"
 

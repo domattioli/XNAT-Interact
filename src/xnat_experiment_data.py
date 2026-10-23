@@ -988,6 +988,26 @@ class ExperimentData():
 _UPLOAD_DATE_KEYWORDS = ( 'StudyDate', 'SeriesDate', 'ContentDate', 'AcquisitionDate', 'InstanceCreationDate' )
 
 
+_UPLOAD_TIME_KEYWORDS = ( 'StudyTime', 'SeriesTime', 'ContentTime', 'AcquisitionTime', 'InstanceCreationTime' )
+
+
+def _epic_start_time_as_dicom_tm( epic_start_time ) -> str:
+    """Return the intake epic start time (e.g. '09:30' or '093000') as a DICOM TM string (HHMMSS), or ''."""
+    if epic_start_time is None:
+        return ''
+    if hasattr( epic_start_time, 'strftime' ):
+        return epic_start_time.strftime( '%H%M%S' )
+    digits = re.sub( r'\D', '', str( epic_start_time ) )
+    if len( digits ) < 4:
+        return ''
+    return ( digits[:6] ).ljust( 6, '0' )
+
+
+def _intake_uid_as_dicom_uid( uid ) -> str:
+    """Intake uid is stored like '2_25_<int>'; DICOM needs dots ('2.25.<int>')."""
+    return str( uid ).replace( '_', '.' )
+
+
 def _operation_date_as_dicom_da( operation_date ) -> str:
     """Return the intake operation date as a DICOM DA string (YYYYMMDD), or '' if it has no 8 digits."""
     if operation_date is None:
@@ -1140,26 +1160,37 @@ class SourceRFSession( ExperimentData ):
             if _meta is not None and _op_da:
                 for _kw in _UPLOAD_DATE_KEYWORDS:
                     setattr( _meta, _kw, _op_da )
-            dicom_obj.StudyTime = self.intake_form.epic_start_time # Provided by intake form
-            if hasattr( dicom_obj, 'StudyInstanceUID' ):
-                dicom_obj.metadata.add_new((0x0019, 0x1003), 'LT', 'Old_StudyInstanceUID: ' + dicom_obj.StudyInstanceUID)
-            dicom_obj.StudyInstanceUID = self.intake_form.uid  # XNAT case grouping key; original preserved above
-            if hasattr( dicom_obj, 'SeriesInstanceUID' ):
-                dicom_obj.metadata.add_new((0x0019, 0x1004), 'LT', 'Old_SeriesInstanceUID: ' + dicom_obj.SeriesInstanceUID)
-            dicom_obj.SeriesInstanceUID = self.intake_form.uid  # XNAT series grouping key; original preserved above
-            if hasattr( dicom_obj, 'SOPInstanceUID' ):
-                dicom_obj.metadata.add_new((0x0019, 0x1005), 'LT', 'Old_SOPInstanceUID: ' + dicom_obj.SOPInstanceUID)
+            # The wrapper holds the pydicom Dataset in .metadata; only that Dataset reaches the written file,
+            # so every time/UID tag is read from and written to it (never to the wrapper itself).
+            _ds = dicom_obj.metadata
+            # Same rule as dates (ADR 0001): every time tag takes the intake epic start time.
+            _op_tm = _epic_start_time_as_dicom_tm( self.intake_form.epic_start_time )
+            if _op_tm:
+                for _kw in _UPLOAD_TIME_KEYWORDS:
+                    setattr( _ds, _kw, _op_tm )
+            _case_uid = _intake_uid_as_dicom_uid( self.intake_form.uid )
+            if getattr( _ds, 'StudyInstanceUID', None ):
+                _ds.add_new((0x0019, 0x1003), 'LT', 'Old_StudyInstanceUID: ' + str( _ds.StudyInstanceUID ))
+            _ds.StudyInstanceUID = _case_uid  # XNAT case grouping key; original preserved above
+            if getattr( _ds, 'SeriesInstanceUID', None ):
+                _ds.add_new((0x0019, 0x1004), 'LT', 'Old_SeriesInstanceUID: ' + str( _ds.SeriesInstanceUID ))
+            _ds.SeriesInstanceUID = _case_uid  # XNAT series grouping key; original preserved above
+            if getattr( _ds, 'SOPInstanceUID', None ):
+                _ds.add_new((0x0019, 0x1005), 'LT', 'Old_SOPInstanceUID: ' + str( _ds.SOPInstanceUID ))
             # FR-001: SOPInstanceUID MUST be unique per instance.
             # Derive deterministically from case UID + frame index so:
             #   (a) re-runs produce the same value (idempotent),
-            #   (b) every frame gets a different value (N frames → N UIDs).
-            # Format: 2.25.<decimal-of-md5-first-16-bytes> (≤64 chars, all digits/dots).
+            #   (b) every frame gets a different value (N frames -> N UIDs).
+            # Format: 2.25.<decimal-of-md5-first-16-bytes> (<=64 chars, all digits/dots).
             _sop_seed = f"{self.intake_form.uid}:frame:{idx}"
             _sop_int  = int( hashlib.md5( _sop_seed.encode() ).hexdigest()[:16], 16 )
-            dicom_obj.SOPInstanceUID = f"2.25.{_sop_int}"
-            if hasattr( dicom_obj, 'NumberOfStudyRelatedInstances' ):
-                dicom_obj.metadata.add_new((0x0019, 0x1006), 'IS', 'Old_NumberOfStudyRelatedInstances: ' + str(dicom_obj.NumberOfStudyRelatedInstances))
-                dicom_obj.NumberOfStudyRelatedInstances = num_valid_shots
+            _ds.SOPInstanceUID = f"2.25.{_sop_int}"
+            _fm = getattr( _ds, 'file_meta', None )
+            if _fm is not None and 'MediaStorageSOPInstanceUID' in _fm:
+                _fm.MediaStorageSOPInstanceUID = _ds.SOPInstanceUID
+            if 'NumberOfStudyRelatedInstances' in _ds:
+                _ds.add_new((0x0019, 0x1006), 'LT', 'Old_NumberOfStudyRelatedInstances: ' + str(_ds.NumberOfStudyRelatedInstances))
+                _ds.NumberOfStudyRelatedInstances = int( num_valid_shots )
             if row['IS_QUESTIONABLE']: # If the shot is questionably a duplicate within-case, add a private tag to explain why.
                 dicom_obj.metadata.add_new( (0x0019, 0x1007), 'LT', 'This shot was flagged by the XNAT-Interact software as a potential duplicate (within-performance).' )
             

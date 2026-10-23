@@ -22,20 +22,26 @@ from typing import Any
 # that _mine_session_metadata can run without a real DICOM file on disk.
 # ---------------------------------------------------------------------------
 
-class _FakeMetadata:
-    """Mimics a pydicom FileDataset with configurable tag presence."""
+from pydicom.dataset import Dataset
+
+
+class _FakeMetadata(Dataset):
+    """A real pydicom Dataset (what the written file holds) that also logs add_new calls.
+
+    Logging keeps duplicate-address checks possible; the real Dataset makes sure
+    the code under test writes tags where the uploaded file will see them.
+    """
 
     def __init__(self, *, has_instance_number: bool = True, instance_number: str = "1") -> None:
+        super().__init__()
         self._has_instance_number = has_instance_number
         if has_instance_number:
             self.InstanceNumber = instance_number
         self._private_tags: list = []
 
     def add_new(self, tag: Any, vr: str, value: Any) -> None:
-        self._private_tags.append((tag, vr, value))
-
-    def __hasattr_shim(self, name: str) -> bool:
-        return hasattr(self, name)
+        self._private_tags.append((tuple(tag), vr, value))
+        super().add_new(tag, vr, value)
 
 
 def _make_dicom_obj(
@@ -216,10 +222,10 @@ class TestPrivateTagVRAndCollision:
         """T018: All 'Old_*UID' entries must have VR='LT', not 'UI'."""
         # Build a DICOM with all UID tags present so they get stashed.
         dicom_obj = _make_dicom_obj()
-        dicom_obj.StudyInstanceUID = "1.2.3.4.5"
-        dicom_obj.SeriesInstanceUID = "1.2.3.4.5.6"
-        dicom_obj.SOPInstanceUID = "1.2.3.4.5.6.7"
-        dicom_obj.NumberOfStudyRelatedInstances = "5"
+        dicom_obj.metadata.StudyInstanceUID = "1.2.3.4.5"
+        dicom_obj.metadata.SeriesInstanceUID = "1.2.3.4.5.6"
+        dicom_obj.metadata.SOPInstanceUID = "1.2.3.4.5.6.7"
+        dicom_obj.metadata.NumberOfStudyRelatedInstances = "5"
 
         session = _MinimalRFSessionForMetadata(dicom_obj)
         self._run_mine_session_metadata(session)
@@ -248,12 +254,12 @@ class TestPrivateTagVRAndCollision:
         """T019: Private-tag addresses must be unique. No two add_new calls should
         use the same (group, element) pair."""
         dicom_obj = _make_dicom_obj()
-        dicom_obj.StudyDate = "20240101"
-        dicom_obj.StudyTime = "120000"
-        dicom_obj.StudyInstanceUID = "1.2.3"
-        dicom_obj.SeriesInstanceUID = "1.2.3.4"
-        dicom_obj.SOPInstanceUID = "1.2.3.4.5"
-        dicom_obj.NumberOfStudyRelatedInstances = "7"
+        dicom_obj.metadata.StudyDate = "20240101"
+        dicom_obj.metadata.StudyTime = "120000"
+        dicom_obj.metadata.StudyInstanceUID = "1.2.3"
+        dicom_obj.metadata.SeriesInstanceUID = "1.2.3.4"
+        dicom_obj.metadata.SOPInstanceUID = "1.2.3.4.5"
+        dicom_obj.metadata.NumberOfStudyRelatedInstances = "7"
 
         session = _MinimalRFSessionForMetadata(dicom_obj)
         self._run_mine_session_metadata(session)
@@ -281,7 +287,7 @@ class TestPrivateTagVRAndCollision:
         """T019: The final metadata-standardization summary tag must use 0x1008,
         not 0x1006 (which is reserved for NumberOfStudyRelatedInstances)."""
         dicom_obj = _make_dicom_obj()
-        dicom_obj.NumberOfStudyRelatedInstances = "3"
+        dicom_obj.metadata.NumberOfStudyRelatedInstances = "3"
 
         session = _MinimalRFSessionForMetadata(dicom_obj)
         self._run_mine_session_metadata(session)

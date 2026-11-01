@@ -10,7 +10,7 @@ tests can feed fake inputs offline — no real subprocess, no real registry.
 Public API
 ----------
 detect_python(
-    min_version=(3, 9),
+    min_version=(3, 11),
     *,
     candidates_provider=None,   # () -> Iterable[str]   — list of exe paths to try
     version_probe=None,         # (path: str) -> tuple[int,...]|None
@@ -64,8 +64,7 @@ def _default_candidates_provider() -> Iterable[str]:
 
     # --- PATH scan ---
     path_dirs = os.environ.get("PATH", "").split(os.pathsep)
-    names = ["python3", "python", "python3.13", "python3.12", "python3.11",
-             "python3.10", "python3.9"]
+    names = ["python3", "python", "python3.13", "python3.12", "python3.11"]
     for d in path_dirs:
         for name in names:
             exe = os.path.join(d, name)
@@ -81,7 +80,7 @@ def _default_candidates_provider() -> Iterable[str]:
         program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
         pf_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
         for base in [local_app, program_files, pf_x86]:
-            for ver in ["3.13", "3.12", "3.11", "3.10", "3.9"]:
+            for ver in ["3.13", "3.12", "3.11"]:
                 for sub in [
                     os.path.join("Python", f"Python{ver.replace('.','')}", "python.exe"),
                     os.path.join(f"Python{ver.replace('.','')}", "python.exe"),
@@ -126,8 +125,7 @@ def _default_candidates_provider() -> Iterable[str]:
     # --- Common non-PATH locations (macOS / Linux) ---
     if sys.platform != "win32":
         for base in ["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin", "/opt/local/bin"]:
-            for name in ["python3", "python3.13", "python3.12", "python3.11",
-                         "python3.10", "python3.9"]:
+            for name in ["python3", "python3.13", "python3.12", "python3.11"]:
                 candidate = os.path.join(base, name)
                 if candidate not in seen:
                     seen.append(candidate)
@@ -179,7 +177,7 @@ def _default_venv_probe(path: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def detect_python(
-    min_version: Tuple[int, int] = (3, 9),
+    min_version: Tuple[int, int] = (3, 11),
     *,
     candidates_provider: Optional[Callable[[], Iterable[str]]] = None,
     version_probe: Optional[Callable[[str], Optional[Tuple[int, ...]]]] = None,
@@ -191,7 +189,7 @@ def detect_python(
     Parameters
     ----------
     min_version
-        Minimum acceptable (major, minor).  Default (3, 9).
+        Minimum acceptable (major, minor).  Default (3, 11).
     candidates_provider
         Zero-arg callable returning an iterable of exe paths to evaluate.
         Defaults to the real PATH + registry + common-locations scanner.

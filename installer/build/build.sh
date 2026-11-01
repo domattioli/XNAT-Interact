@@ -21,7 +21,7 @@
 # ------------
 #   pip install pyinstaller     (both platforms)
 #   brew install create-dmg     (macOS only, for DMG wrapping)
-#   Python 3.9+ in the build environment (separate from the bundled runtime)
+#   Python 3.11+ in the build environment (separate from the bundled runtime)
 #
 # OUTPUT
 # ------

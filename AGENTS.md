@@ -7,7 +7,7 @@ them from the University of Iowa RPACS XNAT server. `main.py` is the interactive
 command-line interface. The repository also contains Streamlit interfaces,
 installer code, and backend data-processing services.
 
-Python 3.9 or newer is required. This repository is not a pip-installable
+Python 3.11 or newer is required. This repository is not a pip-installable
 package.
 
 ## Setup and commands

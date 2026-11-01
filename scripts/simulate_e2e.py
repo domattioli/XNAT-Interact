@@ -771,7 +771,7 @@ def section_packaging():
         return "3.11" in path  # only 3.11 can create venvs
 
     result = detect_python(
-        min_version=(3, 9),
+        min_version=(3, 11),
         candidates_provider=lambda: fake_candidates,
         version_probe=_fake_version_probe,
         venv_probe=_fake_venv_probe,

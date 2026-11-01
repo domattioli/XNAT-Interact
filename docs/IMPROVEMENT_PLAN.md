@@ -98,7 +98,7 @@ These aren't guesses — each points at a real line of code.
 ### C. Smaller issues worth noting
 - Hardcoded server URL and project name (`utilities.py:85-86`, `main.py:264+`)
   — switching between a test and production server means editing code.
-- `environment.yml` pins Python 3.8 while CI uses 3.10 — drift.
+- `environment.yml` pins Python 3.8 while CI uses 3.11 — drift.
 - A `testing 123.txt` file and a large sandbox notebook are committed in `src/`.
 
 ### D. Safety & security gaps (found while writing this plan)

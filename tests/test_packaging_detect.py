@@ -59,14 +59,14 @@ def _always_venv_fail(path: str) -> bool:
 def test_compatible_found_picks_first():
     """First compatible interpreter in candidate list is chosen."""
     result = detect_python(
-        min_version=(3, 9),
+        min_version=(3, 11),
         candidates_provider=_make_candidates(
             "/usr/bin/python3.11",
-            "/usr/bin/python3.10",
+            "/usr/bin/python3.12",
         ),
         version_probe=_make_version_map({
             "/usr/bin/python3.11": (3, 11, 2),
-            "/usr/bin/python3.10": (3, 10, 9),
+            "/usr/bin/python3.12": (3, 12, 0),
         }),
         venv_probe=_always_venv_ok,
     )
@@ -78,8 +78,8 @@ def test_compatible_found_picks_first():
 
 def test_compatible_found_returns_detectresult_type():
     result = detect_python(
-        candidates_provider=_make_candidates("/usr/bin/python3.9"),
-        version_probe=_make_version_map({"/usr/bin/python3.9": (3, 9, 7)}),
+        candidates_provider=_make_candidates("/usr/bin/python3.11"),
+        version_probe=_make_version_map({"/usr/bin/python3.11": (3, 11, 7)}),
         venv_probe=_always_venv_ok,
     )
     assert isinstance(result, DetectResult)
@@ -92,43 +92,55 @@ def test_compatible_found_returns_detectresult_type():
 
 def test_all_too_old_returns_not_found():
     result = detect_python(
-        min_version=(3, 9),
+        min_version=(3, 11),
         candidates_provider=_make_candidates(
-            "/usr/bin/python3.7",
-            "/usr/bin/python3.8",
+            "/usr/bin/python3.9",
+            "/usr/bin/python3.10",
         ),
         version_probe=_make_version_map({
-            "/usr/bin/python3.7": (3, 7, 0),
-            "/usr/bin/python3.8": (3, 8, 12),
+            "/usr/bin/python3.9": (3, 9, 7),
+            "/usr/bin/python3.10": (3, 10, 9),
         }),
         venv_probe=_always_venv_ok,
     )
     assert result.found is False
     assert result.path is None
     assert result.version is None
-    assert "3.7" in result.reason or "minimum" in result.reason.lower() or "compatible" in result.reason.lower()
+    assert "(3, 11)" in result.reason
 
 
 def test_exact_min_version_accepted():
     """Version exactly equal to min_version is accepted."""
     result = detect_python(
-        min_version=(3, 9),
-        candidates_provider=_make_candidates("/usr/bin/python3.9"),
-        version_probe=_make_version_map({"/usr/bin/python3.9": (3, 9, 0)}),
+        min_version=(3, 11),
+        candidates_provider=_make_candidates("/usr/bin/python3.11"),
+        version_probe=_make_version_map({"/usr/bin/python3.11": (3, 11, 0)}),
         venv_probe=_always_venv_ok,
     )
     assert result.found is True
-    assert result.version == (3, 9, 0)
+    assert result.version == (3, 11, 0)
 
 
 def test_one_below_min_rejected():
     result = detect_python(
-        min_version=(3, 10),
-        candidates_provider=_make_candidates("/usr/bin/python3.9"),
-        version_probe=_make_version_map({"/usr/bin/python3.9": (3, 9, 7)}),
+        min_version=(3, 11),
+        candidates_provider=_make_candidates("/usr/bin/python3.10"),
+        version_probe=_make_version_map({"/usr/bin/python3.10": (3, 10, 9)}),
         venv_probe=_always_venv_ok,
     )
     assert result.found is False
+
+
+def test_default_min_version_rejects_python_310():
+    """Default floor is 3.11: a 3.10 interpreter alone is rejected."""
+    result = detect_python(
+        candidates_provider=_make_candidates("/usr/bin/python3.10"),
+        version_probe=_make_version_map({"/usr/bin/python3.10": (3, 10, 9)}),
+        venv_probe=_always_venv_ok,
+    )
+    assert result.found is False
+    assert result.path is None
+    assert "(3, 11)" in result.reason
 
 
 # ---------------------------------------------------------------------------
@@ -201,19 +213,19 @@ def test_venv_probe_fail_falls_through_to_next_candidate():
     result = detect_python(
         candidates_provider=_make_candidates(
             "/usr/bin/python3.11_novenv",
-            "/usr/bin/python3.10_ok",
+            "/usr/bin/python3.12_ok",
         ),
         version_probe=_make_version_map({
             "/usr/bin/python3.11_novenv": (3, 11, 2),
-            "/usr/bin/python3.10_ok": (3, 10, 9),
+            "/usr/bin/python3.12_ok": (3, 12, 0),
         }),
         venv_probe=_make_venv_map({
             "/usr/bin/python3.11_novenv": False,
-            "/usr/bin/python3.10_ok": True,
+            "/usr/bin/python3.12_ok": True,
         }),
     )
     assert result.found is True
-    assert result.path == "/usr/bin/python3.10_ok"
+    assert result.path == "/usr/bin/python3.12_ok"
 
 
 # ---------------------------------------------------------------------------
@@ -223,14 +235,14 @@ def test_venv_probe_fail_falls_through_to_next_candidate():
 def test_multiple_pythons_picks_first_compatible_deterministically():
     """With three candidates, first compatible one (by order) is returned."""
     result = detect_python(
-        min_version=(3, 9),
+        min_version=(3, 11),
         candidates_provider=_make_candidates(
-            "/usr/bin/python3.7",    # too old
+            "/usr/bin/python3.10",   # too old
             "/usr/bin/python3.11",   # compatible ← should be chosen
             "/usr/bin/python3.12",   # also compatible but not first
         ),
         version_probe=_make_version_map({
-            "/usr/bin/python3.7": (3, 7, 0),
+            "/usr/bin/python3.10": (3, 10, 9),
             "/usr/bin/python3.11": (3, 11, 2),
             "/usr/bin/python3.12": (3, 12, 0),
         }),
@@ -247,16 +259,16 @@ def test_multiple_pythons_picks_first_compatible_deterministically():
 def test_mixed_failures_finds_good_candidate():
     """Bad version probe, old version, bad venv, then a good one."""
     result = detect_python(
-        min_version=(3, 9),
+        min_version=(3, 11),
         candidates_provider=_make_candidates(
             "/a/python_crash",    # version probe → None
-            "/b/python3.8",       # too old
+            "/b/python3.10",      # too old
             "/c/python3.11_nv",   # version ok, venv fail
             "/d/python3.11_ok",   # all good
         ),
         version_probe=_make_version_map({
             "/a/python_crash": None,
-            "/b/python3.8": (3, 8, 0),
+            "/b/python3.10": (3, 10, 9),
             "/c/python3.11_nv": (3, 11, 2),
             "/d/python3.11_ok": (3, 11, 2),
         }),
@@ -281,9 +293,9 @@ def test_reason_always_non_empty_on_failure():
             venv_probe=_always_venv_ok,
         ),
         detect_python(
-            min_version=(3, 9),
-            candidates_provider=_make_candidates("/u/python3.7"),
-            version_probe=_make_version_map({"/u/python3.7": (3, 7, 0)}),
+            min_version=(3, 11),
+            candidates_provider=_make_candidates("/u/python3.10"),
+            version_probe=_make_version_map({"/u/python3.10": (3, 10, 9)}),
             venv_probe=_always_venv_ok,
         ),
     ]:

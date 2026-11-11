@@ -16,12 +16,15 @@ clone the parent's model.
 
 | Task class | Examples | Model |
 |---|---|---|
-| Mechanical | rename, typo, locate code, format tweak, single-fn rewrite | `haiku` |
-| Standard | scoped multi-file edit, tests for known behavior, doc drafting, research synthesis | `sonnet` |
-| Hard | algorithm-critical, cross-cutting refactor (3+ files), arch decision, ambiguous, security/PHI-sensitive | `opus` |
+| Read-only | locate code, scouts, summaries, triage (never writes or edits) | `haiku` |
+| Writing (default) | any code/doc/git edit, incl. rename, typo, format tweak, single-fn rewrite; scoped multi-file edit, tests for known behavior, doc drafting | `sonnet` |
+| Judgment | design/scope calls, review: algorithm-critical, cross-cutting refactor (3+ files), arch decision, ambiguous, security/PHI-sensitive | `opus` |
 
 Rule: cheapest tier that won't err. Correctness/PHI/security rounds **up**, never
 down. Known one-line answer → no subagent.
+Operator-facing session keeps judgment only (dialogue, decisions, briefs,
+verification, acceptance); it delegates writing. Route and gate: agents-inc
+managed block in `~/.claude/AGENTS.md`.
 
 ## Token budget: caveman level by who reads the output
 
@@ -52,7 +55,7 @@ dispatch policy that shipped this split.
 ```
 Agent(
   subagent_type: <Explore | general-purpose | specific>,
-  model: <haiku | sonnet | opus>,            # by complexity, not inherited
+  model: <haiku | sonnet | opus>,            # haiku read-only; sonnet writes; opus judgment/review
   description: "<3-5 words>",
   prompt: "<if report-back should be terse: 'Report back caveman-ultra:
             drop articles/filler, fragments OK, code/precision exact. Then:'>
